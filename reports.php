@@ -32,6 +32,7 @@ main{max-width:1440px;margin:26px auto;padding:0 28px 40px}.intro{display:flex;j
 @media(max-width:900px){.filters{grid-template-columns:repeat(2,minmax(0,1fr))}.top-inner{align-items:flex-start}.stats{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:600px){.top-inner{padding:14px 16px;display:block}.actions{margin-top:13px}.intro{display:block}main{padding:0 14px 28px;margin:20px auto}.filters{grid-template-columns:1fr 1fr;padding:13px}.stats{grid-template-columns:1fr}.stat{padding:12px 15px}.stat strong{font-size:22px}.panel-head{align-items:flex-start;flex-direction:column}.brand h1{font-size:18px}}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
 <body>
 <header class="top"><div class="top-inner">
@@ -39,7 +40,7 @@ main{max-width:1440px;margin:26px auto;padding:0 28px 40px}.intro{display:flex;j
   <div class="actions"><a class="btn" href="index.html">← К форме отчёта</a><button class="btn" id="logoutBtn" type="button">Выйти</button></div>
 </div></header>
 <main>
-  <div class="intro"><div><h2>Отчёты сотрудников</h2><p id="roleInfo">Загрузка доступных данных…</p></div><span class="role" id="periodLabel">Сводная по сохранённым отчётам</span></div>
+  <div class="intro"><div><h2>Отчёты сотрудников</h2><p id="roleInfo">Загрузка доступных данных…</p></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="role" id="periodLabel">Сводная по сохранённым отчётам</span><button class="btn primary" id="exportWorkbook" type="button">↓ Скачать полный Excel-отчёт</button></div></div>
   <section class="filters">
     <div class="field"><label for="periodType">Период отчёта</label><select id="periodType"><option value="month">За месяц</option><option value="quarter">За квартал</option><option value="year">За год</option><option value="custom">Произвольный период</option></select></div>
     <div class="field"><label for="periodYear">Год</label><select id="periodYear"></select></div>
@@ -56,15 +57,15 @@ main{max-width:1440px;margin:26px auto;padding:0 28px 40px}.intro{display:flex;j
     <div class="stat"><span>Торговых объектов</span><strong id="statObjects">—</strong></div>
   </section>
   <section class="panel">
-    <div class="panel-head"><div><h3>Сводка по сотрудникам</h3><small>Количество отчётов и среднее заполнение за выбранный период</small></div><button class="btn" id="exportSummary" type="button">Выгрузить сводку в Excel</button></div>
+    <div class="panel-head"><div><h3>Сводка по сотрудникам</h3><small>Количество отчётов и среднее заполнение за выбранный период</small></div><button class="btn" id="exportSummary" type="button">Скачать лист Excel</button></div>
     <div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Отчётов</th><th>Объектов</th><th>Последний отчёт</th><th>Среднее заполнение</th></tr></thead><tbody id="summaryBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div>
   </section>
   <section class="panel">
-    <div class="panel-head"><div><h3>Сводные показатели формы</h3><small>Сумма числовых показателей всех отчётов за выбранный период</small></div><button class="btn" id="exportMetrics" type="button">Выгрузить показатели</button></div>
+    <div class="panel-head"><div><h3>Сводные показатели формы</h3><small>Сумма числовых показателей всех отчётов за выбранный период</small></div><button class="btn" id="exportMetrics" type="button">Скачать лист Excel</button></div>
     <div class="table-wrap"><table><thead><tr><th>Показатель формы</th><th>Итого за период</th><th>Количество заполнений</th></tr></thead><tbody id="metricsBody"><tr><td colspan="3" class="empty">Загрузка…</td></tr></tbody></table></div>
   </section>
   <section class="panel">
-    <div class="panel-head"><div><h3>Содержание отчётов</h3><small>Все значения, внесённые в форму, включая комментарии и дополнительные строки</small></div><button class="btn" id="exportDetails" type="button">Выгрузить все данные в Excel</button></div>
+    <div class="panel-head"><div><h3>Содержание отчётов</h3><small>Все значения, внесённые в форму, включая комментарии и дополнительные строки</small></div><button class="btn" id="exportDetails" type="button">Скачать лист Excel</button></div>
     <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Торговый объект</th><th>Сотрудник</th><th>Кем сохранён</th><th>Заполнение</th><th>Последнее обновление</th></tr></thead><tbody id="detailsBody"><tr><td colspan="6" class="empty">Загрузка…</td></tr></tbody></table></div>
   </section>
 </main>
@@ -94,11 +95,43 @@ var records=[],filtered=[],user=null,objects=[],fieldLabels={};
  function syncDates(){var t=$('periodType').value;if(t==='custom')return;var y=Number($('periodYear').value),from,to;if(t==='year'){from=y+'-01-01';to=y+'-12-31';}else if(t==='quarter'){var q=Number($('periodUnit').value),m=(q-1)*3,last=new Date(y,m+3,0);from=y+'-'+pad(m+1)+'-01';to=y+'-'+pad(last.getMonth()+1)+'-'+pad(last.getDate());}else{var mo=Number($('periodUnit').value),last=new Date(y,mo,0);from=y+'-'+pad(mo)+'-01';to=y+'-'+pad(mo)+'-'+pad(last.getDate());}$('dateFrom').value=from;$('dateTo').value=to;}
  function initPeriod(){var y=$('periodYear'),now=new Date();for(var v=now.getFullYear()+1;v>=now.getFullYear()-8;v--)y.add(new Option(v,v));y.value=now.getFullYear();fillUnits();$('periodType').addEventListener('change',function(){fillUnits();syncDates();});y.addEventListener('change',syncDates);$('periodUnit').addEventListener('change',syncDates);['dateFrom','dateTo'].forEach(function(id){$(id).addEventListener('change',function(){$('periodType').value='custom';fillUnits();});});syncDates();}
  async function load(){var from=$('dateFrom').value,to=$('dateTo').value;if(!from||!to||from>to){alert('Проверьте даты периода.');return;}$('applyBtn').disabled=true;$('applyBtn').textContent='Загрузка…';try{var params=new URLSearchParams({from:from,to:to,object_id:$('objectFilter').value||'0'});var res=await fetch('api.php?action=reports_data&'+params.toString(),{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});var data=await res.json();if(res.status===401){location.href='index.html';return;}if(!res.ok||!data.ok)throw new Error(data.error||'Не удалось загрузить отчёты.');window.__SB_CSRF=data.csrf||'';user=data.user;objects=data.objects||[];records=data.records||[];$('roleInfo').textContent=roleName(user.role)+' · '+(user.object_names||[]).join(', ');var sel=$('objectFilter'),cur=sel.value;sel.innerHTML='<option value="0">Все доступные объекты</option>'+objects.map(function(o){return '<option value="'+Number(o.id)+'">'+esc(o.name)+'</option>';}).join('');if(objects.some(function(o){return String(o.id)===cur;}))sel.value=cur;render();}catch(e){alert(e.message||'Ошибка загрузки отчётов.');}finally{$('applyBtn').disabled=false;$('applyBtn').textContent='Показать';}}
- function exportSummary(){var rows=[['Сотрудник','Количество отчётов','Количество объектов','Последний отчёт','Среднее заполнение, %']];makeSummary(filtered).forEach(function(x){rows.push([x.name,x.count,x.objects,fmtDate(x.last),x.average]);});downloadCsv('Сводка_по_сотрудникам.csv',rows);}
- function exportMetrics(){var rows=[['Показатель формы','Итого за период','Количество заполнений']];metricRows(filtered).forEach(function(x){rows.push([fieldLabels[x.key]||x.key,x.total,x.count]);});downloadCsv('Сводные_показатели.csv',rows);}
- function exportDetails(){var keys=Object.create(null);filtered.forEach(function(r){Object.keys(allValues(r)).forEach(function(k){keys[k]=true;});});var fields=Object.keys(keys).sort(function(a,b){return (fieldLabels[a]||a).localeCompare(fieldLabels[b]||b,'ru');});var rows=[['Дата','Торговый объект','Сотрудник','Кем сохранён','Заполнено полей','Всего полей'].concat(fields.map(function(k){return fieldLabels[k]||k;}))];filtered.forEach(function(r){var vals=allValues(r);rows.push([fmtDate(r.date),r.object,r.employee,r.author,r.done,r.total].concat(fields.map(function(k){return vals[k]===undefined?'':vals[k];})));});downloadCsv('Полные_отчёты_сотрудников.csv',rows);}
+ function safeCell(v){if(v===null||v===undefined)return '';if(typeof v==='object')return JSON.stringify(v);return v;}
+ function periodFilePart(){return String($('dateFrom').value||'')+'_'+String($('dateTo').value||'');}
+ function addStyledSheet(wb,name,title,subtitle,headers,rows,widths){
+   var ws=wb.addWorksheet(name,{views:[{state:'frozen',ySplit:4}]});
+   var n=Math.max(headers.length,1);ws.mergeCells(1,1,1,n);ws.getCell(1,1).value=title;
+   ws.getRow(1).height=30;ws.getCell(1,1).font={name:'Aptos Display',size:16,bold:true,color:{argb:'FFFFFFFF'}};
+   ws.getCell(1,1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF087F83'}};
+   ws.mergeCells(2,1,2,n);ws.getCell(2,1).value=subtitle;
+   ws.getRow(2).height=23;ws.getCell(2,1).font={name:'Aptos',size:10,color:{argb:'FF526775'},italic:true};
+   ws.getRow(3).height=8;
+   var hr=ws.getRow(4);headers.forEach(function(h,i){hr.getCell(i+1).value=h;});
+   hr.height=32;hr.eachCell(function(c){c.font={name:'Aptos',size:10,bold:true,color:{argb:'FFFFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF164E63'}};c.alignment={vertical:'middle',horizontal:'center',wrapText:true};c.border={bottom:{style:'medium',color:{argb:'FF087F83'}}};});
+   rows.forEach(function(row){ws.addRow(row.map(safeCell));});
+   for(var ri=5;ri<=ws.rowCount;ri++){var rr=ws.getRow(ri);rr.height=30;rr.eachCell(function(c){c.font={name:'Aptos',size:10,color:{argb:'FF203642'}};c.alignment={vertical:'top',wrapText:true};c.border={bottom:{style:'hair',color:{argb:'FFDCE6EA'}}};if(ri%2===0)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF2F8F8'}};});}
+   widths.forEach(function(w,i){ws.getColumn(i+1).width=w;});
+   if(rows.length)ws.autoFilter={from:{row:4,column:1},to:{row:4+rows.length,column:headers.length}};
+   ws.pageSetup={orientation:headers.length>6?'landscape':'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0};
+   ws.properties.defaultRowHeight=20;
+   return ws;
+ }
+ async function downloadXlsx(filename,specs){
+   if(!window.ExcelJS){alert('Не удалось загрузить модуль Excel. Проверьте подключение к интернету и обновите страницу.');return;}
+   var wb=new ExcelJS.Workbook();wb.creator='Система отчётности СБ';wb.subject='Отчёты сотрудников';wb.created=new Date();wb.modified=new Date();
+   specs.forEach(function(x){addStyledSheet(wb,x.name,x.title,x.subtitle,x.headers,x.rows,x.widths);});
+   try{var buffer=await wb.xlsx.writeBuffer();var blob=new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(function(){URL.revokeObjectURL(url);},1500);}
+   catch(e){console.error(e);alert('Не удалось сформировать Excel-файл. Попробуйте ещё раз.');}
+ }
+ function summarySpec(){var rows=makeSummary(filtered).map(function(x){return [x.name,x.count,x.objects,fmtDate(x.last),x.average/100];});return {name:'Сводка сотрудников',title:'СВОДКА ПО СОТРУДНИКАМ',subtitle:'Период: '+fmtDate($('dateFrom').value)+' — '+fmtDate($('dateTo').value)+' · Сформировано: '+new Date().toLocaleString('ru-RU'),headers:['Сотрудник','Количество отчётов','Количество объектов','Последний отчёт','Среднее заполнение'],rows:rows,widths:[34,20,20,20,22]};}
+ function metricsSpec(){var rows=metricRows(filtered).map(function(x){return [fieldLabels[x.key]||x.key,x.total,x.count];});return {name:'Числовые поля',title:'ЧИСЛОВЫЕ ПОЛЯ ФОРМЫ',subtitle:'Автоматическая сумма числовых значений. Для показателей с разными единицами измерения суммы следует трактовать с осторожностью.',headers:['Показатель формы','Автосумма за период','Количество заполнений'],rows:rows,widths:[42,24,24]};}
+ function detailsSpec(){var keys=Object.create(null);filtered.forEach(function(r){Object.keys(allValues(r)).forEach(function(k){keys[k]=true;});});var fields=Object.keys(keys).sort(function(a,b){return (fieldLabels[a]||a).localeCompare(fieldLabels[b]||b,'ru');});var headers=['Дата','Торговый объект','Сотрудник','Кем сохранён','Заполнено полей','Всего полей'].concat(fields.map(function(k){return fieldLabels[k]||k;}));var rows=filtered.map(function(r){var vals=allValues(r);return [fmtDate(r.date),r.object,r.employee,r.author,r.done,r.total].concat(fields.map(function(k){return vals[k]===undefined?'':safeCell(vals[k]);}));});return {name:'Полные отчёты',title:'ПОЛНЫЕ ДАННЫЕ ОТЧЁТОВ',subtitle:'Одна строка — один самостоятельный отчёт сотрудника. Включены поля формы и дополнительные данные.',headers:headers,rows:rows,widths:[14,28,28,26,16,14].concat(fields.map(function(){return 24;}))};}
+ function dynamicSpec(){var rows=[];filtered.forEach(function(r){Object.keys(r.dyn||{}).forEach(function(k){rows.push([fmtDate(r.date),r.object,r.employee,k,safeCell(r.dyn[k])]);});});return {name:'Дополнительные данные',title:'ДОПОЛНИТЕЛЬНЫЕ ТАБЛИЦЫ И СТРОКИ',subtitle:'Содержимое динамических таблиц, сохранённых вместе с отчётами.',headers:['Дата','Торговый объект','Сотрудник','Раздел / таблица','Содержимое'],rows:rows,widths:[14,28,28,30,70]};}
+ async function exportWorkbook(){if(!filtered.length){alert('За выбранный период нет отчётов для выгрузки.');return;}var btn=$('exportWorkbook');btn.disabled=true;btn.textContent='Формирование…';try{await downloadXlsx('Отчёты_СБ_'+periodFilePart()+'.xlsx',[summarySpec(),metricsSpec(),detailsSpec(),dynamicSpec()]);}finally{btn.disabled=false;btn.textContent='↓ Скачать полный Excel-отчёт';}}
+ async function exportSummary(){if(!filtered.length){alert('Нет данных для выгрузки.');return;}await downloadXlsx('Сводка_сотрудников_'+periodFilePart()+'.xlsx',[summarySpec()]);}
+ async function exportMetrics(){if(!filtered.length){alert('Нет данных для выгрузки.');return;}await downloadXlsx('Показатели_формы_'+periodFilePart()+'.xlsx',[metricsSpec()]);}
+ async function exportDetails(){if(!filtered.length){alert('Нет данных для выгрузки.');return;}await downloadXlsx('Полные_отчёты_'+periodFilePart()+'.xlsx',[detailsSpec(),dynamicSpec()]);}
  async function loadFieldLabels(){try{var response=await fetch('index.html',{credentials:'same-origin',cache:'no-store'});var html=await response.text();var doc=new DOMParser().parseFromString(html,'text/html');doc.querySelectorAll('[data-field][id]').forEach(function(el){var group=el.closest('.form-group'),label=group&&group.querySelector('label');if(label)fieldLabels[el.id]=label.textContent.trim();});}catch(e){}}
- $('applyBtn').addEventListener('click',load);$('employeeFilter').addEventListener('input',render);$('objectFilter').addEventListener('change',load);$('exportSummary').addEventListener('click',exportSummary);$('exportMetrics').addEventListener('click',exportMetrics);$('exportDetails').addEventListener('click',exportDetails);
+ $('applyBtn').addEventListener('click',load);$('employeeFilter').addEventListener('input',render);$('objectFilter').addEventListener('change',load);$('exportSummary').addEventListener('click',exportSummary);$('exportMetrics').addEventListener('click',exportMetrics);$('exportDetails').addEventListener('click',exportDetails);$('exportWorkbook').addEventListener('click',exportWorkbook);
  initPeriod();loadFieldLabels().then(load);
 $('logoutBtn').addEventListener('click',async function(){try{await fetch('api.php?action=logout',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:window.__SB_CSRF||''})});}catch(e){}location.href='index.html';});
 load();
