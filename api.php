@@ -608,7 +608,7 @@ if ($action === 'reports_data' && $method === 'GET') {
             $nameMarks[] = $key;
             $params[$key] = $name;
         }
-        $sql .= ' AND (object_id IN (' . implode(',', $idMarks) . ') OR (object_id IS NULL AND object_name IN (' . implode(',', $selectedNameMarks) . ')))';
+        $sql .= ' AND (object_id IN (' . implode(',', $idMarks) . ') OR (object_id IS NULL AND object_name IN (' . implode(',', $nameMarks) . ')))';
     }
 
     if ($objectIds) {
@@ -622,7 +622,7 @@ if ($action === 'reports_data' && $method === 'GET') {
             $params[$idKey] = $id;
             $params[$nameKey] = (string)$availableById[$id]['name'];
         }
-        $sql .= ' AND (object_id IN (' . implode(',', $idMarks) . ') OR (object_id IS NULL AND object_name IN (' . implode(',', $nameMarks) . ')))';
+        $sql .= ' AND (object_id IN (' . implode(',', $idMarks) . ') OR (object_id IS NULL AND object_name IN (' . implode(',', $selectedNameMarks) . ')))';
     }
     $sql .= ' ORDER BY report_date DESC, object_name ASC, updated_at DESC';
 
