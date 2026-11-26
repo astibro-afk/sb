@@ -18,7 +18,7 @@
 .sb-site-nav-inner,.nav-inner{width:100%!important;max-width:1240px!important;min-height:40px!important;height:auto!important;margin:0 auto!important;padding:0 24px!important;display:flex!important;align-items:stretch!important;gap:5px!important;overflow-x:auto!important;box-sizing:border-box!important}
 .sb-site-nav a,.nav a{display:flex!important;align-items:center!important;min-height:40px!important;height:40px!important;margin:0!important;padding:0 13px!important;border:0!important;border-bottom:2px solid transparent!important;border-radius:0!important;background:transparent!important;color:var(--sb-header-muted)!important;font-family:Inter,Arial,sans-serif!important;font-size:11px!important;font-weight:700!important;line-height:1!important;text-decoration:none!important;white-space:nowrap!important;box-shadow:none!important}
 .sb-site-nav a:hover,.sb-site-nav a.active,.nav a:hover,.nav a.active{border-bottom:2px solid var(--sb-header-brand)!important;background:transparent!important;color:var(--sb-header-brand)!important}
-.app-header .brand-logo svg{display:none!important}
+.app-header .brand-logo svg{display:none!important}.app-header .brand-logo:before{content:"СБ";font-family:Inter,Arial,sans-serif;font-size:17px;font-weight:800;line-height:1;color:#fff}
 @media(max-width:700px){
  .sb-site-top,.top-inner,.app-header-inner{min-height:60px!important;padding:9px 14px!important;gap:10px!important}
  .sb-site-logo,.topbar .logo,.app-header .brand-logo{width:38px!important;height:38px!important;min-width:38px!important;max-width:38px!important;flex-basis:38px!important;font-size:15px!important}
