@@ -1,0 +1,23 @@
+/* Общая визуальная основа всех страниц SB. Компонентные стили страниц сохраняют свою компоновку. */
+:root{
+  --sb-brand:#0D7377;
+  --sb-brand-dark:#0A5C5F;
+  --sb-brand-soft:#E8F4F2;
+  --sb-page:#F3F8F7;
+  --sb-ink:#1A3438;
+  --sb-muted:#5A777B;
+  --sb-line:#DCE9E7;
+  --sb-focus:rgba(13,115,119,.16);
+}
+html{scroll-behavior:smooth}
+body{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:var(--sb-ink)}
+button,input,select,textarea{font-family:inherit}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{
+  outline:3px solid var(--sb-focus);
+  outline-offset:2px;
+}
+button:disabled{cursor:not-allowed}
+::selection{background:rgba(46,196,182,.22);color:var(--sb-ink)}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
