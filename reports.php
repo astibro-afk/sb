@@ -21,6 +21,14 @@ button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inte
 .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(12,35,40,.48);z-index:20;align-items:center;justify-content:center;padding:18px}.modal-backdrop.open{display:flex}.modal{width:min(460px,100%);background:#fff;border-radius:18px;padding:22px;box-shadow:0 20px 70px rgba(0,0,0,.22)}.modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.modal h2{margin:0;font-size:20px}.modal .actions{display:grid;grid-template-columns:1fr 1fr}.modal .actions button{min-height:48px}@media(max-width:440px){.modal .actions{grid-template-columns:1fr}}
 @media(max-width:760px){header{padding:13px 15px}.head{align-items:flex-start}.brand h1{font-size:15px}main{padding:18px 13px 40px}.panel{padding:16px}.filters{grid-template-columns:repeat(2,minmax(0,1fr))}.detail-grid{grid-template-columns:1fr}}
 @media(max-width:440px){.filters{grid-template-columns:1fr}.head .outline{padding:9px 10px}}
+.preview-modal{display:none;position:fixed;inset:0;background:rgba(12,35,40,.62);z-index:30;padding:14px;align-items:center;justify-content:center}
+.preview-modal.open{display:flex}
+.preview-dialog{width:min(1180px,100%);height:min(94vh,1100px);background:#F0F4F4;border-radius:18px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.3)}
+.preview-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:#fff;border-bottom:1px solid var(--line)}
+.preview-dialog-head h2{font-size:17px;margin:0}
+.preview-dialog-head p{font-size:12px;color:var(--muted);margin:4px 0 0}
+.preview-frame{display:block;width:100%;height:100%;border:0;background:#eef2f2}
+@media(max-width:600px){.preview-modal{padding:0}.preview-dialog{height:100vh;border-radius:0}.preview-dialog-head{padding:12px}.preview-dialog-head h2{font-size:15px}}
 </style>
 </head>
 <body>
@@ -42,6 +50,15 @@ button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inte
 <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Объект</th><th>Сотрудник</th><th>Автор записи</th><th>Обновлён</th><th>Действие</th></tr></thead><tbody id="rows"><tr><td colspan="6" class="empty">Загрузка отчётов…</td></tr></tbody></table></div>
 </section>
 <div class="modal-backdrop" id="downloadModal" aria-hidden="true"><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><div><h2>Скачать отчёт</h2><p class="sub" id="downloadMeta" style="margin:5px 0 0"></p></div><button class="outline" id="closeModal" type="button">Закрыть</button></div><p class="sub" style="margin:16px 0 10px">Выберите формат документа:</p><div class="actions"><button class="primary" id="word" type="button">Word (.doc)</button><button class="secondary" id="excel" type="button">Excel (.xlsx)</button></div><div class="status" id="downloadStatus"></div></div></div>
+<div class="preview-modal" id="previewModal" aria-hidden="true">
+ <div class="preview-dialog" role="dialog" aria-modal="true" aria-labelledby="previewTitle">
+  <div class="preview-dialog-head">
+   <div><h2 id="previewTitle">Предварительный просмотр отчёта</h2><p id="previewMeta"></p></div>
+   <button class="outline" id="closePreview" type="button">Закрыть</button>
+  </div>
+  <iframe class="preview-frame" id="previewFrame" title="Предварительный просмотр документа"></iframe>
+ </div>
+</div>
 </main>
 <script src="report-document.js"></script>
 <script>
@@ -81,7 +98,26 @@ function render(){
  $('rows').querySelectorAll('button[data-key]').forEach(b=>b.addEventListener('click',()=>openRecord(b.dataset.key)));
  $('rows').querySelectorAll('button[data-download]').forEach(b=>b.addEventListener('click',()=>showDownload(b.dataset.download)));
 }
-function openRecord(key){showDownload(key);}
+function openRecord(key){
+ selected=allRecords.find(r=>r.record_key===key);if(!selected)return;
+ try{
+  const source=Object.assign({},selected.data||{},{
+   b0_to:selected.object||(selected.data&&selected.data.b0_to)||'',
+   b0_fio:selected.employee||(selected.data&&selected.data.b0_fio)||'',
+   b0_date:selected.date||(selected.data&&selected.data.b0_date)||''
+  });
+  const documentData=window.SBDocument.build(source,selected.dyn||{});
+  const pageCss='.page{width:210mm;min-height:297mm;background:#fff;margin:24px auto;padding:20mm 25mm 25mm 30mm;box-shadow:0 8px 32px rgba(0,0,0,.12);font-family:"Times New Roman",Times,serif;font-size:12pt;line-height:1.5;color:#000}.page h1{font-size:12pt;font-weight:bold;text-align:center;margin:0 0 16pt;line-height:1.35}.page p{margin:0 0 5pt;text-indent:1.25cm;text-align:justify}.page p.no-indent{text-indent:0}.page strong{font-weight:bold}.page .ph{color:#000;font-weight:bold}.page .sec-title{margin-top:10pt}@media(max-width:850px){.page{width:100%;min-height:0;margin:0;padding:28px 22px;box-shadow:none}}';
+  const html='<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;padding:0;background:#eef2f2}'+pageCss+window.SBDocument.css()+'</style></head><body><div class="page">'+window.SBDocument.docHtml(documentData)+'</div></body></html>';
+  $('previewFrame').srcdoc=html;
+  $('previewMeta').textContent=[selected.date,selected.object,selected.employee].filter(Boolean).join(' · ');
+  $('previewModal').classList.add('open');$('previewModal').setAttribute('aria-hidden','false');
+ }catch(e){setStatus('Не удалось сформировать предпросмотр: '+e.message,true);}
+}
+function closePreview(){$('previewModal').classList.remove('open');$('previewModal').setAttribute('aria-hidden','true');$('previewFrame').srcdoc='';}
+$('closePreview').addEventListener('click',closePreview);
+$('previewModal').addEventListener('click',e=>{if(e.target===$('previewModal'))closePreview();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closePreview();});
 function showDownload(key){selected=allRecords.find(r=>r.record_key===key);if(!selected)return;$('downloadMeta').textContent=[selected.date,selected.object,selected.employee].filter(Boolean).join(' · ');$('downloadStatus').textContent='';$('downloadModal').classList.add('open');$('downloadModal').setAttribute('aria-hidden','false');}
 function closeDownload(){$('downloadModal').classList.remove('open');$('downloadModal').setAttribute('aria-hidden','true');}
 $('closeModal').addEventListener('click',closeDownload);
