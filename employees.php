@@ -111,9 +111,9 @@ function render(){
   const card=node('article','employee');
   const person=node('div','person'),avatar=node('div','avatar',initials(u.full_name||u.username));avatar.setAttribute('aria-hidden','true');
   const main=node('div','person-main');main.append(node('div','name',u.full_name||u.username||'Без имени'),node('div','login','@'+(u.username||'—')));
-  const state=node('span','state'+(u.is_active?'':' inactive'));state.title=u.is_active?'Активный аккаунт':'Аккаунт отключён';state.setAttribute('aria-label',state.title);
+  const online=!!u.is_online&&!!u.is_active;const state=node('span','state'+(online?'':' inactive'));state.title=!u.is_active?'Аккаунт отключён':(online?'Пользователь в сети':'Пользователь не в сети');state.setAttribute('aria-label',state.title);
   person.append(avatar,main,state);card.append(person);
-  const meta=node('div','meta');meta.append(node('span','role',labels[u.role]||u.role||'Сотрудник'),node('span','status '+(u.is_active?'':'off'),u.is_active?'Активен':'Отключён'));card.append(meta);
+  const meta=node('div','meta');meta.append(node('span','role',labels[u.role]||u.role||'Сотрудник'),node('span','status '+(online?'':'off'),!u.is_active?'Отключён':(online?'В сети':'Не в сети')));card.append(meta);
   const metrics=node('div','metrics');
   [[u.reports_count??0,'Отчётов'],[date(u.last_login,true),'Последний вход'],[date(u.last_report,true),'Последний отчёт']].forEach(([v,l])=>{const m=node('div','metric');m.append(node('strong','',String(v)),node('span','',l));metrics.append(m);});
   card.append(metrics);
