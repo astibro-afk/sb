@@ -574,6 +574,8 @@ if ($action === 'reports_data' && $method === 'GET') {
             'total' => (int)($item['total'] ?? 0),
             'saved_at' => (int)($item['t'] ?? 0),
             'updated_at' => (string)$row['updated_at'],
+            'data' => $data,
+            'dyn' => isset($item['dyn']) && is_array($item['dyn']) ? $item['dyn'] : [],
         ];
     }
 
