@@ -218,13 +218,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         } elseif ($act === 'user_toggle') {
-                    $err = 'Пароль нового пользователя — не менее 6 символов.';
-                } else {
-                    $st = $pdo->prepare('INSERT INTO sb_users (username, password_hash, full_name, role, object_id, is_active) VALUES (:u, :h, :f, :r, :o, 1)');
-                    $st->execute([':u' => $username, ':h' => password_hash($password, PASSWORD_DEFAULT), ':f' => $fullName, ':r' => $role, ':o' => $objectId]);
-                }
-            }
-        } elseif ($act === 'user_toggle') {
             if ($id === (int)$me['id']) {
                 $err = 'Нельзя отключить собственную учётную запись.';
             } else {
