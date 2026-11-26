@@ -253,81 +253,112 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
 <meta name="theme-color" content="#f3f7f8">
 <title>Управление — отчет СБ</title>
 <style>
-:root{--ink:#18343a;--muted:#71858a;--line:#e5edef;--teal:#08777b;--teal-dark:#075e62;--pale:#eaf5f5;--bg:#f3f7f8;--white:#fff;--red:#b94b35;--red-bg:#fff0ec;--green:#16734f;--green-bg:#eaf7f0}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.4 Arial,sans-serif}button,input,select{font:inherit}
-.page{width:100%;max-width:none;margin:0;padding:16px 18px 30px}.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.heading{display:flex;align-items:center;gap:10px}.logo{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:var(--teal);color:#fff;font-weight:800}h1{font-size:19px;margin:0}.subtitle{font-size:11px;color:var(--muted)}
-.panel{background:#fff;border:1px solid #eaf0f1;border-radius:12px;padding:13px;margin-bottom:12px}.panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.panel-title{font-size:15px;margin:0}.counter{font-size:11px;color:var(--muted);background:#f1f5f6;border-radius:20px;padding:3px 8px}
-.btn{display:inline-flex;align-items:center;justify-content:center;min-height:31px;padding:5px 10px;border:0;border-radius:7px;background:var(--teal);color:#fff;text-decoration:none;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap}.btn:hover{background:var(--teal-dark)}.btn.secondary{background:var(--pale);color:var(--teal-dark)}.btn.danger{background:var(--red-bg);color:var(--red)}.btn:disabled{opacity:.4;cursor:not-allowed}
-.fields{display:grid;grid-template-columns:1.2fr 1.4fr 1fr 1fr minmax(180px,1.4fr) auto;gap:8px;align-items:end}.field{min-width:0}label{display:block;margin:0 0 3px;color:var(--muted);font-size:10px;font-weight:700}input,select{width:100%;height:31px;padding:5px 8px;border:1px solid #dce6e8;border-radius:7px;background:#fff;color:var(--ink);outline:none;min-width:0;font-size:12px}input:focus,select:focus{border-color:#65aeb0;box-shadow:0 0 0 2px #08777b16}
-.objects{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:10px}.object-item{display:grid;grid-template-columns:minmax(0,1fr) 100px auto auto;gap:6px;align-items:center;padding:6px;background:#f8fbfb;border:1px solid var(--line);border-radius:8px}.object-item input,.object-item select{height:29px}.object-item form{margin:0}
-.user-tools{display:flex;gap:8px;align-items:center;margin:10px 0}.user-tools input{max-width:300px}.user-list{display:grid;gap:5px;overflow-x:auto}.user-card{min-width:1080px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fff}.user-main{display:grid;grid-template-columns:105px minmax(150px,1.3fr) 120px minmax(140px,1fr) 88px 130px 150px;gap:6px;align-items:end}.user-main label{font-size:9px}.user-main input,.user-main select{height:30px}.user-main select[multiple]{height:54px;padding:3px 5px}.fields select[multiple]{height:74px;padding:4px 6px}.user-main .btn{width:100%;height:30px}.mini-form{margin:0}.mini-form input{width:115px}.status{font-size:10px;font-weight:700;padding:4px 7px;border-radius:20px;white-space:nowrap}.active{color:var(--green);background:var(--green-bg)}.off{color:var(--red);background:var(--red-bg)}.created{font-size:10px;color:var(--muted);white-space:nowrap}.alert{padding:9px 11px;border-radius:8px;margin:0 0 10px;background:var(--red-bg);color:var(--red);font-size:12px}.empty{padding:18px;text-align:center;color:var(--muted);border:1px dashed #d8e3e5;border-radius:9px}
-@media(max-width:760px){.page{padding:12px}.fields{grid-template-columns:repeat(2,minmax(0,1fr))}.objects{grid-template-columns:1fr}.object-item{grid-template-columns:minmax(0,1fr) 90px auto auto}.panel{padding:11px}}
+:root{--ink:#18343a;--muted:#71858a;--line:#e4ecee;--teal:#08777b;--teal-dark:#075e62;--pale:#eaf5f5;--bg:#f3f7f8;--white:#fff;--red:#b94b35;--red-bg:#fff0ec;--green:#16734f;--green-bg:#eaf7f0;--shadow:0 5px 20px rgba(24,52,58,.055)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 Inter,Arial,sans-serif}button,input,select{font:inherit}button{cursor:pointer}
+.page{width:100%;max-width:1600px;margin:0 auto;padding:24px clamp(14px,2vw,30px) 40px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}.brand{display:flex;align-items:center;gap:13px}.logo{width:46px;height:46px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(145deg,#0b898b,#075e62);color:#fff;font-weight:800;font-size:15px;box-shadow:0 5px 12px #08777b30}.brand h1{font-size:23px;line-height:1.15;margin:0;letter-spacing:-.4px}.subtitle{font-size:12px;color:var(--muted);margin-top:4px}.top-actions{display:flex;align-items:center;gap:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:8px 13px;border:1px solid transparent;border-radius:9px;background:var(--teal);color:#fff;text-decoration:none;font-weight:700;font-size:12px;white-space:nowrap;transition:.16s ease}.btn:hover{background:var(--teal-dark);transform:translateY(-1px)}.btn.secondary{background:#fff;color:var(--ink);border-color:var(--line)}.btn.secondary:hover{background:var(--pale);border-color:#c5dfe0;color:var(--teal-dark)}.btn.danger{background:var(--red-bg);color:var(--red);border-color:#f6ddd6}.btn.danger:hover{background:#ffe4dc}.btn.small{min-height:31px;padding:6px 10px;font-size:11px}.btn:disabled{opacity:.42;cursor:not-allowed;transform:none}
+.summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:16px}.summary-card{display:flex;align-items:center;gap:12px;padding:13px 16px;background:#fff;border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow)}.summary-icon{width:36px;height:36px;display:grid;place-items:center;border-radius:11px;background:var(--pale);color:var(--teal);font-size:17px}.summary-value{font-size:20px;font-weight:800;line-height:1.1}.summary-label{font-size:11px;color:var(--muted);margin-top:3px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:15px;padding:18px;margin-bottom:15px;box-shadow:var(--shadow)}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.panel-heading{display:flex;align-items:center;gap:10px}.section-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:var(--pale);color:var(--teal);font-size:16px}.panel-title{font-size:16px;font-weight:800;letter-spacing:-.2px;margin:0}.panel-subtitle{font-size:11px;color:var(--muted);margin-top:2px}.counter{font-size:11px;color:#557176;background:#f1f6f6;border:1px solid #e7eeee;border-radius:30px;padding:5px 9px;white-space:nowrap}
+.alert{display:flex;align-items:flex-start;gap:9px;padding:11px 13px;border:1px solid #f4d8d0;border-radius:11px;margin:0 0 14px;background:var(--red-bg);color:var(--red);font-size:12px}.alert:before{content:"!";display:grid;place-items:center;flex:0 0 18px;height:18px;border-radius:50%;background:#f9d9d0;font-weight:800}
+.field{min-width:0}.field label,.field-label{display:block;margin:0 0 5px;color:#647c81;font-size:10px;font-weight:800;letter-spacing:.35px;text-transform:uppercase}input,select{width:100%;height:37px;padding:7px 10px;border:1px solid #dce6e8;border-radius:9px;background:#fff;color:var(--ink);outline:none;min-width:0;font-size:12px;transition:border-color .15s,box-shadow .15s}input:focus,select:focus{border-color:#65aeb0;box-shadow:0 0 0 3px #08777b14}input::placeholder{color:#a0afb2}
+.add-object{display:grid;grid-template-columns:minmax(220px,1fr) 170px auto;gap:10px;align-items:end;padding:13px;background:#f7fafa;border:1px solid #e9f0f1;border-radius:12px}.object-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:9px;margin-top:13px}.object-card{display:grid;grid-template-columns:minmax(0,1fr) 112px auto auto;gap:7px;align-items:center;padding:9px;background:#fbfdfd;border:1px solid var(--line);border-radius:11px}.object-card input,.object-card select{height:34px}.object-card .btn{height:34px}
+.user-create{display:grid;grid-template-columns:1fr 1.35fr 1fr 1fr minmax(210px,1.35fr) auto;gap:10px;align-items:end;padding:14px;background:#f7fafa;border:1px solid #e9f0f1;border-radius:12px}
+.object-picker{position:relative;min-width:0}.object-picker summary{height:37px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border:1px solid #dce6e8;border-radius:9px;background:#fff;color:var(--ink);font-size:12px;cursor:pointer;list-style:none;white-space:nowrap;overflow:hidden}.object-picker summary::-webkit-details-marker{display:none}.object-picker summary:after{content:"⌄";font-size:16px;color:var(--muted)}.object-picker[open] summary{border-color:#65aeb0;box-shadow:0 0 0 3px #08777b14}.picker-value{overflow:hidden;text-overflow:ellipsis}.picker-menu{position:absolute;z-index:20;top:calc(100% + 5px);left:0;right:0;max-height:245px;overflow:auto;padding:6px;background:#fff;border:1px solid #dce6e8;border-radius:10px;box-shadow:0 12px 30px #18343a20}.picker-option{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:7px;color:var(--ink);font-size:12px;cursor:pointer}.picker-option:hover{background:#f1f7f7}.picker-option input{width:15px;height:15px;margin:0;accent-color:var(--teal)}.picker-empty{padding:9px;color:var(--muted);font-size:11px}
+.user-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:17px 0 10px}.search-wrap{position:relative;flex:1;max-width:440px}.search-wrap:before{content:"⌕";position:absolute;left:12px;top:5px;color:#8ba0a4;font-size:20px}.search-wrap input{height:39px;padding-left:36px;background:#fbfdfd}.user-list{display:grid;gap:8px}.user-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:#fff;transition:border-color .15s,box-shadow .15s}.user-card:hover{border-color:#c9dfe0;box-shadow:0 4px 15px #18343a0b}.user-edit-form{display:grid;grid-template-columns:105px minmax(150px,1.2fr) 140px minmax(190px,1.4fr) 105px minmax(140px,1fr) auto;gap:9px;align-items:end;min-width:0}.user-edit-form .field label{font-size:9px}.user-edit-form input,.user-edit-form select{height:36px}.user-edit-form .object-picker summary{height:36px}.user-id{font-weight:800;color:var(--teal);font-variant-numeric:tabular-nums}.user-id small{display:block;margin-top:2px;color:var(--muted);font-size:9px;font-weight:600}.user-actions{display:flex;align-items:center;gap:6px}.user-actions form{margin:0}.status{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:800;padding:5px 8px;border-radius:30px;white-space:nowrap}.status:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}.active{color:var(--green);background:var(--green-bg)}.off{color:var(--red);background:var(--red-bg)}.empty{padding:24px;text-align:center;color:var(--muted);border:1px dashed #d8e3e5;border-radius:11px;background:#fbfdfd;font-size:12px}
+@media(max-width:1180px){.user-create{grid-template-columns:repeat(3,minmax(0,1fr))}.user-edit-form{grid-template-columns:90px minmax(130px,1fr) 125px minmax(170px,1.2fr) 100px auto}.user-edit-form .password-field{grid-column:2/4}.user-edit-form .save-field{grid-column:4/7}.user-edit-form .save-field .btn{width:100%}.user-card{grid-template-columns:1fr}.user-actions{justify-content:flex-end}}
+@media(max-width:700px){.page{padding:14px 11px 28px}.topbar{align-items:flex-start}.brand h1{font-size:20px}.logo{width:41px;height:41px}.summary{gap:7px}.summary-card{padding:10px;gap:8px}.summary-icon{width:30px;height:30px;font-size:14px}.summary-value{font-size:17px}.summary-label{font-size:10px}.panel{padding:13px;border-radius:13px}.panel-head{margin-bottom:12px}.add-object{grid-template-columns:1fr 115px}.add-object .submit-field{grid-column:1/-1}.add-object .submit-field .btn{width:100%}.object-grid{grid-template-columns:1fr}.object-card{grid-template-columns:minmax(0,1fr) 95px auto auto;padding:7px}.user-create{grid-template-columns:1fr 1fr}.user-create .picker-field,.user-create .create-field{grid-column:1/-1}.user-create .create-field .btn{width:100%}.user-tools{align-items:stretch;flex-direction:column}.search-wrap{max-width:none}.user-card{padding:11px}.user-edit-form{grid-template-columns:1fr 1fr}.user-edit-form .id-field{grid-column:1/-1}.user-edit-form .full-field{grid-column:1/-1}.user-edit-form .picker-field{grid-column:1/-1}.user-edit-form .password-field{grid-column:1/-1}.user-edit-form .save-field{grid-column:1/-1}.user-edit-form .save-field .btn{width:100%}.user-actions{justify-content:stretch}.user-actions form{flex:1}.user-actions .btn{width:100%}.top-actions .btn{min-height:34px;padding:7px 9px}}
+@media(max-width:390px){.summary-card{flex-direction:column;align-items:flex-start}.object-card{grid-template-columns:1fr 85px}.object-card .save-object{grid-column:1}.object-card .delete-object{grid-column:2}.user-create{grid-template-columns:1fr}.user-create .field{grid-column:1/-1}}
 </style>
 </head>
 <body>
 <div class="page">
-<header class="header">
-  <div class="heading"><div class="logo">СБ</div><div><h1>Управление</h1><div class="subtitle">Пользователи и торговые объекты</div></div></div>
-  <a class="btn secondary" href="index.html">← К отчетам</a>
+<header class="topbar">
+  <div class="brand"><div class="logo">СБ</div><div><h1>Управление</h1><div class="subtitle">Пользователи, роли и торговые объекты</div></div></div>
+  <div class="top-actions"><a class="btn secondary" href="index.html">← <span>К отчетам</span></a></div>
 </header>
+
+<div class="summary">
+  <div class="summary-card"><div class="summary-icon">♙</div><div><div class="summary-value"><?= count($users) ?></div><div class="summary-label">Всего пользователей</div></div></div>
+  <div class="summary-card"><div class="summary-icon">●</div><div><div class="summary-value"><?= count(array_filter($users, function($u) { return (int)$u['is_active'] === 1; })) ?></div><div class="summary-label">Активных учётных записей</div></div></div>
+  <div class="summary-card"><div class="summary-icon">⌖</div><div><div class="summary-value"><?= count($objects) ?></div><div class="summary-label">Торговых объектов</div></div></div>
+</div>
 
 <?php if ($err): ?><div class="alert"><?= h($err) ?></div><?php endif; ?>
 
 <section class="panel">
-  <div class="panel-head"><h2 class="panel-title">Торговые объекты</h2><span class="counter"><?= count($objects) ?> объектов</span></div>
-  <form method="post" class="fields">
+  <div class="panel-head">
+    <div class="panel-heading"><div class="section-icon">⌖</div><div><h2 class="panel-title">Торговые объекты</h2><div class="panel-subtitle">Создание, переименование и включение объектов</div></div></div>
+    <span class="counter"><?= count($objects) ?> объектов</span>
+  </div>
+  <form method="post" class="add-object">
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="object_save">
-    <div class="field wide"><label>Название нового объекта</label><input name="name" placeholder="Введите название" required></div>
-    <div class="field"><label>Статус</label><select name="is_active"><option value="1" selected>Активен</option><option value="0">Отключен</option></select></div>
-    <div class="field"><label>&nbsp;</label><button class="btn" type="submit">＋ Добавить объект</button></div>
+    <div class="field"><label>Название нового объекта</label><input name="name" placeholder="Например, Группа БФ Волгоград 1" required></div>
+    <div class="field"><label>Начальный статус</label><select name="is_active"><option value="1" selected>Активен</option><option value="0">Отключён</option></select></div>
+    <div class="field submit-field"><label>&nbsp;</label><button class="btn" type="submit">＋ Добавить объект</button></div>
   </form>
-  <?php if ($objects): ?><div class="objects">
+  <?php if ($objects): ?><div class="object-grid">
     <?php foreach ($objects as $o): ?>
-    <form method="post" class="object-item">
+    <form method="post" class="object-card">
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="object_save"><input type="hidden" name="id" value="<?= (int)$o['id'] ?>">
       <input name="name" aria-label="Название объекта" value="<?= h($o['name']) ?>" required>
-      <select name="is_active" aria-label="Статус объекта"><option value="1" <?= $o['is_active'] ? 'selected' : '' ?>>Активен</option><option value="0" <?= !$o['is_active'] ? 'selected' : '' ?>>Отключен</option></select>
-      <button class="btn secondary" type="submit">Сохранить</button>
+      <select name="is_active" aria-label="Статус объекта"><option value="1" <?= $o['is_active'] ? 'selected' : '' ?>>Активен</option><option value="0" <?= !$o['is_active'] ? 'selected' : '' ?>>Отключён</option></select>
+      <button class="btn secondary small save-object" type="submit">Сохранить</button>
+      <button class="btn danger small delete-object" type="submit" name="act" value="object_delete" formnovalidate onclick="return confirm('Удалить объект «<?= h($o['name']) ?>»?');">Удалить</button>
     </form>
     <?php endforeach; ?>
-  </div><?php endif; ?>
+  </div><?php else: ?><div class="empty" style="margin-top:12px">Пока нет торговых объектов. Добавьте первый объект выше.</div><?php endif; ?>
 </section>
 
 <section class="panel">
-  <div class="panel-head"><h2 class="panel-title">Пользователи</h2><span class="counter"><?= count($users) ?> учётных записей</span></div>
-  <form method="post" class="fields">
+  <div class="panel-head">
+    <div class="panel-heading"><div class="section-icon">♙</div><div><h2 class="panel-title">Пользователи</h2><div class="panel-subtitle">Учётные записи, роли, доступ и закреплённые объекты</div></div></div>
+    <span class="counter"><?= count($users) ?> учётных записей</span>
+  </div>
+  <form method="post" class="user-create">
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_save">
     <div class="field"><label>Логин</label><input name="username" placeholder="Логин" required></div>
     <div class="field"><label>ФИО</label><input name="full_name" placeholder="Фамилия Имя Отчество" required></div>
     <div class="field"><label>Пароль</label><input name="password" type="password" minlength="6" placeholder="От 6 символов" required></div>
     <div class="field"><label>Роль</label><select name="role"><option value="user">Пользователь</option><option value="moderator">Модератор</option><option value="admin">Администратор</option></select></div>
-    <div class="field"><label>Объекты (Ctrl/Shift — несколько)</label><select name="object_ids[]" multiple size="3" aria-label="Назначенные объекты"><?php foreach ($objects as $o): ?><option value="<?= (int)$o['id'] ?>"><?= h($o['name']) ?></option><?php endforeach; ?></select></div>
-    <div class="field"><label>&nbsp;</label><button class="btn" type="submit">＋ Создать пользователя</button></div>
+    <div class="field picker-field"><label>Закрепить объекты</label>
+      <details class="object-picker"><summary><span class="picker-value">Выбрать объекты</span></summary><div class="picker-menu">
+      <?php foreach ($objects as $o): ?><label class="picker-option"><input type="checkbox" name="object_ids[]" value="<?= (int)$o['id'] ?>"><span><?= h($o['name']) ?></span></label><?php endforeach; ?>
+      <?php if (!$objects): ?><div class="picker-empty">Сначала добавьте торговый объект</div><?php endif; ?>
+      </div></details>
+    </div>
+    <div class="field create-field"><label>&nbsp;</label><button class="btn" type="submit">＋ Создать пользователя</button></div>
   </form>
 
-  <div class="user-tools" style="margin-top:16px"><input id="userSearch" type="search" placeholder="Поиск по логину или ФИО…" aria-label="Поиск пользователей"><span class="counter" id="visibleCount"><?= count($users) ?> показано</span></div>
+  <div class="user-tools"><div class="search-wrap"><input id="userSearch" type="search" placeholder="Поиск по логину, ФИО или объекту…" aria-label="Поиск пользователей"></div><span class="counter" id="visibleCount"><?= count($users) ?> показано</span></div>
   <div class="user-list" id="userList">
   <?php foreach ($users as $u): ?>
     <article class="user-card" data-search="<?= h(mb_strtolower($u['username'].' '.$u['full_name'].' '.implode(' ', array_map(function($oid) use ($objName) { return $objName[$oid] ?? ''; }, $userObjectIds[(int)$u['id']] ?? [])), 'UTF-8')) ?>">
-      <form method="post" class="user-main">
+      <form method="post" class="user-edit-form">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_save"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
-        <div class="field"><label>Логин · ID <?= (int)$u['id'] ?></label><input name="username" value="<?= h($u['username']) ?>" required></div>
-        <div class="field"><label>ФИО</label><input name="full_name" value="<?= h($u['full_name']) ?>" required></div>
+        <div class="field id-field"><label>Учётная запись</label><div class="user-id">#<?= (int)$u['id'] ?><small><?= $u['is_active'] ? 'В системе' : 'Отключена' ?></small></div></div>
+        <div class="field"><label>Логин</label><input name="username" value="<?= h($u['username']) ?>" required></div>
+        <div class="field full-field"><label>ФИО</label><input name="full_name" value="<?= h($u['full_name']) ?>" required></div>
         <div class="field"><label>Роль</label><select name="role"><?php foreach ($roleNames as $rk => $rn): ?><option value="<?= h($rk) ?>" <?= $u['role'] === $rk ? 'selected' : '' ?>><?= h($rn) ?></option><?php endforeach; ?></select></div>
-        <div class="field"><label>Объекты (Ctrl/Shift — несколько)</label><select name="object_ids[]" multiple size="2" aria-label="Назначенные объекты"><?php foreach ($objects as $o): ?><option value="<?= (int)$o['id'] ?>" <?= in_array((int)$o['id'], $userObjectIds[(int)$u['id']] ?? [], true) ? 'selected' : '' ?>><?= h($o['name']) ?></option><?php endforeach; ?></select></div>
-        <div class="field"><label>Статус</label><select name="is_active"><option value="1" <?= $u['is_active'] ? 'selected' : '' ?>>Активен</option><option value="0" <?= !$u['is_active'] ? 'selected' : '' ?>>Отключен</option></select></div>
-        <div class="field"><label>Новый пароль (необязательно)</label><input name="password" type="password" minlength="6" placeholder="Не менять"></div>
-        <div class="field"><label>&nbsp;</label><button class="btn secondary" type="submit">Сохранить</button></div>
+        <div class="field picker-field"><label>Закреплённые объекты</label>
+          <details class="object-picker"><summary><span class="picker-value">Выбрать объекты</span></summary><div class="picker-menu">
+          <?php foreach ($objects as $o): ?><label class="picker-option"><input type="checkbox" name="object_ids[]" value="<?= (int)$o['id'] ?>" <?= in_array((int)$o['id'], $userObjectIds[(int)$u['id']] ?? [], true) ? 'checked' : '' ?>><span><?= h($o['name']) ?></span></label><?php endforeach; ?>
+          <?php if (!$objects): ?><div class="picker-empty">Нет объектов</div><?php endif; ?>
+          </div></details>
+        </div>
+        <div class="field"><label>Статус</label><select name="is_active"><option value="1" <?= $u['is_active'] ? 'selected' : '' ?>>Активен</option><option value="0" <?= !$u['is_active'] ? 'selected' : '' ?>>Отключён</option></select></div>
+        <div class="field password-field"><label>Новый пароль</label><input name="password" type="password" minlength="6" placeholder="Оставьте пустым, чтобы не менять"></div>
+        <div class="field save-field"><label>&nbsp;</label><button class="btn secondary" type="submit">Сохранить изменения</button></div>
       </form>
-      <span class="status <?= $u['is_active'] ? 'active' : 'off' ?>"><?= $u['is_active'] ? 'Активен' : 'Отключен' ?></span>
-      <div style="display:flex;gap:5px;align-items:center">
-        <form method="post" class="mini-form"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_toggle"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>"><button class="btn danger" type="submit" <?= (int)$u['id'] === (int)$me['id'] ? 'disabled' : '' ?>><?= $u['is_active'] ? 'Отключить' : 'Включить' ?></button></form>
-        <form method="post" onsubmit="return confirm('Удалить пользователя «<?= h($u['username']) ?>»? Это действие нельзя отменить.');"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_delete"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>"><button class="btn danger" type="submit" <?= (int)$u['id'] === (int)$me['id'] ? 'disabled' : '' ?>>Удалить</button></form>
+      <div class="user-actions">
+        <span class="status <?= $u['is_active'] ? 'active' : 'off' ?>"><?= $u['is_active'] ? 'Активен' : 'Отключён' ?></span>
+        <form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_toggle"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>"><button class="btn danger small" type="submit" <?= (int)$u['id'] === (int)$me['id'] ? 'disabled' : '' ?>><?= $u['is_active'] ? 'Отключить' : 'Включить' ?></button></form>
+        <form method="post" onsubmit="return confirm('Удалить пользователя «<?= h($u['username']) ?>»? Это действие нельзя отменить.');"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_delete"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>"><button class="btn danger small" type="submit" <?= (int)$u['id'] === (int)$me['id'] ? 'disabled' : '' ?>>Удалить</button></form>
       </div>
     </article>
   <?php endforeach; ?>
   </div>
-  <div class="empty" id="noUsers" hidden>Пользователи не найдены.</div>
+  <div class="empty" id="noUsers" hidden>По вашему запросу ничего не найдено.</div>
 </section>
 </div>
 <script>
@@ -336,18 +367,37 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
   const cards=Array.from(document.querySelectorAll('.user-card'));
   const count=document.getElementById('visibleCount');
   const empty=document.getElementById('noUsers');
-  if(!input)return;
-  input.addEventListener('input',function(){
-    const q=this.value.trim().toLocaleLowerCase('ru');
-    let shown=0;
-    cards.forEach(card=>{
-      const match=(card.dataset.search||'').includes(q);
-      card.hidden=!match;
-      if(match)shown++;
-    });
-    count.textContent=shown+' показано';
-    empty.hidden=shown!==0;
+  function updatePicker(details){
+    const summary=details.querySelector('.picker-value');
+    const checked=Array.from(details.querySelectorAll('input[type="checkbox"]:checked'));
+    if(!summary)return;
+    if(!checked.length){summary.textContent='Выбрать объекты';return;}
+    const names=checked.map(x=>x.parentElement.querySelector('span').textContent.trim());
+    summary.textContent=names.length===1?names[0]:'Выбрано: '+names.length;
+    summary.title=names.join(', ');
+  }
+  document.querySelectorAll('.object-picker').forEach(details=>{
+    updatePicker(details);
+    details.querySelectorAll('input[type="checkbox"]').forEach(box=>box.addEventListener('change',()=>updatePicker(details)));
   });
+  document.addEventListener('click',event=>{
+    document.querySelectorAll('.object-picker[open]').forEach(details=>{
+      if(!details.contains(event.target))details.open=false;
+    });
+  });
+  if(input){
+    input.addEventListener('input',function(){
+      const q=this.value.trim().toLocaleLowerCase('ru');
+      let shown=0;
+      cards.forEach(card=>{
+        const match=(card.dataset.search||'').includes(q);
+        card.hidden=!match;
+        if(match)shown++;
+      });
+      count.textContent=shown+' показано';
+      empty.hidden=shown!==0;
+    });
+  }
 })();
 </script>
 </body>
