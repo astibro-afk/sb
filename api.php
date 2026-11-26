@@ -498,7 +498,26 @@ if ($action === 'load' && $method === 'GET') {
     }
     $data[KEY_ARCH] = $archive;
 
-    reply(200, ['ok' => true, 'data' => $data, 'user' => $ctx, 'objects' => $objects, 'csrf' => csrf_token()]);
+    // Сотрудники для поля «Составитель»: активные пользователи и новые учётные записи,
+    // ожидающие активации по одноразовой ссылке. Отключённые пользователи не показываются.
+    $employeeSql = "SELECT u.id, u.full_name, u.object_id
+                    FROM sb_users u
+                    WHERE u.role = 'user'
+                      AND (u.is_active = 1 OR EXISTS (
+                          SELECT 1 FROM sb_user_activation_tokens t
+                          WHERE t.user_id = u.id AND t.expires_at > NOW()
+                      ))";
+    $employeeParams = [];
+    if ($ctx['role'] === 'moderator') {
+        $employeeSql .= " AND u.object_id = ?";
+        $employeeParams[] = (int)$ctx['object_id'];
+    }
+    $employeeSql .= " ORDER BY u.full_name, u.id";
+    $employeeStmt = $pdo->prepare($employeeSql);
+    $employeeStmt->execute($employeeParams);
+    $employees = $employeeStmt->fetchAll();
+
+    reply(200, ['ok' => true, 'data' => $data, 'user' => $ctx, 'objects' => $objects, 'employees' => $employees, 'csrf' => csrf_token()]);
 }
 
 if ($action === 'save' && $method === 'POST') {
