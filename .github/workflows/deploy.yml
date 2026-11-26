@@ -12,6 +12,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check PHP syntax
+        run: |
+          for file in *.php; do
+            php -l "$file"
+          done
+
       - name: Upload site to InfinityFree
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
