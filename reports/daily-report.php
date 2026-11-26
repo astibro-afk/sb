@@ -1544,8 +1544,9 @@ body { background: #F3F8F7; }
       <button class="btn btn-ghost" id="btnLogout" type="button">Выход</button>
     </div>
   </div>
-</header>
 <nav class="sb-site-nav" aria-label="Основная навигация"><div class="sb-site-nav-inner"><a href="../index.html">Главная</a><a class="active" href="../reports.php">Отчёты</a><a href="../tasks.php">Задачи</a><a href="../employees.php">Сотрудники</a><a href="../notifications.php">Уведомления</a></div></nav>
+</header>
+
 
 <div class="progress-wrap">
   <div class="progress-card">
