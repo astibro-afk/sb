@@ -614,5 +614,7 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
   }
 })();
 </script>
-</body>
+<script>
+(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,30000);document.addEventListener('visibilitychange',ping);})();
+</script></body>
 </html>
