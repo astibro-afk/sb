@@ -684,7 +684,8 @@ if ($action === 'tasks_data' && $method === 'GET') {
         WHERE o.is_active=1";
     $params = [];
     if ($ctx['role'] === 'user') {
-        $sql .= " AND t.assignee_id=:uid"; $params[':uid']=(int)$ctx['id'];
+        $sql .= " AND t.assignee_id=:uid AND EXISTS(SELECT 1 FROM sb_user_objects mine WHERE mine.user_id=:uid_object AND mine.object_id=t.object_id)";
+        $params[':uid']=(int)$ctx['id']; $params[':uid_object']=(int)$ctx['id'];
     } elseif ($ctx['role'] === 'moderator') {
         $sql .= " AND EXISTS (SELECT 1 FROM sb_user_objects uo WHERE uo.user_id=:mid AND uo.object_id=t.object_id)";
         $params[':mid']=(int)$ctx['id'];
@@ -765,13 +766,17 @@ if ($action === 'task_update' && $method === 'POST') {
     if($ctx['role']==='moderator'){
         $check=$pdo->prepare('SELECT COUNT(*) FROM sb_user_objects WHERE user_id=:uid AND object_id=:oid');
         $check->execute([':uid'=>(int)$ctx['id'],':oid'=>(int)$task['object_id']]);$canSee=(int)$check->fetchColumn()>0;
-    } elseif($ctx['role']==='user') $canSee=(int)$task['assignee_id']===(int)$ctx['id'];
+    } elseif($ctx['role']==='user') {
+        $check=$pdo->prepare('SELECT COUNT(*) FROM sb_user_objects WHERE user_id=:uid AND object_id=:oid');
+        $check->execute([':uid'=>(int)$ctx['id'],':oid'=>(int)$task['object_id']]);
+        $canSee=(int)$task['assignee_id']===(int)$ctx['id']&&(int)$check->fetchColumn()>0;
+    }
     if(!$canSee) reply(403,['ok'=>false,'error'=>'Нет доступа к этой задаче.']);
     $status=(string)($body['status']??'');
     if($status!==''){
         $isAssignee=(int)$task['assignee_id']===(int)$ctx['id'];
         $isManager=$ctx['role']==='admin'||($ctx['role']==='moderator'&&(int)$task['created_by']===(int)$ctx['id']);
-        if($isAssignee&&!in_array($status,['in_progress','review'],true)) reply(403,['ok'=>false,'error'=>'Исполнитель может перевести задачу в работу или на проверку.']);
+        if($isAssignee&&!$isManager&&!in_array($status,['in_progress','review'],true)) reply(403,['ok'=>false,'error'=>'Исполнитель может перевести задачу в работу или на проверку.']);
         if(!$isAssignee&&!$isManager) reply(403,['ok'=>false,'error'=>'Недостаточно прав для изменения статуса.']);
         if($isManager&&!in_array($status,['in_progress','done'],true)) reply(400,['ok'=>false,'error'=>'Недопустимый статус.']);
         if(!in_array($status,['in_progress','review','done'],true)) reply(400,['ok'=>false,'error'=>'Недопустимый статус.']);
