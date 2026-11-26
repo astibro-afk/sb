@@ -159,10 +159,17 @@ $('word').addEventListener('click',()=>{
 });
 $('excel').addEventListener('click',()=>{
  if(!selected)return;
- loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',()=>!!window.XLSX).then(()=>{
- const wb=XLSX.utils.book_new();const ws=XLSX.utils.aoa_to_sheet(exportRows());ws['!cols']=[{wch:34},{wch:70}];XLSX.utils.book_append_sheet(wb,ws,'Отчёт');
- XLSX.writeFile(wb,'Отчёт_'+safe(selected.date)+'_'+safe(selected.employee)+'.xlsx');
- }).catch(e=>$('downloadStatus').textContent='Ошибка Excel: '+e.message);
+ try{
+  const source=Object.assign({},selected.data||{},{
+   b0_to:selected.object||(selected.data&&selected.data.b0_to)||'',
+   b0_fio:selected.employee||(selected.data&&selected.data.b0_fio)||'',
+   b0_date:selected.date||(selected.data&&selected.data.b0_date)||''
+  });
+  const documentData=window.SBDocument.build(source,selected.dyn||{});
+  const blob=window.SBDocument.excelBlob(documentData);
+  download(blob,'Отчёт_'+safe(selected.date)+'_'+safe(selected.employee)+'.xlsx');
+  $('downloadStatus').textContent='Excel-файл сформирован.';
+ }catch(e){$('downloadStatus').textContent='Ошибка Excel: '+e.message;}
 });
 function safe(s){return String(s||'Отчёт').replace(/[^\p{L}\p{N}_-]+/gu,'_').slice(0,70);}
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);}
