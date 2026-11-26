@@ -764,5 +764,5 @@ function excelBlob(d){
  return buildXlsx([{name:'Ежедневный отчёт',rows:rows,opts:{cols:[64,18,4,18,42],merge:merges,freeze:3}}]);
 }
 
-root.SBDocument={build:build,docHtml:docHtml,wordHtml:wordHtml,excelBlob:excelBlob,css:docCss};
+root.SBDocument={build:build,docHtml:docHtml,wordHtml:wordHtml,excelBlob:excelBlob,buildXlsx:buildXlsx,css:docCss};
 })(window);
