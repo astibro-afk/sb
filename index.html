@@ -4519,7 +4519,12 @@ var colIdx = [];
     var btnEmployees = $('#btnEmployees');
     if (btnEmployees) btnEmployees.style.display = '';
     var btnNotifications = $('#btnNotifications');
-    if (btnNotifications) btnNotifications.style.display = '';
+    if (btnNotifications) {
+      btnNotifications.style.display = '';
+      sbFetch('notifications_data').then(function(data) {
+        if (data && data.ok) btnNotifications.textContent = 'Уведомления' + (Number(data.unread) > 0 ? ' (' + Number(data.unread) + ')' : '');
+      }).catch(function() {});
+    }
     var btnUsers = $('#btnUsers');
     if (btnUsers) btnUsers.style.display = (user.role === 'admin') ? '' : 'none';
     var btnAddUser = $('#btnAddUser');
