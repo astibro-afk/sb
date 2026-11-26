@@ -215,6 +215,20 @@ function db(array $cfg): PDO {
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_report_comment_author (author_user_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS sb_audit_log (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            actor_user_id INT UNSIGNED NULL DEFAULT NULL,
+            actor_name VARCHAR(255) NOT NULL DEFAULT '',
+            action VARCHAR(64) NOT NULL,
+            target_type VARCHAR(64) NOT NULL DEFAULT '',
+            target_id INT UNSIGNED NULL DEFAULT NULL,
+            target_label VARCHAR(255) NOT NULL DEFAULT '',
+            details TEXT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_audit_created (created_at),
+            INDEX idx_audit_actor (actor_user_id),
+            INDEX idx_audit_action (action)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         ensure_user_objects($pdo);
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
@@ -236,6 +250,15 @@ function ensure_user_objects(PDO $pdo): void {
     // Идемпотентный перенос прежней одиночной привязки.
     $pdo->exec("INSERT IGNORE INTO sb_user_objects (user_id, object_id)
         SELECT id, object_id FROM sb_users WHERE object_id IS NOT NULL");
+}
+
+function audit_log(PDO $pdo, ?array $actor, string $action, string $targetType = '', ?int $targetId = null, string $targetLabel = '', array $details = []): void {
+    try {
+        $actorId = isset($actor['id']) ? (int)$actor['id'] : (isset($actor['user_id']) ? (int)$actor['user_id'] : 0);
+        $actorName = (string)($actor['full_name'] ?? $actor['actor_name'] ?? $actor['username'] ?? '');
+        $stmt = $pdo->prepare('INSERT INTO sb_audit_log (actor_user_id, actor_name, action, target_type, target_id, target_label, details) VALUES (:uid, :name, :action, :type, :target_id, :label, :details)');
+        $stmt->execute([':uid' => $actorId > 0 ? $actorId : null, ':name' => mb_substr($actorName, 0, 255), ':action' => mb_substr($action, 0, 64), ':type' => mb_substr($targetType, 0, 64), ':target_id' => $targetId, ':label' => mb_substr($targetLabel, 0, 255), ':details' => $details ? json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null]);
+    } catch (Throwable $e) { error_log('SB audit log error: ' . $e->getMessage()); }
 }
 
 function get_user_object_rows(PDO $pdo, int $userId): array {
@@ -465,7 +488,7 @@ if ($action === 'activate_info' && $method === 'GET') {
     $token = (string)($_GET['token'] ?? '');
     if (!preg_match('/^[a-f0-9]{64}$/', $token)) reply(400, ['ok' => false, 'error' => 'Некорректная ссылка активации.']);
     $pdo = db($cfg);
-    $st = $pdo->prepare('SELECT u.username, u.full_name, t.expires_at FROM sb_user_activation_tokens t JOIN sb_users u ON u.id=t.user_id WHERE t.token_hash=:h AND t.expires_at > NOW() AND u.is_active=0 LIMIT 1');
+    $st = $pdo->prepare('SELECT u.username, u.full_name, t.expires_at FROM sb_user_activation_tokens t JOIN sb_users u ON u.id=t.user_id WHERE t.token_hash=:h AND t.expires_at > NOW() LIMIT 1');
     $st->execute([':h' => hash('sha256', $token)]);
     $row = $st->fetch();
     if (!$row) reply(404, ['ok' => false, 'error' => 'Ссылка недействительна или срок её действия истёк. Обратитесь к модератору за новой ссылкой.']);
@@ -484,12 +507,13 @@ if ($action === 'activate_complete' && $method === 'POST') {
         $st->execute([':h' => hash('sha256', $token)]);
         $userId = $st->fetchColumn();
         if (!$userId) { $pdo->rollBack(); reply(404, ['ok' => false, 'error' => 'Ссылка недействительна или срок её действия истёк.']); }
-        $st = $pdo->prepare('UPDATE sb_users SET password_hash=:p, is_active=1 WHERE id=:id AND is_active=0');
+        $st = $pdo->prepare('UPDATE sb_users SET password_hash=:p, is_active=1 WHERE id=:id');
         $st->execute([':p' => password_hash($password, PASSWORD_DEFAULT), ':id' => (int)$userId]);
         if ($st->rowCount() !== 1) { $pdo->rollBack(); reply(409, ['ok' => false, 'error' => 'Учётная запись уже активирована или отключена.']); }
         $st = $pdo->prepare('DELETE FROM sb_user_activation_tokens WHERE user_id=:id');
         $st->execute([':id' => (int)$userId]);
         $pdo->commit();
+        audit_log($pdo, ['id' => (int)$userId, 'full_name' => 'Пользователь'], 'password_changed', 'user', (int)$userId, 'Пароль обновлён по одноразовой ссылке');
         reply(200, ['ok' => true]);
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
@@ -538,12 +562,16 @@ if ($action === 'login' && $method === 'POST') {
     $_SESSION['sb_user_id'] = (int)$user['id'];
     $_SESSION['sb_login_time'] = time();
     $_SESSION['sb_csrf'] = bin2hex(random_bytes(32));
+    audit_log($pdo, $user, 'login', 'session', (int)$user['id'], 'Вход в систему');
     reply(200, ['ok' => true, 'user' => user_ctx($pdo, $user), 'csrf' => $_SESSION['sb_csrf']]);
 }
 
 if ($action === 'logout' && $method === 'POST') {
     $body = input_json();
     check_csrf($body);
+    $logoutPdo = db($cfg);
+    $logoutUser = current_user($logoutPdo);
+    if ($logoutUser) audit_log($logoutPdo, $logoutUser, 'logout', 'session', (int)$logoutUser['id'], 'Выход из системы');
     $_SESSION = [];
     if (ini_get('session.use_cookies')) {
         $p = session_get_cookie_params();
@@ -560,6 +588,26 @@ if (!$user) {
         'error' => 'Требуется вход. Обновите страницу и авторизуйтесь.']);
 }
 $ctx = user_ctx($pdo, $user);
+
+if ($action === 'admin_password_reset' && $method === 'POST') {
+    require_role($ctx, 'admin');
+    $body = input_json();
+    check_csrf($body);
+    $targetId = (int)($body['user_id'] ?? 0);
+    if ($targetId < 1) reply(400, ['ok' => false, 'error' => 'Не выбран пользователь.']);
+    $find = $pdo->prepare('SELECT id, username, full_name FROM sb_users WHERE id = :id LIMIT 1');
+    $find->execute([':id' => $targetId]);
+    $target = $find->fetch();
+    if (!$target) reply(404, ['ok' => false, 'error' => 'Пользователь не найден.']);
+    $token = bin2hex(random_bytes(32));
+    $pdo->prepare('DELETE FROM sb_user_activation_tokens WHERE user_id = :id')->execute([':id' => $targetId]);
+    $save = $pdo->prepare('INSERT INTO sb_user_activation_tokens (user_id, token_hash, expires_at) VALUES (:id, :hash, DATE_ADD(NOW(), INTERVAL 48 HOUR))');
+    $save->execute([':id' => $targetId, ':hash' => hash('sha256', $token)]);
+    $base = rtrim(dirname((string)($_SERVER['SCRIPT_NAME'] ?? '/')), '/\\');
+    $url = ((!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off') ? 'https' : 'http') . '://' . (string)($_SERVER['HTTP_HOST'] ?? '') . ($base ? $base : '') . '/activate.php?token=' . $token;
+    audit_log($pdo, $ctx, 'password_reset_link_created', 'user', $targetId, (string)$target['username']);
+    reply(200, ['ok' => true, 'activation_url' => $url, 'expires_in_hours' => 48]);
+}
 
 if ($action === 'report_comment' && $method === 'POST') {
     $body = input_json();
@@ -585,6 +633,7 @@ if ($action === 'report_comment' && $method === 'POST') {
                 author_name = VALUES(author_name), updated_at = CURRENT_TIMESTAMP');
         $save->execute([':k' => $recordKey, ':c' => $comment, ':uid' => (int)$ctx['id'], ':name' => (string)$ctx['full_name']]);
     }
+    audit_log($pdo, $ctx, 'report_comment_updated', 'report', null, $recordKey);
     reply(200, ['ok' => true, 'comment' => $comment, 'author' => (string)$ctx['full_name']]);
 }
 
@@ -797,6 +846,7 @@ if ($action === 'save' && $method === 'POST') {
             error_log('SB archive save error: ' . $e->getMessage());
             reply(500, ['ok' => false, 'error' => 'Не удалось сохранить архив на сервере.']);
         }
+        audit_log($pdo, $ctx, 'reports_saved', 'reports', null, 'Сохранение дневных отчётов', ['count' => count($body['value'])]);
         reply(200, ['ok' => true]);
     }
 
@@ -879,6 +929,7 @@ if ($action === 'reports_delete' && $method === 'POST') {
         $del = $pdo->prepare('DELETE FROM sb_archive_records WHERE record_key = :k');
         $del->execute([':k' => $recordKey]);
         $pdo->commit();
+        audit_log($pdo, $ctx, 'report_deleted', 'report', null, (string)$record['record_key'], ['object' => $record['object_name']]);
         reply(200, ['ok' => true]);
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
@@ -962,6 +1013,7 @@ if ($action === 'moderator_user_create' && $method === 'POST') {
         $st = $pdo->prepare('INSERT INTO sb_user_activation_tokens (user_id,token_hash,expires_at) VALUES (:u,:h,DATE_ADD(NOW(), INTERVAL 48 HOUR))');
         $st->execute([':u'=>$newId, ':h'=>hash('sha256',$token)]);
         $pdo->commit();
+        audit_log($pdo, $ctx, 'user_created', 'user', $newId, $username, ['role' => 'user', 'object_ids' => $objectIds]);
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         error_log('SB user create error: '.$e->getMessage());
@@ -1027,6 +1079,7 @@ if ($action === 'user_save' && $method === 'POST') {
             if ($pdo->inTransaction()) $pdo->rollBack();
             throw $e;
         }
+        audit_log($pdo, $ctx, 'user_updated', 'user', $id, $username, ['role' => $role, 'object_ids' => $objectIds, 'active' => $isActive]);
         reply(200, ['ok' => true]);
     }
     if (strlen($password) < 6) reply(400, ['ok' => false, 'error' => 'Пароль нового пользователя — не менее 6 символов.']);
@@ -1044,6 +1097,7 @@ if ($action === 'user_save' && $method === 'POST') {
         if ($pdo->inTransaction()) $pdo->rollBack();
         throw $e;
     }
+    audit_log($pdo, $ctx, 'user_created', 'user', $newId, $username, ['role' => $role, 'object_ids' => $objectIds, 'active' => $isActive]);
     reply(200, ['ok' => true, 'id' => $newId]);
 }
 
@@ -1078,11 +1132,14 @@ if ($action === 'object_save' && $method === 'POST') {
     if ($id > 0) {
         $stmt = $pdo->prepare('UPDATE sb_objects SET name = :n, is_active = :a WHERE id = :id');
         $stmt->execute([':n' => $name, ':a' => $isActive, ':id' => $id]);
+        audit_log($pdo, $ctx, 'object_updated', 'object', $id, $name, ['active' => $isActive]);
         reply(200, ['ok' => true]);
     }
     $stmt = $pdo->prepare('INSERT INTO sb_objects (name, is_active) VALUES (:n, :a)');
     $stmt->execute([':n' => $name, ':a' => $isActive]);
-    reply(200, ['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+    $newObjectId = (int)$pdo->lastInsertId();
+    audit_log($pdo, $ctx, 'object_created', 'object', $newObjectId, $name, ['active' => $isActive]);
+    reply(200, ['ok' => true, 'id' => $newObjectId]);
 }
 
 reply(404, ['ok' => false, 'error' => 'Неизвестная операция.']);
