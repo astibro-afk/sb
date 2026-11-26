@@ -69,7 +69,7 @@ main{max-width:1320px;margin:22px auto;padding:0 24px 38px}
   <div class="actions"><a class="btn" href="index.html">← К форме отчёта</a><button class="btn" id="logoutBtn" type="button">Выйти</button></div>
 </div></header>
 <main>
-  <div class="intro"><div><h2>Отчёты сотрудников</h2><p id="roleInfo">Загрузка доступных данных…</p></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="role" id="periodLabel">Сводная по сохранённым отчётам</span><button class="btn primary" id="exportWorkbook" type="button">↓ Скачать полный Excel-отчёт</button></div></div>
+  <div class="intro"><div><h2>Отчёты сотрудников</h2><p id="roleInfo">Загрузка доступных данных…</p></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="role" id="periodLabel">Сводная по сохранённым отчётам</span><button class="btn primary" id="exportWorkbook" type="button">↓ Скачать Excel по нарушениям</button></div></div>
   <section class="filters">
     <div class="field"><label for="periodType">Период отчёта</label><select id="periodType"><option value="year" selected>За год</option><option value="month">За месяц</option><option value="quarter">За квартал</option><option value="custom">Произвольный период</option></select></div>
     <div class="field"><label for="periodYear">Год</label><select id="periodYear"></select></div>
@@ -81,42 +81,15 @@ main{max-width:1320px;margin:22px auto;padding:0 24px 38px}
     <button class="btn primary" id="applyBtn" type="button">Показать</button>
   </section>
   <section class="stats compact-stats">
-    <div class="stat"><span>Отчётов за период</span><strong id="statReports">—</strong></div>
-    <div class="stat"><span>Объектов в отчётах</span><strong id="statObjects">—</strong></div>
-    <div class="stat"><span>Выявлено правонарушений</span><strong id="statDamage">—</strong><small>уголовные, административные и разбор на месте</small></div>
+    <div class="stat"><span>Количество нарушений</span><strong id="statCases">—</strong></div>
+    <div class="stat"><span>Сумма нарушений и ущерба</span><strong id="statDamage">—</strong><small>рублей</small></div>
+    <div class="stat"><span>Отчётов с нарушениями</span><strong id="statViolationReports">—</strong></div>
   </section>
-  <nav class="tabs" aria-label="Разделы отчёта">
-    <button class="tab active" data-tab="overview" type="button">Обзор</button>
-    <button class="tab" data-tab="employees" type="button">Сотрудники</button>
-    <button class="tab" data-tab="indicators" type="button">Показатели</button>
-    <button class="tab" data-tab="details" type="button">Отчёты</button>
-  </nav>
-  <section class="tab-pane active" id="tab-overview">
-    <section class="panel trend-panel">
-      <div class="panel-head"><div><h3>Динамика выявлений</h3><small>По месяцам выбранного года в сравнении с предыдущим</small></div><div class="legend"><span><i></i>Выбранный год</span><span><i></i>Предыдущий год</span></div></div>
-      <div id="trendChart" class="chart-area"><div class="empty">Загрузка динамики…</div></div>
-    </section>
-    <section class="panel">
-      <div class="panel-head"><div><h3>Сводка по торговым объектам</h3><small>Сравнение активности и выявлений. Показатели не являются оценкой качества работы объекта.</small></div>
-        <select id="objectSort" class="sort-select" aria-label="Сортировка объектов"><option value="coverage">Лучшее заполнение</option><option value="cases">Больше выявлений</option></select>
-      </div>
-      <div class="table-wrap"><table class="simple-table"><thead><tr><th>Торговый объект</th><th>Отчётов</th><th>Заполнение</th><th>Выявлений</th><th>Динамика</th></tr></thead><tbody id="objectSummaryBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div>
-    </section>
-  </section>
-  <section class="tab-pane" id="tab-employees">
-    <section class="panel"><div class="panel-head"><div><h3>Сводка по сотрудникам</h3><small>Количество самостоятельных отчётов, объекты и среднее заполнение</small></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Отчётов</th><th>Объектов</th><th>Последний отчёт</th><th>Заполнение</th></tr></thead><tbody id="summaryBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div></section>
-  </section>
-  <section class="tab-pane" id="tab-indicators">
-    <section class="panel"><div class="panel-head"><div><h3>Сводные показатели</h3><small>Итоги по всем выбранным объектам за период</small></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Направление</th><th>Показатель</th><th>Итого</th><th>Ед. изм.</th><th>Отчётов с данными</th></tr></thead><tbody id="metricsBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div></section>
-    <section class="panel"><div class="panel-head"><div><h3>Показатели по объектам</h3><small>Детализация однотипных показателей</small></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Объект</th><th>Направление</th><th>Показатель</th><th>Значение</th><th>Ед. изм.</th></tr></thead><tbody id="objectMetricsBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div></section>
-  </section>
-  <section class="tab-pane" id="tab-details">
-    <section class="panel"><div class="panel-head"><div><h3>Содержание отчётов</h3><small>Каждая строка — отдельный отчёт сотрудника. Комментарии руководителя доступны внутри отчёта.</small></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Объект</th><th>Сотрудник</th><th>Кем сохранён</th><th>Заполнение</th><th>Комментарий руководителя</th><th>Обновлён</th></tr></thead><tbody id="detailsBody"><tr><td colspan="7" class="empty">Загрузка…</td></tr></tbody></table></div></section>
-  </section>
+  <nav class="tabs"><button class="tab active" data-tab="overview" type="button">Сводка нарушений</button><button class="tab" data-tab="objects" type="button">По объектам</button><button class="tab" data-tab="details" type="button">Отчёты с нарушениями</button></nav>
+  <section class="tab-pane active" id="tab-overview"><section class="panel"><div class="panel-head"><div><h3>Динамика нарушений</h3><small>Количество выявлений по месяцам, сравнение с прошлым годом</small></div><div class="legend"><span><i></i>Текущий год</span><span><i></i>Прошлый год</span></div></div><div id="trendChart" class="chart-area"></div></section>
+  <section class="panel"><div class="panel-head"><div><h3>Нарушения по направлениям</h3><small>Количество и сумма по данным отчётов</small></div></div><div class="table-wrap"><table><thead><tr><th>Направление</th><th>Вид нарушения</th><th>Количество</th><th>Сумма, руб.</th></tr></thead><tbody id="violationSummaryBody"></tbody></table></div></section></section>
+  <section class="tab-pane" id="tab-objects"><section class="panel"><div class="panel-head"><div><h3>Нарушения по объектам</h3><small>Количество выявлений и сумма ущерба</small></div><select id="objectSort" class="sort-select"><option value="cases">Больше нарушений</option><option value="damage">Большая сумма</option></select></div><div class="table-wrap"><table><thead><tr><th>Торговый объект</th><th>Количество нарушений</th><th>Сумма, руб.</th></tr></thead><tbody id="objectSummaryBody"></tbody></table></div></section></section>
+  <section class="tab-pane" id="tab-details"><section class="panel"><div class="panel-head"><div><h3>Отчёты с нарушениями</h3><small>Только записи, в которых зафиксированы нарушения или сумма ущерба</small></div></div><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Объект</th><th>Сотрудник</th><th>Выявленные нарушения</th><th>Количество</th><th>Сумма, руб.</th><th>Комментарий руководителя</th></tr></thead><tbody id="detailsBody"></tbody></table></div></section></section>
 </main>
 <script>
 (function(){
@@ -133,97 +106,39 @@ var records=[],filtered=[],previousFiltered=[],user=null,objects=[],fieldLabels=
  function makeSummary(list){var map=Object.create(null);list.forEach(function(r){var name=r.employee||'Сотрудник не указан';if(!map[name])map[name]={name:name,count:0,objects:Object.create(null),last:'',sum:0};var x=map[name];x.count++;x.objects[r.object||'']=true;if(r.date>x.last)x.last=r.date;x.sum+=pct(r);});return Object.keys(map).map(function(k){var x=map[k];return {name:x.name,count:x.count,objects:Object.keys(x.objects).filter(Boolean).length,last:x.last,average:x.count?Math.round(x.sum/x.count):0};}).sort(function(a,b){return a.name.localeCompare(b.name,'ru');});}
  function allValues(r){var out={};Object.keys(r.data||{}).forEach(function(k){out[k]=r.data[k];});Object.keys(r.dyn||{}).forEach(function(k){out['Доп. таблица: '+k]=r.dyn[k];});return out;}
  var METRICS=[
-  ['1. Кассовые операции','Отмена позиций в чеке — количество','b1_pos_qty','шт.'],
-  ['1. Кассовые операции','Отмена позиций в чеке — сумма нарушений','b1_pos_sum','руб.'],
-  ['1. Кассовые операции','Анулирование чека — количество','b1_chek_qty','шт.'],
-  ['1. Кассовые операции','Анулирование чека — сумма нарушений','b1_chek_sum','руб.'],
-  ['1. Кассовые операции','Фиктивные возвраты — количество','b1_ret_qty','шт.'],
-  ['1. Кассовые операции','Фиктивные возвраты — сумма нарушений','b1_ret_sum','руб.'],
-  ['1. Кассовые операции','Продажа с заниженным весом — количество','b1_weight_qty','шт.'],
-  ['1. Кассовые операции','Продажа с заниженным весом — сумма нарушений','b1_weight_sum','руб.'],
-  ['2. FaceID','Срабатывания','b2_triggers','шт.'],
-  ['2. FaceID','Отработано реагированием','b2_worked','шт.'],
-  ['2. FaceID','Пополнено базы данных','b2_db','чел.'],
-  ['3. Перемещения ТМЦ','Проверки внутри объекта','b3_in_checks','проверок'],
-  ['3. Перемещения ТМЦ','Выявлено нарушений внутри объекта','b3_in_qty','шт.'],
-  ['3. Перемещения ТМЦ','Сумма нарушений внутри объекта','b3_in_sum','руб.'],
-  ['3. Перемещения ТМЦ','Проверки между объектами','b3_between_checks','проверок'],
-  ['3. Перемещения ТМЦ','Выявлено нарушений между объектами','b3_between_qty','шт.'],
-  ['3. Перемещения ТМЦ','Сумма нарушений между объектами','b3_between_sum','руб.'],
-  ['4. Инвентаризации','Контрольные проверки','b4_checks','проверок'],
-  ['4. Инвентаризации','Выявленные расхождения','b4_dev_qty','шт.'],
-  ['4. Инвентаризации','Сумма расхождений','b4_dev_sum','руб.'],
-  ['5. Виртуальные остатки','Позиций передано на пересчёт','b5_positions','ед.'],
-  ['5. Виртуальные остатки','Сумма по выгрузке','b5_sum','руб.'],
-  ['6. Поставки с РЦ','Проверки поставок','b6_checks','проверок'],
-  ['6. Поставки с РЦ','Нарушения по качеству','b6_q_qty','шт.'],
-  ['6. Поставки с РЦ','Сумма нарушений по качеству','b6_q_sum','руб.'],
-  ['6. Поставки с РЦ','Нарушения по количеству','b6_qty_qty','шт.'],
-  ['6. Поставки с РЦ','Сумма нарушений по количеству','b6_qty_sum','руб.'],
-  ['6. Поставки с РЦ','Нарушения по срокам годности','b6_sg_qty','шт.'],
-  ['6. Поставки с РЦ','Сумма нарушений по срокам годности','b6_sg_sum','руб.'],
-  ['7. Прямые поставщики','Проверки поставок','b7_checks','проверок'],
-  ['7. Прямые поставщики','Нарушения по качеству','b7_q_qty','шт.'],
-  ['7. Прямые поставщики','Сумма нарушений по качеству','b7_q_sum','руб.'],
-  ['7. Прямые поставщики','Нарушения по количеству','b7_qty_qty','шт.'],
-  ['7. Прямые поставщики','Сумма нарушений по количеству','b7_qty_sum','руб.'],
-  ['7. Прямые поставщики','Нарушения по срокам годности','b7_sg_qty','шт.'],
-  ['7. Прямые поставщики','Сумма нарушений по срокам годности','b7_sg_sum','руб.'],
-  ['8. Списание ТМЦ','Проверки качества списания','b8_checks','проверок'],
-  ['8. Списание ТМЦ','Выявленные нарушения','b8_qty','шт.'],
-  ['8. Списание ТМЦ','Сумма выявленных нарушений','b8_sum','руб.'],
-  ['9. Служебные записки','Количество служебных записок','b9_count','шт.'],
-  ['10. Правонарушения','Уголовные преступления — количество','b10_crim_qty','случаев'],
-  ['10. Правонарушения','Уголовные преступления — сумма','b10_crim_sum','руб.'],
-  ['10. Правонарушения','Административные правонарушения — количество','b10_adm_qty','случаев'],
-  ['10. Правонарушения','Административные правонарушения — сумма','b10_adm_sum','руб.'],
-  ['10. Правонарушения','Разбор на месте — количество','b10_local_qty','случаев'],
-  ['10. Правонарушения','Разбор на месте — сумма','b10_local_sum','руб.']
+['Кассовые операции','Отмена позиций','b1_pos_qty','шт.'],['Кассовые операции','Сумма отменённых позиций','b1_pos_sum','руб.'],['Кассовые операции','Аннулирование чека','b1_chek_qty','шт.'],['Кассовые операции','Сумма аннулированных чеков','b1_chek_sum','руб.'],['Кассовые операции','Фиктивные возвраты','b1_ret_qty','шт.'],['Кассовые операции','Сумма фиктивных возвратов','b1_ret_sum','руб.'],['Кассовые операции','Продажа с заниженным весом','b1_weight_qty','шт.'],['Кассовые операции','Сумма продажи с заниженным весом','b1_weight_sum','руб.'],
+['Перемещения ТМЦ','Нарушения внутри объекта','b3_in_qty','шт.'],['Перемещения ТМЦ','Сумма нарушений внутри объекта','b3_in_sum','руб.'],['Перемещения ТМЦ','Нарушения между объектами','b3_between_qty','шт.'],['Перемещения ТМЦ','Сумма нарушений между объектами','b3_between_sum','руб.'],
+['Инвентаризации','Выявленные расхождения','b4_dev_qty','шт.'],['Инвентаризации','Сумма расхождений','b4_dev_sum','руб.'],
+['Поставки с РЦ','Нарушения по качеству','b6_q_qty','шт.'],['Поставки с РЦ','Сумма нарушений по качеству','b6_q_sum','руб.'],['Поставки с РЦ','Нарушения по количеству','b6_qty_qty','шт.'],['Поставки с РЦ','Сумма нарушений по количеству','b6_qty_sum','руб.'],['Поставки с РЦ','Нарушения по срокам годности','b6_sg_qty','шт.'],['Поставки с РЦ','Сумма нарушений по срокам годности','b6_sg_sum','руб.'],
+['Прямые поставщики','Нарушения по качеству','b7_q_qty','шт.'],['Прямые поставщики','Сумма нарушений по качеству','b7_q_sum','руб.'],['Прямые поставщики','Нарушения по количеству','b7_qty_qty','шт.'],['Прямые поставщики','Сумма нарушений по количеству','b7_qty_sum','руб.'],['Прямые поставщики','Нарушения по срокам годности','b7_sg_qty','шт.'],['Прямые поставщики','Сумма нарушений по срокам годности','b7_sg_sum','руб.'],
+['Списание ТМЦ','Выявленные нарушения','b8_qty','шт.'],['Списание ТМЦ','Сумма выявленных нарушений','b8_sum','руб.'],['Правонарушения','Уголовные — количество','b10_crim_qty','случаев'],['Правонарушения','Уголовные — сумма ущерба','b10_crim_sum','руб.'],['Правонарушения','Административные — количество','b10_adm_qty','случаев'],['Правонарушения','Административные — сумма ущерба','b10_adm_sum','руб.'],['Правонарушения','Разбор на месте — количество','b10_local_qty','случаев'],['Правонарушения','Разбор на месте — сумма ущерба','b10_local_sum','руб.']
  ];
  function numericValue(raw){if(raw===null||raw===undefined||raw==='')return null;if(typeof raw==='number')return Number.isFinite(raw)?raw:null;var s=String(raw).replace(/\u00a0/g,' ').trim();if(!s||s==='—'||s==='-')return null;s=s.replace(/\s/g,'').replace(',','.').replace(/руб\.?/gi,'');if(!/^[-+]?(?:\d+\.?\d*|\.\d+)$/.test(s))return null;var n=Number(s);return Number.isFinite(n)?n:null;}
  function metricRows(list){return METRICS.map(function(def){var total=0,count=0;list.forEach(function(r){var n=numericValue((r.data||{})[def[2]]);if(n!==null){total+=n;count++;}});return {section:def[0],label:def[1],key:def[2],unit:def[3],total:total,count:count};}).filter(function(x){return x.count>0;});}
  function objectMetricRows(list){var groups=Object.create(null);list.forEach(function(r){var name=r.object||'Объект не указан';if(!groups[name])groups[name]=[];groups[name].push(r);});var out=[];Object.keys(groups).sort(function(a,b){return a.localeCompare(b,'ru');}).forEach(function(name){metricRows(groups[name]).forEach(function(m){out.push({object:name,section:m.section,label:m.label,unit:m.unit,total:m.total,count:m.count});});});return out;}
  function fmtMetric(n){return Number(n).toLocaleString('ru-RU',{maximumFractionDigits:2});}
 
+ function violationTotals(r){var d=r.data||{},qty=0,damage=0,labels=[];METRICS.forEach(function(m){var n=numericValue(d[m[2]]);if(n===null)return;if(m[3]==='руб.')damage+=n;else if(n>0){qty+=n;labels.push(m[1]+' ('+fmtMetric(n)+')');}});return {qty:qty,damage:damage,labels:labels};}
+ function hasViolations(r){var t=violationTotals(r);return t.qty>0||t.damage>0;}
  function render(){
  var q=$('employeeFilter').value.trim().toLocaleLowerCase('ru'),from=$('dateFrom').value,to=$('dateTo').value;
  filtered=records.filter(function(r){return r.date>=from&&r.date<=to&&(!q||(r.employee||'').toLocaleLowerCase('ru').includes(q));});
- var year=Number(from.slice(0,4));
- previousFiltered=records.filter(function(r){return r.date>=String(year-1)+'-01-01'&&r.date<=String(year-1)+'-12-31'&&(!q||(r.employee||'').toLocaleLowerCase('ru').includes(q));});
- var cases=function(list){return list.reduce(function(n,r){return n+['b10_crim_qty','b10_adm_qty','b10_local_qty'].reduce(function(v,k){return v+(numericValue((r.data||{})[k])||0);},0);},0);};
- $('statReports').textContent=filtered.length;
- $('statObjects').textContent=new Set(filtered.map(function(r){return r.object||'';}).filter(Boolean)).size;
- $('statDamage').textContent=fmtMetric(cases(filtered));
- var sums=makeSummary(filtered);
- $('summaryBody').innerHTML=sums.length?sums.map(function(x){return '<tr><td><strong>'+esc(x.name)+'</strong></td><td>'+x.count+'</td><td>'+x.objects+'</td><td>'+fmtDate(x.last)+'</td><td><span class="progress"><i style="width:'+x.average+'%"></i></span>'+x.average+'%</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">За выбранный период отчёты не найдены</td></tr>';
- var metrics=metricRows(filtered);$('metricsBody').innerHTML=metrics.length?metrics.map(function(x){return '<tr><td>'+esc(x.section)+'</td><td>'+esc(x.label)+'</td><td><strong>'+fmtMetric(x.total)+'</strong></td><td>'+esc(x.unit)+'</td><td>'+x.count+'</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">Нет данных по показателям</td></tr>';
- var byObject=objectMetricRows(filtered);$('objectMetricsBody').innerHTML=byObject.length?byObject.map(function(x){return '<tr><td><strong>'+esc(x.object)+'</strong></td><td>'+esc(x.section)+'</td><td>'+esc(x.label)+'</td><td><strong>'+fmtMetric(x.total)+'</strong></td><td>'+esc(x.unit)+'</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">Нет данных по объектам</td></tr>';
- $('detailsBody').innerHTML=filtered.length?filtered.map(function(r){var p=pct(r),comment=r.manager_comment||'';return '<tr><td>'+fmtDate(r.date)+'</td><td>'+esc(r.object||'—')+'</td><td><strong>'+esc(r.employee||'Не указан')+'</strong></td><td>'+esc(r.author||'—')+'</td><td><span class="progress"><i style="width:'+p+'%"></i></span>'+p+'%</td><td><div class="comment-cell">'+(comment?'<span title="'+esc(comment)+'">'+esc(comment)+'</span>':'<span class="muted">Нет комментария</span>')+(user&&user.role==='admin'?'<button class="btn comment-btn" data-comment="'+esc(r.record_key)+'" type="button">'+(comment?'Изменить':'Добавить')+'</button>':'')+'</div></td><td>'+fmtTime(r.updated_at)+'</td></tr>';}).join(''):'<tr><td colspan="7" class="empty">За выбранный период отчёты не найдены</td></tr>';
- renderObjectSummary();renderTrends();
- $('periodLabel').textContent=$('periodType').selectedOptions[0].text+' · '+$('dateFrom').value+' — '+$('dateTo').value;
+ var year=Number(from.slice(0,4));previousFiltered=records.filter(function(r){return r.date>=String(year-1)+'-01-01'&&r.date<=String(year-1)+'-12-31';});
+ var list=filtered.filter(hasViolations),qty=0,damage=0;list.forEach(function(r){var t=violationTotals(r);qty+=t.qty;damage+=t.damage;});
+ $('statCases').textContent=fmtMetric(qty);$('statDamage').textContent=fmtMetric(damage);$('statViolationReports').textContent=list.length;
+ var summary=METRICS.filter(function(m){return m[3]!=='руб.';}).map(function(m){var qv=0,sv=0;filtered.forEach(function(r){qv+=numericValue((r.data||{})[m[2]])||0;});var sk=m[2].replace('_qty','_sum');var sm=METRICS.find(function(x){return x[2]===sk;});if(sm)filtered.forEach(function(r){sv+=numericValue((r.data||{})[sm[2]])||0;});return {section:m[0],label:m[1],qty:qv,damage:sv};}).filter(function(x){return x.qty||x.damage;});
+ $('violationSummaryBody').innerHTML=summary.length?summary.map(function(x){return '<tr><td>'+esc(x.section)+'</td><td><strong>'+esc(x.label)+'</strong></td><td>'+fmtMetric(x.qty)+'</td><td>'+fmtMetric(x.damage)+'</td></tr>';}).join(''):'<tr><td colspan="4" class="empty">Нарушений не зафиксировано</td></tr>';
+ var om=Object.create(null);list.forEach(function(r){var n=r.object||'Объект не указан',t=violationTotals(r);if(!om[n])om[n]={name:n,qty:0,damage:0};om[n].qty+=t.qty;om[n].damage+=t.damage;});
+ var oa=Object.keys(om).map(function(k){return om[k];});oa.sort(function(a,b){return $('objectSort').value==='damage'?b.damage-a.damage:b.qty-a.qty;});
+ $('objectSummaryBody').innerHTML=oa.length?oa.map(function(x){return '<tr><td><strong>'+esc(x.name)+'</strong></td><td>'+fmtMetric(x.qty)+'</td><td>'+fmtMetric(x.damage)+'</td></tr>';}).join(''):'<tr><td colspan="3" class="empty">Нарушений не зафиксировано</td></tr>';
+ $('detailsBody').innerHTML=list.length?list.map(function(r){var t=violationTotals(r),c=r.manager_comment||'';return '<tr><td>'+fmtDate(r.date)+'</td><td>'+esc(r.object||'—')+'</td><td>'+esc(r.employee||'Не указан')+'</td><td>'+esc(t.labels.join('; '))+'</td><td>'+fmtMetric(t.qty)+'</td><td>'+fmtMetric(t.damage)+'</td><td><div class="comment-cell">'+(c?'<span>'+esc(c)+'</span>':'<span class="muted">Нет комментария</span>')+(user&&user.role==='admin'?'<button class="btn comment-btn" data-comment="'+esc(r.record_key)+'" type="button">'+(c?'Изменить':'Добавить')+'</button>':'')+'</div></td></tr>';}).join(''):'<tr><td colspan="7" class="empty">Нет отчётов с нарушениями</td></tr>';
+ renderTrends();$('periodLabel').textContent=$('periodType').selectedOptions[0].text+' · '+from+' — '+to;
  }
- function renderObjectSummary(){
- var map=Object.create(null);
- filtered.forEach(function(r){var k=r.object||'Объект не указан';if(!map[k])map[k]={name:k,reports:0,fill:0,cases:0};var x=map[k];x.reports++;x.fill+=pct(r);['b10_crim_qty','b10_adm_qty','b10_local_qty'].forEach(function(k){x.cases+=numericValue((r.data||{})[k])||0;});});
- var arr=Object.keys(map).map(function(k){var x=map[k];x.average=x.reports?Math.round(x.fill/x.reports):0;return x;});
- var sort=$('objectSort').value;arr.sort(function(a,b){return sort==='cases'?(b.cases-a.cases||b.reports-a.reports):(b.average-a.average||b.reports-a.reports);});
- $('objectSummaryBody').innerHTML=arr.length?arr.map(function(x){var old=previousFiltered.filter(function(r){return r.object===x.name;}).reduce(function(n,r){return n+['b10_crim_qty','b10_adm_qty','b10_local_qty'].reduce(function(v,k){return v+(numericValue((r.data||{})[k])||0);},0);},0);var change=old===0?(x.cases===0?'—':'Новый рост'):((x.cases-old)>0?'+':'')+((x.cases-old)/old*100).toFixed(0)+'%';return '<tr><td><strong>'+esc(x.name)+'</strong></td><td>'+x.reports+'</td><td><span class="progress"><i style="width:'+x.average+'%"></i></span>'+x.average+'%</td><td>'+fmtMetric(x.cases)+'</td><td>'+change+'</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">За выбранный период отчёты не найдены</td></tr>';
- }
- function renderTrends(){
- var y=Number($('dateFrom').value.slice(0,4)),labels=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'],now=[],old=[];
- function sum(list,m){return list.filter(function(r){return String(r.date||'').slice(5,7)===pad(m);}).reduce(function(n,r){return n+['b10_crim_qty','b10_adm_qty','b10_local_qty'].reduce(function(v,k){return v+(numericValue((r.data||{})[k])||0);},0);},0);}
- for(var m=1;m<=12;m++){now.push(sum(filtered,m));old.push(sum(previousFiltered,m));}
- var max=Math.max.apply(null,now.concat(old).concat([1]));
- var W=900,H=205,L=36,R=16,T=12,B=30,plotH=H-T-B,plotW=W-L-R;
- function points(arr){return arr.map(function(v,i){return (L+i*plotW/11)+','+(T+plotH-(v/max)*plotH);}).join(' ');}
- var grid='';for(var g=0;g<=4;g++){var yy=T+plotH*g/4;grid+='<line x1="'+L+'" y1="'+yy+'" x2="'+(W-R)+'" y2="'+yy+'" stroke="#e8eef0"/><text x="'+(L-9)+'" y="'+(yy+4)+'" text-anchor="end" font-size="10" fill="#82919a">'+Math.round(max*(4-g)/4)+'</text>';}
- var ticks=labels.map(function(n,i){return '<text x="'+(L+i*plotW/11)+'" y="'+(H-7)+'" text-anchor="middle" font-size="10" fill="#82919a">'+n+'</text>';}).join('');
- $('trendChart').innerHTML=filtered.length?'<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Динамика выявлений по месяцам"><g>'+grid+'</g><polyline points="'+points(old)+'" fill="none" stroke="#aab9c2" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="'+points(now)+'" fill="none" stroke="#087f83" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'+now.map(function(v,i){return '<circle cx="'+(L+i*plotW/11)+'" cy="'+(T+plotH-(v/max)*plotH)+'" r="3.5" fill="#087f83"/>';}).join('')+ticks+'</svg>':'<div class="empty">Нет данных для построения динамики</div>';
- }
-function saveComment(key,initial){
+ function renderTrends(){var labels=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'],now=[],old=[];function sum(arr,m){return arr.reduce(function(n,r){return Number(String(r.date||'').slice(5,7))===m?n+violationTotals(r).qty:n;},0);}for(var m=1;m<=12;m++){now.push(sum(filtered,m));old.push(sum(previousFiltered,m));}var max=Math.max.apply(null,now.concat(old).concat([1])),W=900,H=205,L=36,R=16,T=12,B=30,ph=H-T-B,pw=W-L-R;function pts(arr){return arr.map(function(v,i){return (L+i*pw/11)+','+(T+ph-v/max*ph);}).join(' ');}var grid='';for(var g=0;g<=4;g++){var y=T+ph*g/4;grid+='<line x1="'+L+'" y1="'+y+'" x2="'+(W-R)+'" y2="'+y+'" stroke="#e8eef0"/><text x="'+(L-8)+'" y="'+(y+4)+'" text-anchor="end" font-size="10" fill="#82919a">'+Math.round(max*(4-g)/4)+'</text>';}var ticks=labels.map(function(x,i){return '<text x="'+(L+i*pw/11)+'" y="'+(H-7)+'" text-anchor="middle" font-size="10" fill="#82919a">'+x+'</text>';}).join('');$('trendChart').innerHTML='<svg viewBox="0 0 '+W+' '+H+'"><g>'+grid+'</g><polyline points="'+pts(old)+'" fill="none" stroke="#aab9c2" stroke-width="2.5"/><polyline points="'+pts(now)+'" fill="none" stroke="#087f83" stroke-width="3"/>'+ticks+'</svg>';}
+ function saveComment(key,initial){
  var old=document.querySelector('.comment-editor');if(old)old.remove();
  var tr=Array.from($('detailsBody').querySelectorAll('tr')).find(function(row){var b=row.querySelector('[data-comment]');return b&&b.getAttribute('data-comment')===key;});if(!tr)return;
- var box=document.createElement('div');box.className='comment-editor';box.innerHTML='<textarea maxlength="5000" placeholder="Комментарий руководителя (до 5000 символов)"></textarea><div><button type="button" class="btn primary save-comment">Сохранить</button><button type="button" class="btn cancel-comment">Отмена</button></div>';box.querySelector('textarea').value=initial||'';tr.cells[5].appendChild(box);
+ var box=document.createElement('div');box.className='comment-editor';box.innerHTML='<textarea maxlength="5000" placeholder="Комментарий руководителя (до 5000 символов)"></textarea><div><button type="button" class="btn primary save-comment">Сохранить</button><button type="button" class="btn cancel-comment">Отмена</button></div>';box.querySelector('textarea').value=initial||'';tr.cells[6].appendChild(box);
  box.querySelector('.cancel-comment').onclick=function(){box.remove();};
  box.querySelector('.save-comment').onclick=async function(){var btn=this;btn.disabled=true;try{var response=await fetch('api.php?action=report_comment',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({csrf:window.__SB_CSRF||'',record_key:key,comment:box.querySelector('textarea').value})});var result=await response.json();if(!response.ok||!result.ok)throw new Error(result.error||'Не удалось сохранить комментарий');var record=records.find(function(r){return r.record_key===key;});if(record)record.manager_comment=result.comment;box.remove();render();}catch(e){alert(e.message);}finally{btn.disabled=false;}};
 }
@@ -267,13 +182,15 @@ function pad(n){return String(n).padStart(2,'0');}
  function dynamicSpec(){var rows=[];filtered.forEach(function(r){Object.keys(r.dyn||{}).forEach(function(k){rows.push([fmtDate(r.date),r.object,r.employee,k,safeCell(r.dyn[k])]);});});return {name:'Дополнительные данные',title:'ДОПОЛНИТЕЛЬНЫЕ ТАБЛИЦЫ И СТРОКИ',subtitle:'Содержимое динамических таблиц, сохранённых вместе с отчётами.',headers:['Дата','Торговый объект','Сотрудник','Раздел / таблица','Содержимое'],rows:rows,widths:[14,28,28,30,70]};}
  function rankingSpec(){var map=Object.create(null);filtered.forEach(function(r){var k=r.object||'Объект не указан';if(!map[k])map[k]={name:k,reports:0,fill:0,cases:0,damage:0};var x=map[k];x.reports++;x.fill+=pct(r);['b10_crim_qty','b10_adm_qty','b10_local_qty'].forEach(function(k){x.cases+=numericValue((r.data||{})[k])||0;});['b10_crim_sum','b10_adm_sum','b10_local_sum'].forEach(function(k){x.damage+=numericValue((r.data||{})[k])||0;});});var rows=Object.keys(map).map(function(k){var x=map[k];return [x.name,x.reports,x.reports?x.fill/x.reports/100:0,x.reports?x.cases/x.reports:0,x.reports?x.damage/x.reports:0];});return {name:'Рейтинг объектов',title:'РЕЙТИНГ ОБЪЕКТОВ',subtitle:'Средние показатели на один самостоятельный отчёт; не являются оценкой качества объекта.',headers:['Объект','Отчётов','Среднее заполнение','Случаев на отчёт','Сумма на отчёт, руб.'],rows:rows,widths:[32,14,22,22,24]};}
 function trendSpec(){var rows=[],y=Number($('dateFrom').value.slice(0,4));for(var m=1;m<=12;m++){var mm=pad(m),prefix=y+'-'+mm,list=filtered.filter(function(r){return String(r.date||'').slice(0,7)===prefix;}),prev=previousFiltered.filter(function(r){return String(r.date||'').slice(5,7)===mm;});function sum(rs,key){return rs.reduce(function(a,r){return a+(numericValue((r.data||{})[key])||0);},0);}var cases=sum(list,'b10_crim_qty')+sum(list,'b10_adm_qty')+sum(list,'b10_local_qty'),old=sum(prev,'b10_crim_qty')+sum(prev,'b10_adm_qty')+sum(prev,'b10_local_qty');rows.push([prefix,list.length,sum(list,'b10_crim_qty'),sum(list,'b10_adm_qty'),sum(list,'b10_local_qty'),sum(list,'b10_crim_sum')+sum(list,'b10_adm_sum')+sum(list,'b10_local_sum'),old,prev.length&&old?((cases-old)/old):null]);}return {name:'Динамика',title:'ДИНАМИКА ПО МЕСЯЦАМ',subtitle:'Сравнение числа правонарушений с аналогичным месяцем предыдущего года.',headers:['Месяц','Отчётов','Уголовные','Административные','Разбор на месте','Сумма, руб.','Случаев годом ранее','Изменение'],rows:rows,widths:[16,12,14,18,18,20,22,16]};}
-async function exportWorkbook(){if(!filtered.length){alert('За выбранный период нет отчётов для выгрузки.');return;}var btn=$('exportWorkbook');btn.disabled=true;btn.textContent='Формирование…';try{await downloadXlsx('Отчёты_СБ_'+periodFilePart()+'.xlsx',[summarySpec(),metricsSpec(),objectMetricsSpec(),rankingSpec(),trendSpec(),detailsSpec(),dynamicSpec()]);}finally{btn.disabled=false;btn.textContent='↓ Скачать полный Excel-отчёт';}}
- async function exportSummary(){if(!filtered.length){alert('Нет данных для выгрузки.');return;}await downloadXlsx('Сводка_сотрудников_'+periodFilePart()+'.xlsx',[summarySpec()]);}
- async function exportMetrics(){if(!filtered.length){alert('Нет данных для выгрузки.');return;}await downloadXlsx('Показатели_формы_'+periodFilePart()+'.xlsx',[metricsSpec(),objectMetricsSpec()]);}
- async function exportDetails(){if(!filtered.length){alert('Нет данных для выгрузки.');return;}await downloadXlsx('Полные_отчёты_'+periodFilePart()+'.xlsx',[detailsSpec(),dynamicSpec()]);}
+function violationsWorkbookSpecs(){
+ var types=METRICS.filter(function(m){return m[3]!=='руб.';}).map(function(m){var qv=0,sv=0;filtered.forEach(function(r){qv+=numericValue((r.data||{})[m[2]])||0;});var sm=METRICS.find(function(x){return x[2]===m[2].replace('_qty','_sum');});if(sm)filtered.forEach(function(r){sv+=numericValue((r.data||{})[sm[2]])||0;});return [m[0],m[1],qv,sv];}).filter(function(x){return x[2]||x[3];});
+ var objs=Object.create(null),details=[];filtered.filter(hasViolations).forEach(function(r){var t=violationTotals(r),n=r.object||'Объект не указан';if(!objs[n])objs[n]={qty:0,damage:0};objs[n].qty+=t.qty;objs[n].damage+=t.damage;details.push([fmtDate(r.date),n,r.employee||'',t.labels.join('; '),t.qty,t.damage,r.manager_comment||'']);});
+ return [{name:'Сводка нарушений',title:'СВОДКА НАРУШЕНИЙ',subtitle:'Период: '+fmtDate($('dateFrom').value)+' — '+fmtDate($('dateTo').value),headers:['Направление','Вид нарушения','Количество','Сумма, руб.'],rows:types,widths:[28,48,18,20]},{name:'По объектам',title:'НАРУШЕНИЯ ПО ОБЪЕКТАМ',subtitle:'Объекты с зафиксированными нарушениями',headers:['Торговый объект','Количество нарушений','Сумма, руб.'],rows:Object.keys(objs).map(function(k){return [k,objs[k].qty,objs[k].damage];}),widths:[40,24,24]},{name:'Отчёты с нарушениями',title:'ОТЧЁТЫ С НАРУШЕНИЯМИ',subtitle:'Только отчёты с выявлениями',headers:['Дата','Объект','Сотрудник','Выявленные нарушения','Количество','Сумма, руб.','Комментарий руководителя'],rows:details,widths:[14,28,28,60,16,20,50]}];
+}
+async function exportWorkbook(){if(!filtered.some(hasViolations)){alert('Нет нарушений для выгрузки.');return;}var btn=$('exportWorkbook');btn.disabled=true;btn.textContent='Формирование…';try{await downloadXlsx('Нарушения_СБ_'+periodFilePart()+'.xlsx',violationsWorkbookSpecs());}finally{btn.disabled=false;btn.textContent='↓ Скачать Excel по нарушениям';}}
  async function loadFieldLabels(){try{var response=await fetch('index.html',{credentials:'same-origin',cache:'no-store'});var html=await response.text();var doc=new DOMParser().parseFromString(html,'text/html');doc.querySelectorAll('[data-field][id]').forEach(function(el){var group=el.closest('.form-group'),label=group&&group.querySelector('label');if(label)fieldLabels[el.id]=label.textContent.trim();});}catch(e){}}
  document.querySelectorAll('[data-tab]').forEach(function(btn){btn.addEventListener('click',function(){document.querySelectorAll('.tab').forEach(function(x){x.classList.toggle('active',x===btn);});document.querySelectorAll('.tab-pane').forEach(function(x){x.classList.toggle('active',x.id==='tab-'+btn.dataset.tab);});});});
- $('objectSort').addEventListener('change',renderObjectSummary);
+ $('objectSort').addEventListener('change',render);
  $('applyBtn').addEventListener('click',load);$('employeeFilter').addEventListener('input',render);$('objectFilter').addEventListener('change',load);$('exportWorkbook').addEventListener('click',exportWorkbook);
  initPeriod();$('periodType').value='year';fillUnits();syncDates();loadFieldLabels().then(load);
 $('logoutBtn').addEventListener('click',async function(){try{await fetch('api.php?action=logout',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:window.__SB_CSRF||''})});}catch(e){}location.href='index.html';});
