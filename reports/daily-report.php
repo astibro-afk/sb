@@ -1545,7 +1545,7 @@ body { background: #F3F8F7; }
     </div>
   </div>
 </header>
-<header class="sb-site-header"><div class="sb-site-top"><a class="sb-site-brand" href="../index.html"><span class="sb-site-logo">СБ</span><span class="sb-site-brand-text"><strong>Служба безопасности</strong><small>Группа БФ Волгоград 1</small></span></a><div class="sb-site-actions"><div class="sb-site-user" id="sbHeaderUser" hidden><strong id="sbHeaderName"></strong><small id="sbHeaderMeta"></small></div><a class="sb-site-notice" href="../notifications.php">Уведомления <span id="sbHeaderBadge" hidden>0</span></a><a class="sb-site-manage" id="sbHeaderManage" href="../users.php" hidden>Управление</a><button class="sb-site-logout" id="sbHeaderLogout" type="button">Выход</button></div></div><nav class="sb-site-nav" aria-label="Основная навигация"><div class="sb-site-nav-inner"><a href="../index.html">Главная</a><a class="active" href="../reports.php">Отчёты</a><a href="../tasks.php">Задачи</a><a href="../employees.php">Сотрудники</a><a href="../notifications.php">Уведомления</a></div></nav></header>
+<nav class="sb-site-nav" aria-label="Основная навигация"><div class="sb-site-nav-inner"><a href="../index.html">Главная</a><a class="active" href="../reports.php">Отчёты</a><a href="../tasks.php">Задачи</a><a href="../employees.php">Сотрудники</a><a href="../notifications.php">Уведомления</a></div></nav>
 
 <div class="progress-wrap">
   <div class="progress-card">
