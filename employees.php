@@ -104,6 +104,7 @@ h1{margin:0;font-size:23px;line-height:1.2;letter-spacing:-.45px;font-weight:750
 const cards=document.getElementById('cards'),search=document.getElementById('search'),count=document.getElementById('count'),roleFilter=document.getElementById('roleFilter'),objectFilter=document.getElementById('objectFilter');
 const labels={admin:'Администратор',moderator:'Модератор',user:'Специалист СБ'};
 function node(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n;}
+function readJson(response){return response.text().then(text=>{if(!text.trim())throw new Error('Сервер вернул пустой ответ. Обновите страницу; если ошибка повторится, сообщите администратору.');try{return JSON.parse(text);}catch(_){throw new Error('Сервер вернул некорректный ответ. Проверьте авторизацию и попробуйте обновить страницу.');}});}
 function date(v,withTime){if(!v)return '—';const d=new Date(String(v).replace(' ','T'));if(isNaN(d))return String(v);return d.toLocaleString('ru-RU',withTime?{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}:{day:'2-digit',month:'2-digit',year:'2-digit'});}
 function initials(name){const parts=String(name||'СБ').trim().split(/\s+/).filter(Boolean);return (parts.length>1?parts[0][0]+parts[1][0]:parts[0].slice(0,2)).toLocaleUpperCase('ru');}
 let all=[];
@@ -130,7 +131,7 @@ function render(){
    if(!detail.hidden){detail.hidden=true;btn.querySelector('span').textContent='История';return;}
    btn.disabled=true;
    try{
-    const r=await fetch('api.php?action=employee_history&user_id='+encodeURIComponent(u.id),{credentials:'same-origin',cache:'no-store'}),d=await r.json();
+    const r=await fetch('api.php?action=employee_history&user_id='+encodeURIComponent(u.id),{credentials:'same-origin',cache:'no-store'}),d=await readJson(r);
     if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось загрузить историю.');
     detail.replaceChildren(node('div','details-title','Последние события'));const list=node('div','history');
     (d.history||[]).forEach(e=>{const item=node('div','event');item.append(node('div','',String(e.action||'Событие')+(e.target_label?' · '+e.target_label:'')),node('small','',date(e.created_at,true)));list.append(item);});
@@ -142,10 +143,10 @@ function render(){
   cards.append(card);
  });
 }
-function refreshPresence(){fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(r=>r.json()).then(d=>{if(!d.ok)return;(d.employees||[]).forEach(u=>{const card=cards.querySelector('[data-user-id="'+CSS.escape(String(u.id))+'"]');if(!card)return;const online=!!u.is_online&&!!u.is_active;const dot=card.querySelector('.state'),tag=card.querySelector('[data-presence="1"]');if(dot){dot.classList.toggle('inactive',!online);dot.title=!u.is_active?'Аккаунт отключён':(online?'Пользователь в сети':'Пользователь не в сети');dot.setAttribute('aria-label',dot.title);}if(tag){tag.classList.toggle('off',!online);tag.textContent=!u.is_active?'Отключён':(online?'В сети':'Не в сети');}});}).catch(function(){});}
+function refreshPresence(){fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(readJson).then(d=>{if(!d.ok)return;(d.employees||[]).forEach(u=>{const card=cards.querySelector('[data-user-id="'+CSS.escape(String(u.id))+'"]');if(!card)return;const online=!!u.is_online&&!!u.is_active;const dot=card.querySelector('.state'),tag=card.querySelector('[data-presence="1"]');if(dot){dot.classList.toggle('inactive',!online);dot.title=!u.is_active?'Аккаунт отключён':(online?'Пользователь в сети':'Пользователь не в сети');dot.setAttribute('aria-label',dot.title);}if(tag){tag.classList.toggle('off',!online);tag.textContent=!u.is_active?'Отключён':(online?'В сети':'Не в сети');}});}).catch(function(){});}
 setInterval(refreshPresence,30000);
 search.addEventListener('input',render);roleFilter.addEventListener('change',render);objectFilter.addEventListener('change',render);
-fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось загрузить сотрудников.');all=d.employees||[];
+fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(async r=>{const d=await readJson(r);if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось загрузить сотрудников.');all=d.employees||[];
  const roleOrder=['admin','moderator','user'];const roles=[...new Set(all.map(u=>u.role).filter(Boolean))].sort((a,b)=>roleOrder.indexOf(a)-roleOrder.indexOf(b));roles.forEach(role=>roleFilter.append(new Option(labels[role]||role,role)));
  const objects=[...new Set(all.flatMap(u=>u.objects||[]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));objects.forEach(name=>objectFilter.append(new Option(name,name)));
  if(d.user&&d.user.role==='user'){document.getElementById('heading').textContent='Моя карточка';document.getElementById('subtitle').textContent='Ваши отчёты и история активности';document.getElementById('toolbar').hidden=true;}render();}).catch(e=>{count.textContent='Ошибка';cards.replaceChildren(node('div','empty',e.message));});
