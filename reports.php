@@ -15,7 +15,7 @@ header{background:rgba(255,255,255,.88);border-bottom:1px solid var(--line);padd
 main{padding:28px 22px 60px}.panel{background:rgba(255,255,255,.88);border:1px solid var(--line);border-radius:18px;padding:22px;margin-bottom:18px;box-shadow:0 5px 24px rgba(13,115,119,.06)}
 h2{font-size:21px;margin:0 0 7px}p.sub{color:var(--muted);margin:0 0 20px;font-size:13px}
 .filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;align-items:end}.field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:0 0 6px}.field input,.field select{width:100%;height:42px;border:1px solid var(--line);border-radius:10px;padding:0 11px;background:white;color:var(--text);font:inherit;font-size:14px;min-width:0}
-button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inter,Arial;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:7px}.primary{background:var(--grad);color:white}.secondary{background:#E0F2F1;color:var(--pd)}.outline{background:white;color:var(--text);border:1px solid var(--line)}button:disabled{opacity:.45;cursor:not-allowed}
+button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inter,Arial;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:7px}.primary{background:var(--grad);color:white}.secondary{background:#E0F2F1;color:var(--pd)}.outline{background:white;color:var(--text);border:1px solid var(--line)}button:disabled{opacity:.45;cursor:not-allowed}.danger{background:#FEE4E2;color:#B42318}
 .actions{display:flex;gap:8px;flex-wrap:wrap}.status{font-size:13px;color:var(--muted);margin-top:12px}.status.error{color:#b42318}.summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.pill{background:#E0F2F1;color:var(--pd);padding:7px 11px;border-radius:20px;font-size:12px;font-weight:700}
 .table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:720px}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}th{font-size:11px;text-transform:uppercase;letter-spacing:.35px;color:var(--muted);background:#F7FBFB;position:sticky;top:0}tr:hover td{background:#FAFDFD}.empty{text-align:center;padding:32px;color:var(--muted)}
 .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(12,35,40,.48);z-index:20;align-items:center;justify-content:center;padding:18px}.modal-backdrop.open{display:flex}.modal{width:min(460px,100%);background:#fff;border-radius:18px;padding:22px;box-shadow:0 20px 70px rgba(0,0,0,.22)}.modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.modal h2{margin:0;font-size:20px}.modal .actions{display:grid;grid-template-columns:1fr 1fr}.modal .actions button{min-height:48px}@media(max-width:440px){.modal .actions{grid-template-columns:1fr}}
@@ -65,7 +65,7 @@ button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inte
 (function(){
 'use strict';
 const $=id=>document.getElementById(id);
-let allRecords=[], selected=null, currentUser=null;
+let allRecords=[], selected=null, currentUser=null, csrfToken='';
 function loadScript(src,test){return new Promise((resolve,reject)=>{if(test())return resolve();const s=document.createElement('script');s.src=src;s.async=true;s.onload=()=>test()?resolve():reject(new Error('Библиотека не загрузилась.'));s.onerror=()=>reject(new Error('Не удалось загрузить библиотеку. Проверьте интернет.'));document.head.appendChild(s);});}
 const today=new Date(), iso=d=>{const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,10)};
 $('from').value='2026-01-01';$('to').value=iso(today);
@@ -79,7 +79,7 @@ async function load(){
  const response=await fetch('api.php?'+qs.toString(),{credentials:'same-origin',cache:'no-store'});
  const data=await response.json();
  if(!response.ok||!data.ok)throw new Error(data.error||'Не удалось загрузить отчёты.');
- currentUser=data.user;allRecords=data.records||[];
+ currentUser=data.user;csrfToken=data.csrf||'';allRecords=data.records||[];
  const objects=data.objects||[];
  if(!$('object').dataset.ready){objects.forEach(o=>{const op=document.createElement('option');op.value=o.id;op.textContent=o.name;$('object').appendChild(op)});$('object').dataset.ready='1';}
  const employees=new Map();
@@ -94,9 +94,27 @@ function render(){
  const objectId=$('object').value, employeeId=$('employee').value;
  const filtered=allRecords.filter(r=>(!objectId||(r.object_id?String(r.object_id)===objectId:true))&&(!employeeId||String(r.owner_user_id||'')===employeeId));
  $('summary').innerHTML='<span class="pill">Отчётов: '+filtered.length+'</span><span class="pill">Объектов: '+new Set(filtered.map(r=>r.object)).size+'</span><span class="pill">Сотрудников: '+new Set(filtered.map(r=>r.owner_user_id||r.author)).size+'</span>';
- $('rows').innerHTML=filtered.length?filtered.map((r)=>'<tr><td>'+esc(r.date)+'</td><td>'+esc(r.object)+'</td><td>'+esc(r.employee)+'</td><td>'+esc(r.author)+'</td><td>'+esc(r.updated_at||'')+'</td><td><div class="actions"><button class="secondary" data-key="'+esc(r.record_key)+'">Открыть</button><button class="outline" data-download="'+esc(r.record_key)+'">Скачать</button></div></td></tr>').join(''):'<tr><td colspan="6" class="empty">За выбранный период отчётов нет.</td></tr>';
+ $('rows').innerHTML=filtered.length?filtered.map((r)=>'<tr><td>'+esc(r.date)+'</td><td>'+esc(r.object)+'</td><td>'+esc(r.employee)+'</td><td>'+esc(r.author)+'</td><td>'+esc(r.updated_at||'')+'</td><td><div class="actions"><button class="secondary" data-key="'+esc(r.record_key)+'">Открыть</button><button class="outline" data-download="'+esc(r.record_key)+'">Скачать</button><button class="danger" data-delete="'+esc(r.record_key)+'">Удалить</button></div></td></tr>').join(''):'<tr><td colspan="6" class="empty">За выбранный период отчётов нет.</td></tr>';
  $('rows').querySelectorAll('button[data-key]').forEach(b=>b.addEventListener('click',()=>openRecord(b.dataset.key)));
  $('rows').querySelectorAll('button[data-download]').forEach(b=>b.addEventListener('click',()=>showDownload(b.dataset.download)));
+ $('rows').querySelectorAll('button[data-delete]').forEach(b=>b.addEventListener('click',()=>deleteRecord(b.dataset.delete)));
+}
+async function deleteRecord(key){
+ const record=allRecords.find(r=>r.record_key===key);
+ if(!record)return;
+ const label=[record.date,record.object,record.employee].filter(Boolean).join(' · ');
+ if(!confirm('Удалить отчёт?\n'+label+'\n\nВосстановить запись будет нельзя.'))return;
+ try{
+  setStatus('Удаляем отчёт…');
+  const response=await fetch('api.php?action=reports_delete',{
+   method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({record_key:key,csrf:csrfToken})
+  });
+  const result=await response.json();
+  if(!response.ok||!result.ok)throw new Error(result.error||'Не удалось удалить отчёт.');
+  await load();
+  setStatus('Отчёт удалён.');
+ }catch(e){setStatus(e.message,true);}
 }
 function openRecord(key){
  selected=allRecords.find(r=>r.record_key===key);if(!selected)return;
