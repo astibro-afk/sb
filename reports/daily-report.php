@@ -610,6 +610,29 @@ select.empty { color: var(--text-muted); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
 
 .quality-warn{margin:12px 0;padding:12px 14px;border:1px solid #e6c56a;border-radius:10px;background:#fff8e5;color:#5d4710;font-size:13px;line-height:1.5;max-height:220px;overflow:auto}.quality-warn.ok{border-color:#9bc9a5;background:#edf8ef;color:#205b2b}.quality-warn strong{display:block;margin-bottom:5px}.quality-warn ul{margin:5px 0 0;padding-left:20px}.quality-warn li{margin:3px 0}
+
+/* Единая шапка SB — размеры и оформление как на главной странице */
+.sb-topbar{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid #DCE9E7}
+.sb-top-inner{max-width:1240px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.sb-brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:#1A3438;min-width:0}
+.sb-logo{width:42px;height:42px;flex:0 0 42px;border-radius:12px;background:linear-gradient(135deg,#0d7377,#2ec4b6);display:grid;place-items:center;color:#fff;font-size:18px;font-weight:800}
+.sb-brand-text{display:flex;flex-direction:column;min-width:0}
+.sb-brand-text strong{font-size:16px;line-height:1.2;font-weight:800}
+.sb-brand-text small{font-size:11px;color:#5A777B;margin-top:3px}
+.sb-header-right{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap}
+.sb-user-chip{padding:6px 11px;border:1px solid #DCE9E7;border-radius:9px;background:#f8fcfb;display:flex;flex-direction:column;line-height:1.3}
+.sb-user-name{font-size:12px;font-weight:750}
+.sb-user-meta{font-size:10px;color:#5A777B}
+.sb-header-btn{border:1px solid #DCE9E7;background:#fff;color:#1A3438;border-radius:9px;padding:8px 12px;font:600 12px Inter,Arial,sans-serif;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;text-decoration:none;white-space:nowrap}
+.sb-header-btn:hover{border-color:#9bc9c5;color:#0D7377}
+.sb-header-btn #notificationBadge{min-width:17px;height:17px;padding:0 5px;border-radius:10px;background:#d94841;color:#fff;font-size:10px;line-height:17px;text-align:center;font-weight:700}
+.sb-nav{border-top:1px solid #f0f4f3}
+.sb-nav-inner{max-width:1240px;margin:0 auto;padding:0 24px;display:flex;gap:5px;overflow:auto}
+.sb-nav a{padding:10px 14px;color:#71878a;font-size:12px;font-weight:650;white-space:nowrap;border-bottom:2px solid transparent;text-decoration:none}
+.sb-nav a:hover,.sb-nav a.active{color:#0D7377;border-bottom-color:#0D7377}
+@media(max-width:850px){.sb-top-inner{padding:11px 15px}.sb-nav-inner{padding:0 10px}}
+@media(max-width:650px){.sb-top-inner{align-items:flex-start;flex-direction:column;gap:10px}.sb-header-right{width:100%;justify-content:flex-start}.sb-user-chip{max-width:100%}}
+
 </style>
 <style>
   .dup-warn{margin:12px 0;padding:10px 14px;border-radius:10px;background:#FFF7E0;border:1px solid rgba(255,182,39,.55);color:#7A5200;font-size:13px;line-height:1.45}
@@ -1512,39 +1535,30 @@ body { background: #F3F8F7; }
 <div class="bg-blob"></div>
 <div class="bg-blob"></div>
 
-<header class="app-header">
-  <div class="app-header-inner">
-    <div class="brand">
-      <div class="brand-logo">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>
+<header class="sb-topbar">
+  <div class="sb-top-inner">
+    <a class="sb-brand" href="../index.html">
+      <span class="sb-logo">СБ</span>
+      <span class="sb-brand-text"><strong>Служба безопасности</strong><small>Группа БФ Волгоград 1</small></span>
+    </a>
+    <div class="sb-header-right">
+      <div class="sb-user-chip" id="userChip">
+        <span class="sb-user-name user-chip-name"></span>
+        <span class="sb-user-meta user-chip-role"></span>
       </div>
-      <div class="brand-text">
-        <h1>Служба безопасности</h1>
-        <span>Группа БФ Волгоград 1 · Ежедневный отчёт</span>
-      </div>
-    </div>
-    <div class="header-actions">
-      <div class="user-chip" id="userChip">
-        <span class="user-chip-name"></span>
-        <span class="user-chip-role"></span>
-      </div>
-      
-      <a class="btn btn-ghost" href="../reports.php" style="display:inline-flex;align-items:center;text-decoration:none">
-        Отчёты сотрудников
-      </a>
-
-      <button class="btn btn-reset" id="btnReset">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
-        Сброс данных
-      </button>
-      
-      <a class="btn btn-ghost" id="btnEmployees" href="../employees.php" style="display:none;text-decoration:none">Сотрудники</a>
-      <a class="btn btn-ghost" id="btnTasks" href="../tasks.php" style="display:none;text-decoration:none">Задачи</a>
-      <a class="btn btn-ghost" id="btnNotifications" href="../notifications.php" style="display:none;text-decoration:none;position:relative;padding:8px 10px" aria-label="Уведомления" title="Уведомления"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg><span id="notificationBadge" style="display:none;position:absolute;top:1px;right:1px;min-width:16px;height:16px;padding:0 4px;border-radius:10px;background:#d94841;color:#fff;font-size:10px;line-height:16px;text-align:center;font-weight:700"></span></a>
-      <button class="btn btn-ghost" id="btnLogout" type="button">Выход</button>
+      <a class="sb-header-btn" id="btnNotifications" href="../notifications.php" aria-label="Уведомления">Уведомления <span id="notificationBadge" hidden></span></a>
+      <button class="sb-header-btn" id="btnLogout" type="button">Выход</button>
     </div>
   </div>
-<nav class="sb-site-nav" aria-label="Основная навигация"><div class="sb-site-nav-inner"><a href="../index.html">Главная</a><a class="active" href="../reports.php">Отчёты</a><a href="../tasks.php">Задачи</a><a href="../employees.php">Сотрудники</a><a href="../notifications.php">Уведомления</a></div></nav>
+  <nav class="sb-nav" aria-label="Основная навигация">
+    <div class="sb-nav-inner">
+      <a href="../index.html">Главная</a>
+      <a class="active" href="../reports.php">Отчёты</a>
+      <a href="../tasks.php">Задачи</a>
+      <a href="../employees.php">Сотрудники</a>
+      <a href="../notifications.php">Уведомления</a>
+    </div>
+  </nav>
 </header>
 
 
@@ -1937,6 +1951,7 @@ body { background: #F3F8F7; }
   <div class="sticky-bar-inner">
     <div class="sticky-info">Заполнено <strong id="stickDone">0</strong> из <strong id="stickTotal">0</strong> полей</div>
     <div class="header-actions">
+      <button class="btn btn-reset" id="btnReset" type="button">Сброс данных</button>
       <button class="btn btn-ghost" id="btnPreview2">Предпросмотр</button>
       <button class="btn btn-ghost" id="btnChangeFolder2" type="button">Изменить папку сохранения</button>
       <button class="btn btn-primary" id="btnDownload2">Скачать Word</button>
