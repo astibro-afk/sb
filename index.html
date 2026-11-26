@@ -5144,7 +5144,7 @@ var colIdx = [];
   z-index: 900; max-width: 92%; padding: 12px 18px; background: #FFB627; color: #5A4A00;
   border-radius: 12px; font-size: 14px; font-weight: 600; box-shadow: 0 6px 20px rgba(255,182,39,.35); }
 
-/* Сбалансированная шапка: читаемый бренд и удобные кнопки */
+/* Компактная шапка: кнопки занимают ширину по содержимому */
 .app-header {
   padding: 10px 22px !important;
   background: rgba(255,255,255,.98);
@@ -5157,7 +5157,7 @@ var colIdx = [];
   display: grid;
   grid-template-columns: 230px minmax(0,1fr);
   align-items: center;
-  gap: 20px;
+  gap: 18px;
 }
 .brand { gap: 11px; min-width: 0; }
 .brand-logo {
@@ -5166,26 +5166,27 @@ var colIdx = [];
   box-shadow: 0 3px 9px rgba(19,67,67,.12);
 }
 .brand-logo svg { width: 21px; height: 21px; }
-.brand-text h1 {
-  font-size: 16px; line-height: 1.2; letter-spacing: -.25px;
-}
-.brand-text span {
-  display: block; margin-top: 3px; font-size: 11px; line-height: 1.2;
-}
+.brand-text h1 { font-size: 16px; line-height: 1.2; letter-spacing: -.25px; }
+.brand-text span { display: block; margin-top: 3px; font-size: 11px; line-height: 1.2; }
 .header-actions {
   width: 100%;
-  display: grid;
-  grid-template-columns: repeat(4,minmax(0,1fr));
-  grid-auto-flow: row;
-  align-items: stretch;
-  gap: 7px 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
 }
 .header-actions .btn {
-  width: 100%; min-width: 0; min-height: 34px;
-  padding: 7px 9px; gap: 6px;
-  border-radius: 9px;
-  font-size: 12px; line-height: 1.15;
-  white-space: normal; text-align: center;
+  width: auto;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 11px;
+  gap: 6px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-align: center;
   box-shadow: 0 1px 3px rgba(19,67,67,.07);
   transition: transform .15s ease, box-shadow .15s ease;
 }
@@ -5195,38 +5196,52 @@ var colIdx = [];
 }
 .header-actions .btn svg { width: 14px; height: 14px; flex: 0 0 auto; }
 .header-actions .user-chip {
-  width: 100%; min-width: 0; min-height: 34px;
-  padding: 5px 9px; border-radius: 9px;
-  display: flex; flex-direction: column;
-  justify-content: center; gap: 2px; line-height: 1.1;
+  width: auto;
+  max-width: 190px;
+  min-width: 110px;
+  min-height: 32px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  line-height: 1.1;
   overflow: hidden;
 }
 .header-actions .user-chip-name {
-  max-width: 100%; font-size: 11px; font-weight: 700;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .header-actions .user-chip-role {
-  max-width: 100%; font-size: 9px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 100%;
+  font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 @media (max-width: 900px) {
   .app-header { padding: 9px 14px !important; }
-  .app-header-inner { grid-template-columns: 190px minmax(0,1fr); gap: 12px; }
+  .app-header-inner { grid-template-columns: 180px minmax(0,1fr); gap: 12px; }
   .brand { gap: 8px; }
   .brand-logo { width: 38px; height: 38px; flex-basis: 38px; }
   .brand-text h1 { font-size: 14px; }
   .brand-text span { font-size: 10px; }
   .header-actions { gap: 6px; }
-  .header-actions .btn { min-height: 32px; padding: 6px 5px; font-size: 11px; }
+  .header-actions .btn { min-height: 30px; padding: 5px 9px; font-size: 11px; }
 }
 @media (max-width: 620px) {
   .app-header { padding: 10px 12px !important; }
-  .app-header-inner { grid-template-columns: 1fr; gap: 10px; }
+  .app-header-inner { grid-template-columns: 1fr; gap: 9px; }
   .brand { justify-content: center; }
-  .header-actions { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
-  .header-actions .btn { min-height: 36px; font-size: 11px; }
+  .header-actions { justify-content: center; gap: 6px; }
+  .header-actions .btn { min-height: 32px; padding: 6px 9px; font-size: 11px; }
+  .header-actions .user-chip { max-width: 100%; }
 }
-
 </style>
 
 <div class="viewonly-banner" id="viewOnlyBanner"></div>
