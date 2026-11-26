@@ -669,7 +669,8 @@ if ($action === 'moderator_user_create' && $method === 'POST') {
     if ($fullName === '' || mb_strlen($fullName) > 255) reply(400, ['ok' => false, 'error' => 'Укажите ФИО (до 255 символов).']);
 
     if ($ctx['role'] === 'moderator') {
-        $objectIds = user_object_ids($pdo, (int)$ctx['id']);
+        $objectRows = array_filter(get_user_object_rows($pdo, (int)$ctx['id']), function($row) { return (int)$row['is_active'] === 1; });
+        $objectIds = array_map(function($row) { return (int)$row['id']; }, array_values($objectRows));
     } else {
         $rawIds = $body['object_ids'] ?? (($body['object_id'] ?? '') === '' ? [] : [$body['object_id']]);
         if (!is_array($rawIds)) reply(400, ['ok' => false, 'error' => 'Некорректный список объектов.']);
