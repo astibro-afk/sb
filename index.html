@@ -3685,9 +3685,7 @@ function monthRecords(month, object) {
     out += '</div>';
     return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">' +
       '<head><meta charset="utf-8"><title>Сводный отчет СБ</title>' +
-      '<style>' + docCss() + '<\/style></head><body>' + out + '<script>
-(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,30000);document.addEventListener('visibilitychange',ping);})();
-</script></body></ht' + 'ml>';
+      '<style>' + docCss() + '<\/style></head><body>' + out + '</body></ht' + 'ml>';
   }
   // Прогресс сборки сводной (v1.86): окно показывается после подготовки,
   // файл записывается только когда полоса доходит до 100%.
@@ -4852,5 +4850,8 @@ var colIdx = [];
     </form>
   </div>
 </div>
+<script>
+(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,30000);document.addEventListener('visibilitychange',ping);})();
+</script>
 </body>
 </html>
