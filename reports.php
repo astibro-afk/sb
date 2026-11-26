@@ -33,7 +33,7 @@ button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inte
 <link rel="stylesheet" href="site-theme.css">
 </head>
 <body>
-<header><div class="head"><div class="brand"><div class="logo">СБ</div><div><h1>Отчёты сотрудников</h1><small>Архив ежедневных отчётов</small></div></div><a class="linkbtn outline" href="index.html">К ежедневному отчёту</a></div></header>
+<header><div class="head"><div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M9 13h6M9 17h6"></path></svg></div><div><h1>Отчёты сотрудников</h1><small>Архив ежедневных отчётов</small></div></div><a class="linkbtn outline" href="index.html">К ежедневному отчёту</a></div></header>
 <main>
 <section class="panel">
 <h2>Поиск отчётов</h2><p class="sub">Выберите период и при необходимости ограничьте список объектом или сотрудником.</p>
