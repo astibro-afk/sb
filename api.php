@@ -206,6 +206,15 @@ function db(array $cfg): PDO {
                 CONSTRAINT fk_activation_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         ensure_archive_columns($pdo);
+        $pdo->exec("CREATE TABLE IF NOT EXISTS sb_report_comments (
+            record_key CHAR(66) NOT NULL PRIMARY KEY,
+            comment TEXT NOT NULL,
+            author_user_id INT UNSIGNED NOT NULL,
+            author_name VARCHAR(255) NOT NULL DEFAULT '',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_report_comment_author (author_user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         ensure_user_objects($pdo);
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
@@ -552,6 +561,33 @@ if (!$user) {
 }
 $ctx = user_ctx($pdo, $user);
 
+if ($action === 'report_comment' && $method === 'POST') {
+    $body = input_json();
+    check_csrf($body);
+    if ($ctx['role'] !== 'admin') {
+        reply(403, ['ok' => false, 'error' => 'Комментарии руководителя может изменять только администратор.']);
+    }
+    $recordKey = trim((string)($body['record_key'] ?? ''));
+    $comment = trim((string)($body['comment'] ?? ''));
+    if (!preg_match('/^[a-f0-9]{64,66}$/i', $recordKey) || mb_strlen($comment) > 5000) {
+        reply(400, ['ok' => false, 'error' => 'Проверьте отчёт и длину комментария (до 5000 символов).']);
+    }
+    $exists = $pdo->prepare('SELECT record_key FROM sb_archive_records WHERE record_key = :k LIMIT 1');
+    $exists->execute([':k' => $recordKey]);
+    if (!$exists->fetchColumn()) reply(404, ['ok' => false, 'error' => 'Отчёт не найден.']);
+    if ($comment === '') {
+        $del = $pdo->prepare('DELETE FROM sb_report_comments WHERE record_key = :k');
+        $del->execute([':k' => $recordKey]);
+    } else {
+        $save = $pdo->prepare('INSERT INTO sb_report_comments (record_key, comment, author_user_id, author_name)
+            VALUES (:k, :c, :uid, :name)
+            ON DUPLICATE KEY UPDATE comment = VALUES(comment), author_user_id = VALUES(author_user_id),
+                author_name = VALUES(author_name), updated_at = CURRENT_TIMESTAMP');
+        $save->execute([':k' => $recordKey, ':c' => $comment, ':uid' => (int)$ctx['id'], ':name' => (string)$ctx['full_name']]);
+    }
+    reply(200, ['ok' => true, 'comment' => $comment, 'author' => (string)$ctx['full_name']]);
+}
+
 if ($action === 'reports_data' && $method === 'GET') {
     $from = (string)($_GET['from'] ?? date('Y-m-01'));
     $to = (string)($_GET['to'] ?? date('Y-m-d'));
@@ -590,8 +626,10 @@ if ($action === 'reports_data' && $method === 'GET') {
         }
     }
 
-    $sql = 'SELECT report_date, object_name, owner_user_id, owner_name, object_id, payload, updated_at
-            FROM sb_archive_records WHERE report_date >= :date_from AND report_date <= :date_to';
+    $sql = 'SELECT a.record_key, a.report_date, a.object_name, a.owner_user_id, a.owner_name, a.object_id, a.payload, a.updated_at,
+                   c.comment AS manager_comment, c.author_name AS comment_author, c.updated_at AS comment_updated_at
+            FROM sb_archive_records a LEFT JOIN sb_report_comments c ON c.record_key = a.record_key
+            WHERE a.report_date >= :date_from AND a.report_date <= :date_to';
     $params = [':date_from' => $from, ':date_to' => $to];
 
     if ($ctx['role'] !== 'admin') {
@@ -608,7 +646,7 @@ if ($action === 'reports_data' && $method === 'GET') {
             $nameMarks[] = $key;
             $params[$key] = $name;
         }
-        $sql .= ' AND (object_id IN (' . implode(',', $idMarks) . ') OR (object_id IS NULL AND object_name IN (' . implode(',', $nameMarks) . ')))';
+        $sql .= ' AND (a.object_id IN (' . implode(',', $idMarks) . ') OR (a.object_id IS NULL AND a.object_name IN (' . implode(',', $nameMarks) . ')))';
     }
 
     if ($objectIds) {
@@ -622,9 +660,9 @@ if ($action === 'reports_data' && $method === 'GET') {
             $params[$idKey] = $id;
             $params[$nameKey] = (string)$availableById[$id]['name'];
         }
-        $sql .= ' AND (object_id IN (' . implode(',', $idMarks) . ') OR (object_id IS NULL AND object_name IN (' . implode(',', $selectedNameMarks) . ')))';
+        $sql .= ' AND (a.object_id IN (' . implode(',', $idMarks) . ') OR (a.object_id IS NULL AND a.object_name IN (' . implode(',', $selectedNameMarks) . ')))';
     }
-    $sql .= ' ORDER BY report_date DESC, object_name ASC, updated_at DESC';
+    $sql .= ' ORDER BY a.report_date DESC, a.object_name ASC, a.updated_at DESC';
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
@@ -634,6 +672,10 @@ if ($action === 'reports_data' && $method === 'GET') {
         if (!is_array($item)) continue;
         $data = isset($item['data']) && is_array($item['data']) ? $item['data'] : [];
         $records[] = [
+            'record_key' => (string)$row['record_key'],
+            'manager_comment' => (string)($row['manager_comment'] ?? ''),
+            'comment_author' => (string)($row['comment_author'] ?? ''),
+            'comment_updated_at' => (string)($row['comment_updated_at'] ?? ''),
             'date' => (string)($data['b0_date'] ?? $row['report_date']),
             'object' => (string)($data['b0_to'] ?? $row['object_name']),
             'employee' => (string)($data['b0_fio'] ?? $item['fio'] ?? ''),
