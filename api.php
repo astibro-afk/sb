@@ -241,6 +241,12 @@ function db(array $cfg): PDO {
             INDEX idx_notifications_user_read (user_id, is_read, created_at),
             CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS sb_user_presence (
+            user_id INT UNSIGNED NOT NULL PRIMARY KEY,
+            last_seen DATETIME NOT NULL,
+            INDEX idx_presence_last_seen (last_seen),
+            CONSTRAINT fk_presence_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         ensure_user_objects($pdo);
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
@@ -609,6 +615,13 @@ if (!$user) {
 }
 $ctx = user_ctx($pdo, $user);
 
+if ($action === 'presence_ping' && $method === 'GET') {
+    $st = $pdo->prepare('INSERT INTO sb_user_presence (user_id,last_seen) VALUES (:uid,NOW())
+        ON DUPLICATE KEY UPDATE last_seen=NOW()');
+    $st->execute([':uid'=>(int)$ctx['id']]);
+    reply(200, ['ok'=>true]);
+}
+
 if ($action === 'notifications_data' && $method === 'GET') {
     $st = $pdo->prepare('SELECT id, type, title, message, link, is_read, created_at FROM sb_notifications WHERE user_id=:uid ORDER BY id DESC LIMIT 100');
     $st->execute([':uid'=>(int)$ctx['id']]);
@@ -636,7 +649,9 @@ if ($action === 'employees_data' && $method === 'GET') {
     $sql = "SELECT u.id,u.username,u.full_name,u.role,u.is_active,u.created_at,
         (SELECT MAX(a.created_at) FROM sb_audit_log a WHERE a.actor_user_id=u.id AND a.action='login') AS last_login,
         (SELECT COUNT(*) FROM sb_archive_records ar WHERE ar.owner_user_id=u.id) AS reports_count,
-        (SELECT MAX(ar.report_date) FROM sb_archive_records ar WHERE ar.owner_user_id=u.id) AS last_report
+        (SELECT MAX(ar.report_date) FROM sb_archive_records ar WHERE ar.owner_user_id=u.id) AS last_report,
+        (SELECT CASE WHEN p.last_seen >= DATE_SUB(NOW(), INTERVAL 90 SECOND) THEN 1 ELSE 0 END
+            FROM sb_user_presence p WHERE p.user_id=u.id) AS is_online
         FROM sb_users u WHERE 1=1";
     $params = [];
     if ($ctx['role'] === 'user') {
@@ -659,6 +674,7 @@ if ($action === 'employees_data' && $method === 'GET') {
         $employee['objects']=array_column($objectSt->fetchAll(),'name');
         $employee['reports_count']=(int)$employee['reports_count'];
         $employee['is_active']=(int)$employee['is_active'];
+        $employee['is_online']=(int)($employee['is_online'] ?? 0);
     }
     unset($employee);
     if ($targetId > 0 && !$users) reply(404,['ok'=>false,'error'=>'Сотрудник не найден или у вас нет доступа.']);
