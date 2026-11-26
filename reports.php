@@ -45,7 +45,7 @@ main{max-width:1440px;margin:26px auto;padding:0 28px 40px}.intro{display:flex;j
     <div class="field"><label for="periodType">Период отчёта</label><select id="periodType"><option value="month">За месяц</option><option value="quarter">За квартал</option><option value="year">За год</option><option value="custom">Произвольный период</option></select></div>
     <div class="field"><label for="periodYear">Год</label><select id="periodYear"></select></div>
     <div class="field" id="unitField"><label for="periodUnit">Месяц</label><select id="periodUnit"></select></div>
-    <div class="field"><label for="objectFilter">Торговый объект</label><select id="objectFilter" multiple size="3" aria-label="Выбор нескольких торговых объектов"></select><small style="display:block;color:var(--muted);margin-top:5px">Можно выбрать несколько объектов. Если ничего не выбрано — будут показаны все доступные.</small></div>
+    <div class="field"><label for="objectFilter">Торговый объект</label><select id="objectFilter" multiple size="3" aria-label="Выбор нескольких торговых объектов"></select><small style="display:block;color:var(--muted);margin-top:5px">Можно выбрать несколько объектов (Ctrl/Shift). Если ничего не выбрано — будут показаны все доступные.</small></div>
     <div class="field"><label for="employeeFilter">Поиск сотрудника</label><input type="search" id="employeeFilter" placeholder="ФИО сотрудника"></div>
     <div class="field"><label for="dateFrom">Дата с (для произвольного периода)</label><input type="date" id="dateFrom" value="<?php echo htmlspecialchars($monthStart, ENT_QUOTES, 'UTF-8'); ?>"></div>
     <div class="field"><label for="dateTo">Дата по</label><input type="date" id="dateTo" value="<?php echo htmlspecialchars($today, ENT_QUOTES, 'UTF-8'); ?>"></div>
@@ -192,7 +192,6 @@ var records=[],filtered=[],user=null,objects=[],fieldLabels={};
  $('applyBtn').addEventListener('click',load);$('employeeFilter').addEventListener('input',render);$('objectFilter').addEventListener('change',load);$('exportSummary').addEventListener('click',exportSummary);$('exportMetrics').addEventListener('click',exportMetrics);$('exportDetails').addEventListener('click',exportDetails);$('exportWorkbook').addEventListener('click',exportWorkbook);
  initPeriod();loadFieldLabels().then(load);
 $('logoutBtn').addEventListener('click',async function(){try{await fetch('api.php?action=logout',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:window.__SB_CSRF||''})});}catch(e){}location.href='index.html';});
-load();
 })();
 </script>
 </body>
