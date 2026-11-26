@@ -520,7 +520,7 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
       <div class="user-actions">
         <span class="status <?= $u['is_active'] ? 'active' : 'off' ?>"><?= $u['is_active'] ? 'Активен' : 'Отключён' ?></span>
         <form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_toggle"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>"><button class="btn danger small" type="submit" <?= (int)$u['id'] === (int)$me['id'] ? 'disabled' : '' ?>><?= $u['is_active'] ? 'Отключить' : 'Включить' ?></button></form>
-        <button class="btn secondary small" type="button" data-reset-user="<?= (int)$u['id'] ?>">Сбросить пароль</button>
+        <button class="btn secondary small" type="button" data-reset-user="<?= (int)$u['id'] ?>" <?= empty($u['is_active']) ? 'disabled title="Сначала включите учётную запись"' : '' ?>>Сбросить пароль</button>
         <form method="post" onsubmit="return confirm('Удалить пользователя «<?= h($u['username']) ?>»? Это действие нельзя отменить.');"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_delete"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>"><button class="btn danger small" type="submit" <?= (int)$u['id'] === (int)$me['id'] ? 'disabled' : '' ?>>Удалить</button></form>
       </div>
     </article>
