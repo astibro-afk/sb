@@ -142,5 +142,8 @@ search.addEventListener('input',render);
 fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось загрузить сотрудников.');all=d.employees||[];if(d.user&&d.user.role==='user'){document.getElementById('heading').textContent='Моя карточка';document.getElementById('subtitle').textContent='Ваши отчёты и история активности';document.getElementById('toolbar').hidden=true;}render();}).catch(e=>{count.textContent='Ошибка';cards.replaceChildren(node('div','empty',e.message));});
 })();
 </script>
+<script>
+(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,30000);document.addEventListener('visibilitychange',ping);})();
+</script>
 </body>
 </html>
