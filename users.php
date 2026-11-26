@@ -449,7 +449,7 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
     <article class="user-card" data-search="<?= h(mb_strtolower($u['username'].' '.$u['full_name'].' '.implode(' ', array_map(function($oid) use ($objName) { return $objName[$oid] ?? ''; }, $userObjectIds[(int)$u['id']] ?? [])), 'UTF-8')) ?>">
       <form method="post" class="user-edit-form">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_save"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
-        <div class="field id-field"><label>Учётная запись</label><div class="user-id">#<?= (int)$u['id'] ?><small><?= $u['is_active'] ? 'В системе' : 'Отключена' ?></small></div></div>
+        <div class="field id-field"><div class="user-id">#<?= (int)$u['id'] ?><small><?= $u['is_active'] ? 'В системе' : 'Отключена' ?></small></div></div>
         <div class="field"><label>Логин</label><input name="username" value="<?= h($u['username']) ?>" required></div>
         <div class="field full-field"><label>ФИО</label><input name="full_name" value="<?= h($u['full_name']) ?>" required></div>
         <div class="field"><label>Роль</label><select name="role"><?php foreach ($roleNames as $rk => $rn): ?><option value="<?= h($rk) ?>" <?= $u['role'] === $rk ? 'selected' : '' ?>><?= h($rn) ?></option><?php endforeach; ?></select></div>
