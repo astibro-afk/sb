@@ -61,8 +61,12 @@ main{max-width:1440px;margin:26px auto;padding:0 28px 40px}.intro{display:flex;j
     <div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Отчётов</th><th>Объектов</th><th>Последний отчёт</th><th>Среднее заполнение</th></tr></thead><tbody id="summaryBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div>
   </section>
   <section class="panel">
-    <div class="panel-head"><div><h3>Сводные показатели формы</h3><small>Сумма числовых показателей всех отчётов за выбранный период</small></div><button class="btn" id="exportMetrics" type="button">Скачать лист Excel</button></div>
-    <div class="table-wrap"><table><thead><tr><th>Показатель формы</th><th>Итого за период</th><th>Количество заполнений</th></tr></thead><tbody id="metricsBody"><tr><td colspan="3" class="empty">Загрузка…</td></tr></tbody></table></div>
+    <div class="panel-head"><div><h3>Сводные показатели по всем выбранным объектам</h3><small>Итоги за период: количество случаев отдельно от сумм выявленных нарушений</small></div><button class="btn" id="exportMetrics" type="button">Скачать сводку Excel</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Направление работы</th><th>Показатель</th><th>Итого</th><th>Ед. изм.</th><th>Отчётов с данными</th></tr></thead><tbody id="metricsBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><h3>Показатели в разрезе объектов</h3><small>Каждый объект показан отдельными строками — можно сравнивать результаты между объектами</small></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Торговый объект</th><th>Направление работы</th><th>Показатель</th><th>Значение</th><th>Ед. изм.</th></tr></thead><tbody id="objectMetricsBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div>
   </section>
   <section class="panel">
     <div class="panel-head"><div><h3>Содержание отчётов</h3><small>Все значения, внесённые в форму, включая комментарии и дополнительные строки</small></div><button class="btn" id="exportDetails" type="button">Скачать лист Excel</button></div>
@@ -83,11 +87,64 @@ var records=[],filtered=[],user=null,objects=[],fieldLabels={};
  function downloadCsv(name,rows){var csv='\\ufeff'+rows.map(function(row){return row.map(csvCell).join(';');}).join('\\r\\n');var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(function(){URL.revokeObjectURL(url);},1000);}
  function makeSummary(list){var map=Object.create(null);list.forEach(function(r){var name=r.employee||'Сотрудник не указан';if(!map[name])map[name]={name:name,count:0,objects:Object.create(null),last:'',sum:0};var x=map[name];x.count++;x.objects[r.object||'']=true;if(r.date>x.last)x.last=r.date;x.sum+=pct(r);});return Object.keys(map).map(function(k){var x=map[k];return {name:x.name,count:x.count,objects:Object.keys(x.objects).filter(Boolean).length,last:x.last,average:x.count?Math.round(x.sum/x.count):0};}).sort(function(a,b){return a.name.localeCompare(b.name,'ru');});}
  function allValues(r){var out={};Object.keys(r.data||{}).forEach(function(k){out[k]=r.data[k];});Object.keys(r.dyn||{}).forEach(function(k){out['Доп. таблица: '+k]=r.dyn[k];});return out;}
- function metricRows(list){var map=Object.create(null);list.forEach(function(r){Object.keys(r.data||{}).forEach(function(k){if(['b0_date','b0_to','b0_fio'].includes(k))return;var raw=String(r.data[k]==null?'':r.data[k]).trim().replace(/\\s/g,'').replace(',','.');if(!raw||!/^[-+]?\\d+(?:\\.\\d+)?$/.test(raw))return;var n=Number(raw);if(!Number.isFinite(n))return;if(!map[k])map[k]={key:k,total:0,count:0};map[k].total+=n;map[k].count++;});});return Object.keys(map).map(function(k){return map[k];}).sort(function(a,b){return (fieldLabels[a.key]||a.key).localeCompare(fieldLabels[b.key]||b.key,'ru');});}
+ var METRICS=[
+  ['1. Кассовые операции','Отмена позиций в чеке — количество','b1_pos_qty','шт.'],
+  ['1. Кассовые операции','Отмена позиций в чеке — сумма нарушений','b1_pos_sum','руб.'],
+  ['1. Кассовые операции','Анулирование чека — количество','b1_chek_qty','шт.'],
+  ['1. Кассовые операции','Анулирование чека — сумма нарушений','b1_chek_sum','руб.'],
+  ['1. Кассовые операции','Фиктивные возвраты — количество','b1_ret_qty','шт.'],
+  ['1. Кассовые операции','Фиктивные возвраты — сумма нарушений','b1_ret_sum','руб.'],
+  ['1. Кассовые операции','Продажа с заниженным весом — количество','b1_weight_qty','шт.'],
+  ['1. Кассовые операции','Продажа с заниженным весом — сумма нарушений','b1_weight_sum','руб.'],
+  ['2. FaceID','Срабатывания','b2_triggers','шт.'],
+  ['2. FaceID','Отработано реагированием','b2_worked','шт.'],
+  ['2. FaceID','Пополнено базы данных','b2_db','чел.'],
+  ['3. Перемещения ТМЦ','Проверки внутри объекта','b3_in_checks','проверок'],
+  ['3. Перемещения ТМЦ','Выявлено нарушений внутри объекта','b3_in_qty','шт.'],
+  ['3. Перемещения ТМЦ','Сумма нарушений внутри объекта','b3_in_sum','руб.'],
+  ['3. Перемещения ТМЦ','Проверки между объектами','b3_between_checks','проверок'],
+  ['3. Перемещения ТМЦ','Выявлено нарушений между объектами','b3_between_qty','шт.'],
+  ['3. Перемещения ТМЦ','Сумма нарушений между объектами','b3_between_sum','руб.'],
+  ['4. Инвентаризации','Контрольные проверки','b4_checks','проверок'],
+  ['4. Инвентаризации','Выявленные расхождения','b4_dev_qty','шт.'],
+  ['4. Инвентаризации','Сумма расхождений','b4_dev_sum','руб.'],
+  ['5. Виртуальные остатки','Позиций передано на пересчёт','b5_positions','ед.'],
+  ['5. Виртуальные остатки','Сумма по выгрузке','b5_sum','руб.'],
+  ['6. Поставки с РЦ','Проверки поставок','b6_checks','проверок'],
+  ['6. Поставки с РЦ','Нарушения по качеству','b6_q_qty','шт.'],
+  ['6. Поставки с РЦ','Сумма нарушений по качеству','b6_q_sum','руб.'],
+  ['6. Поставки с РЦ','Нарушения по количеству','b6_qty_qty','шт.'],
+  ['6. Поставки с РЦ','Сумма нарушений по количеству','b6_qty_sum','руб.'],
+  ['6. Поставки с РЦ','Нарушения по срокам годности','b6_sg_qty','шт.'],
+  ['6. Поставки с РЦ','Сумма нарушений по срокам годности','b6_sg_sum','руб.'],
+  ['7. Прямые поставщики','Проверки поставок','b7_checks','проверок'],
+  ['7. Прямые поставщики','Нарушения по качеству','b7_q_qty','шт.'],
+  ['7. Прямые поставщики','Сумма нарушений по качеству','b7_q_sum','руб.'],
+  ['7. Прямые поставщики','Нарушения по количеству','b7_qty_qty','шт.'],
+  ['7. Прямые поставщики','Сумма нарушений по количеству','b7_qty_sum','руб.'],
+  ['7. Прямые поставщики','Нарушения по срокам годности','b7_sg_qty','шт.'],
+  ['7. Прямые поставщики','Сумма нарушений по срокам годности','b7_sg_sum','руб.'],
+  ['8. Списание ТМЦ','Проверки качества списания','b8_checks','проверок'],
+  ['8. Списание ТМЦ','Выявленные нарушения','b8_qty','шт.'],
+  ['8. Списание ТМЦ','Сумма выявленных нарушений','b8_sum','руб.'],
+  ['9. Служебные записки','Количество служебных записок','b9_count','шт.'],
+  ['10. Правонарушения','Уголовные преступления — количество','b10_crim_qty','случаев'],
+  ['10. Правонарушения','Уголовные преступления — сумма','b10_crim_sum','руб.'],
+  ['10. Правонарушения','Административные правонарушения — количество','b10_adm_qty','случаев'],
+  ['10. Правонарушения','Административные правонарушения — сумма','b10_adm_sum','руб.'],
+  ['10. Правонарушения','Разбор на месте — количество','b10_local_qty','случаев'],
+  ['10. Правонарушения','Разбор на месте — сумма','b10_local_sum','руб.']
+ ];
+ function numericValue(raw){if(raw===null||raw===undefined||raw==='')return null;if(typeof raw==='number')return Number.isFinite(raw)?raw:null;var s=String(raw).replace(/\u00a0/g,' ').trim();if(!s||s==='—'||s==='-')return null;s=s.replace(/\s/g,'').replace(',','.').replace(/руб\.?/gi,'');if(!/^[-+]?(?:\d+\.?\d*|\.\d+)$/.test(s))return null;var n=Number(s);return Number.isFinite(n)?n:null;}
+ function metricRows(list){return METRICS.map(function(def){var total=0,count=0;list.forEach(function(r){var n=numericValue((r.data||{})[def[2]]);if(n!==null){total+=n;count++;}});return {section:def[0],label:def[1],key:def[2],unit:def[3],total:total,count:count};}).filter(function(x){return x.count>0;});}
+ function objectMetricRows(list){var groups=Object.create(null);list.forEach(function(r){var name=r.object||'Объект не указан';if(!groups[name])groups[name]=[];groups[name].push(r);});var out=[];Object.keys(groups).sort(function(a,b){return a.localeCompare(b,'ru');}).forEach(function(name){metricRows(groups[name]).forEach(function(m){out.push({object:name,section:m.section,label:m.label,unit:m.unit,total:m.total,count:m.count});});});return out;}
+ function fmtMetric(n){return Number(n).toLocaleString('ru-RU',{maximumFractionDigits:2});}
+
  function render(){var q=$('employeeFilter').value.trim().toLocaleLowerCase('ru');filtered=records.filter(function(r){return !q||(r.employee||'').toLocaleLowerCase('ru').includes(q);});
  $('statReports').textContent=filtered.length;$('statEmployees').textContent=new Set(filtered.map(function(r){return r.employee||'Сотрудник не указан';})).size;$('statObjects').textContent=new Set(filtered.map(function(r){return r.object||'';}).filter(Boolean)).size;
  var sums=makeSummary(filtered);$('summaryBody').innerHTML=sums.length?sums.map(function(x){return '<tr><td><strong>'+esc(x.name)+'</strong></td><td>'+x.count+'</td><td>'+x.objects+'</td><td>'+fmtDate(x.last)+'</td><td><span class="progress"><i style="width:'+x.average+'%"></i></span>'+x.average+'%</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">За выбранный период отчёты не найдены</td></tr>';
- var metrics=metricRows(filtered);$('metricsBody').innerHTML=metrics.length?metrics.map(function(x){return '<tr><td>'+esc(fieldLabels[x.key]||x.key)+'</td><td><strong>'+x.total.toLocaleString('ru-RU',{maximumFractionDigits:2})+'</strong></td><td>'+x.count+'</td></tr>';}).join(''):'<tr><td colspan="3" class="empty">Числовые показатели не найдены</td></tr>';
+ var metrics=metricRows(filtered);$('metricsBody').innerHTML=metrics.length?metrics.map(function(x){return '<tr><td>'+esc(x.section)+'</td><td>'+esc(x.label)+'</td><td><strong>'+fmtMetric(x.total)+'</strong></td><td>'+esc(x.unit)+'</td><td>'+x.count+'</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">За выбранный период нет данных по показателям</td></tr>';
+ var byObject=objectMetricRows(filtered);$('objectMetricsBody').innerHTML=byObject.length?byObject.map(function(x){return '<tr><td><strong>'+esc(x.object)+'</strong></td><td>'+esc(x.section)+'</td><td>'+esc(x.label)+'</td><td><strong>'+fmtMetric(x.total)+'</strong></td><td>'+esc(x.unit)+'</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">Нет данных по выбранным объектам</td></tr>';
  $('detailsBody').innerHTML=filtered.length?filtered.map(function(r){var p=pct(r);return '<tr><td>'+fmtDate(r.date)+'</td><td>'+esc(r.object||'—')+'</td><td><strong>'+esc(r.employee||'Не указан')+'</strong></td><td>'+esc(r.author||'—')+'</td><td><span class="progress"><i style="width:'+p+'%"></i></span>'+p+'%</td><td>'+fmtTime(r.updated_at)+'</td></tr>';}).join(''):'<tr><td colspan="6" class="empty">За выбранный период отчёты не найдены</td></tr>';
  $('periodLabel').textContent=$('periodType').selectedOptions[0].text+' · '+$('dateFrom').value+' — '+$('dateTo').value;}
  function pad(n){return String(n).padStart(2,'0');}
@@ -123,12 +180,13 @@ var records=[],filtered=[],user=null,objects=[],fieldLabels={};
    catch(e){console.error(e);alert('Не удалось сформировать Excel-файл. Попробуйте ещё раз.');}
  }
  function summarySpec(){var rows=makeSummary(filtered).map(function(x){return [x.name,x.count,x.objects,fmtDate(x.last),x.average/100];});return {name:'Сводка сотрудников',title:'СВОДКА ПО СОТРУДНИКАМ',subtitle:'Период: '+fmtDate($('dateFrom').value)+' — '+fmtDate($('dateTo').value)+' · Сформировано: '+new Date().toLocaleString('ru-RU'),headers:['Сотрудник','Количество отчётов','Количество объектов','Последний отчёт','Среднее заполнение'],rows:rows,widths:[34,20,20,20,22]};}
- function metricsSpec(){var rows=metricRows(filtered).map(function(x){return [fieldLabels[x.key]||x.key,x.total,x.count];});return {name:'Числовые поля',title:'ЧИСЛОВЫЕ ПОЛЯ ФОРМЫ',subtitle:'Автоматическая сумма числовых значений. Для показателей с разными единицами измерения суммы следует трактовать с осторожностью.',headers:['Показатель формы','Автосумма за период','Количество заполнений'],rows:rows,widths:[42,24,24]};}
+ function metricsSpec(){var rows=metricRows(filtered).map(function(x){return [x.section,x.label,x.total,x.unit,x.count];});return {name:'Сводка показателей',title:'СВОДНЫЕ ПОКАЗАТЕЛИ ПО ВЫБРАННЫМ ОБЪЕКТАМ',subtitle:'Суммируются только однотипные показатели формы; количество, проверки и рублёвые суммы показаны раздельно.',headers:['Направление работы','Показатель','Итого за период','Ед. изм.','Отчётов с данными'],rows:rows,widths:[28,46,20,14,20]};}
+ function objectMetricsSpec(){var rows=objectMetricRows(filtered).map(function(x){return [x.object,x.section,x.label,x.total,x.unit,x.count];});return {name:'По объектам',title:'ПОКАЗАТЕЛИ В РАЗРЕЗЕ ТОРГОВЫХ ОБЪЕКТОВ',subtitle:'Каждая строка содержит один показатель одного объекта. Можно фильтровать и сравнивать объекты.',headers:['Торговый объект','Направление работы','Показатель','Значение','Ед. изм.','Отчётов с данными'],rows:rows,widths:[30,28,44,18,14,20]};}
  function detailsSpec(){var keys=Object.create(null);filtered.forEach(function(r){Object.keys(allValues(r)).forEach(function(k){keys[k]=true;});});var fields=Object.keys(keys).sort(function(a,b){return (fieldLabels[a]||a).localeCompare(fieldLabels[b]||b,'ru');});var headers=['Дата','Торговый объект','Сотрудник','Кем сохранён','Заполнено полей','Всего полей'].concat(fields.map(function(k){return fieldLabels[k]||k;}));var rows=filtered.map(function(r){var vals=allValues(r);return [fmtDate(r.date),r.object,r.employee,r.author,r.done,r.total].concat(fields.map(function(k){return vals[k]===undefined?'':safeCell(vals[k]);}));});return {name:'Полные отчёты',title:'ПОЛНЫЕ ДАННЫЕ ОТЧЁТОВ',subtitle:'Одна строка — один самостоятельный отчёт сотрудника. Включены поля формы и дополнительные данные.',headers:headers,rows:rows,widths:[14,28,28,26,16,14].concat(fields.map(function(){return 24;}))};}
  function dynamicSpec(){var rows=[];filtered.forEach(function(r){Object.keys(r.dyn||{}).forEach(function(k){rows.push([fmtDate(r.date),r.object,r.employee,k,safeCell(r.dyn[k])]);});});return {name:'Дополнительные данные',title:'ДОПОЛНИТЕЛЬНЫЕ ТАБЛИЦЫ И СТРОКИ',subtitle:'Содержимое динамических таблиц, сохранённых вместе с отчётами.',headers:['Дата','Торговый объект','Сотрудник','Раздел / таблица','Содержимое'],rows:rows,widths:[14,28,28,30,70]};}
- async function exportWorkbook(){if(!filtered.length){alert('За выбранный период нет отчётов для выгрузки.');return;}var btn=$('exportWorkbook');btn.disabled=true;btn.textContent='Формирование…';try{await downloadXlsx('Отчёты_СБ_'+periodFilePart()+'.xlsx',[summarySpec(),metricsSpec(),detailsSpec(),dynamicSpec()]);}finally{btn.disabled=false;btn.textContent='↓ Скачать полный Excel-отчёт';}}
+ async function exportWorkbook(){if(!filtered.length){alert('За выбранный период нет отчётов для выгрузки.');return;}var btn=$('exportWorkbook');btn.disabled=true;btn.textContent='Формирование…';try{await downloadXlsx('Отчёты_СБ_'+periodFilePart()+'.xlsx',[summarySpec(),metricsSpec(),objectMetricsSpec(),detailsSpec(),dynamicSpec()]);}finally{btn.disabled=false;btn.textContent='↓ Скачать полный Excel-отчёт';}}
  async function exportSummary(){if(!filtered.length){alert('Нет данных для выгрузки.');return;}await downloadXlsx('Сводка_сотрудников_'+periodFilePart()+'.xlsx',[summarySpec()]);}
- async function exportMetrics(){if(!filtered.length){alert('Нет данных для выгрузки.');return;}await downloadXlsx('Показатели_формы_'+periodFilePart()+'.xlsx',[metricsSpec()]);}
+ async function exportMetrics(){if(!filtered.length){alert('Нет данных для выгрузки.');return;}await downloadXlsx('Показатели_формы_'+periodFilePart()+'.xlsx',[metricsSpec(),objectMetricsSpec()]);}
  async function exportDetails(){if(!filtered.length){alert('Нет данных для выгрузки.');return;}await downloadXlsx('Полные_отчёты_'+periodFilePart()+'.xlsx',[detailsSpec(),dynamicSpec()]);}
  async function loadFieldLabels(){try{var response=await fetch('index.html',{credentials:'same-origin',cache:'no-store'});var html=await response.text();var doc=new DOMParser().parseFromString(html,'text/html');doc.querySelectorAll('[data-field][id]').forEach(function(el){var group=el.closest('.form-group'),label=group&&group.querySelector('label');if(label)fieldLabels[el.id]=label.textContent.trim();});}catch(e){}}
  $('applyBtn').addEventListener('click',load);$('employeeFilter').addEventListener('input',render);$('objectFilter').addEventListener('change',load);$('exportSummary').addEventListener('click',exportSummary);$('exportMetrics').addEventListener('click',exportMetrics);$('exportDetails').addEventListener('click',exportDetails);$('exportWorkbook').addEventListener('click',exportWorkbook);
