@@ -1546,6 +1546,7 @@ body { background: #F3F8F7; }
         <span class="sb-user-name user-chip-name"></span>
         <span class="sb-user-meta user-chip-role"></span>
       </div>
+      <a class="sb-header-btn" id="btnHeaderManage" href="../users.php" style="display:none">Управление</a>
       <a class="sb-header-btn" id="btnNotifications" href="../notifications.php" aria-label="Уведомления">Уведомления <span id="notificationBadge" hidden></span></a>
       <button class="sb-header-btn" id="btnLogout" type="button">Выход</button>
     </div>
@@ -4540,6 +4541,8 @@ var colIdx = [];
         }
       }).catch(function() {});
     }
+    var btnHeaderManage = $('#btnHeaderManage');
+    if (btnHeaderManage) btnHeaderManage.style.display = (user.role === 'admin') ? '' : 'none';
     var btnUsers = $('#btnUsers');
     if (btnUsers) btnUsers.style.display = (user.role === 'admin') ? '' : 'none';
     var btnAddUser = $('#btnAddUser');
