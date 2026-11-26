@@ -5280,6 +5280,19 @@ var colIdx = [];
   }
   .app-header .header-actions .btn { width: auto; }
 }
+
+/* Логотип и название — единый блок; сам блок расположен по центру шапки */
+.app-header .brand {
+  width: auto !important;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  text-align: left;
+  gap: 14px;
+  margin: 0 auto;
+}
+.app-header .brand-text { text-align: left !important; }
 </style>
 
 <div class="viewonly-banner" id="viewOnlyBanner"></div>
