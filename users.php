@@ -24,6 +24,12 @@ function csrf_token(): string {
     if (empty($_SESSION['sb_csrf'])) $_SESSION['sb_csrf'] = bin2hex(random_bytes(32));
     return (string)$_SESSION['sb_csrf'];
 }
+function users_audit_log(PDO $pdo, array $actor, string $action, string $type, ?int $targetId, string $label, array $details = []): void {
+    try {
+        $st = $pdo->prepare('INSERT INTO sb_audit_log (actor_user_id, actor_name, action, target_type, target_id, target_label, details) VALUES (:uid,:name,:action,:type,:target_id,:label,:details)');
+        $st->execute([':uid' => (int)$actor['id'], ':name' => (string)$actor['full_name'], ':action' => $action, ':type' => $type, ':target_id' => $targetId, ':label' => mb_substr($label,0,255), ':details' => $details ? json_encode($details, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) : null]);
+    } catch (Throwable $e) { error_log('SB users audit error: '.$e->getMessage()); }
+}
 
 $err = '';
 $cfg = require __DIR__ . '/config.php';
@@ -61,6 +67,18 @@ try {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $pdo->exec("INSERT IGNORE INTO sb_user_objects (user_id, object_id)
         SELECT id, object_id FROM sb_users WHERE object_id IS NOT NULL");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_audit_log (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        actor_user_id INT UNSIGNED NULL DEFAULT NULL,
+        actor_name VARCHAR(255) NOT NULL DEFAULT '',
+        action VARCHAR(64) NOT NULL,
+        target_type VARCHAR(64) NOT NULL DEFAULT '',
+        target_id INT UNSIGNED NULL DEFAULT NULL,
+        target_label VARCHAR(255) NOT NULL DEFAULT '',
+        details TEXT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_audit_created (created_at), INDEX idx_audit_actor (actor_user_id), INDEX idx_audit_action (action)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 } catch (Throwable $e) {
     error_log('SB users page database error: ' . $e->getMessage());
     http_response_code(500);
@@ -91,6 +109,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
 
         if ($act === 'object_delete') {
+            $nameStmt = $pdo->prepare('SELECT name FROM sb_objects WHERE id = :id');
+            $nameStmt->execute([':id' => $id]);
+            $objectLabel = (string)($nameStmt->fetchColumn() ?: 'Объект #'.$id);
             $check = $pdo->prepare('SELECT COUNT(*) FROM sb_user_objects WHERE object_id = :id');
             $check->execute([':id' => $id]);
             if ($id < 1) {
@@ -101,6 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $del = $pdo->prepare('DELETE FROM sb_objects WHERE id = :id');
                 $del->execute([':id' => $id]);
                 if ($del->rowCount() === 0) $err = 'Объект не найден.';
+                else users_audit_log($pdo, $me, 'object_deleted', 'object', $id, $objectLabel);
             }
         } elseif ($act === 'user_delete') {
             if ($id < 1 || $id === (int)$me['id']) {
@@ -108,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $pdo->beginTransaction();
                 try {
-                    $lock = $pdo->prepare('SELECT id, role, is_active FROM sb_users WHERE id = :id FOR UPDATE');
+                    $lock = $pdo->prepare('SELECT id, role, is_active, username, full_name FROM sb_users WHERE id = :id FOR UPDATE');
                     $lock->execute([':id' => $id]);
                     $target = $lock->fetch();
                     if (!$target) {
@@ -122,6 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($err === '') {
                         $del = $pdo->prepare('DELETE FROM sb_users WHERE id = :id');
                         $del->execute([':id' => $id]);
+                        users_audit_log($pdo, $me, 'user_deleted', 'user', $id, (string)$target['username'], ['full_name' => $target['full_name']]);
                     }
                     $pdo->commit();
                 } catch (Throwable $e) {
@@ -142,9 +165,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } elseif ($id > 0) {
                     $st = $pdo->prepare('UPDATE sb_objects SET name = :n, is_active = :a WHERE id = :id');
                     $st->execute([':n' => $name, ':a' => $active, ':id' => $id]);
+                    users_audit_log($pdo, $me, 'object_updated', 'object', $id, $name, ['active' => $active]);
                 } else {
                     $st = $pdo->prepare('INSERT INTO sb_objects (name, is_active) VALUES (:n, :a)');
                     $st->execute([':n' => $name, ':a' => $active]);
+                    $id = (int)$pdo->lastInsertId();
+                    users_audit_log($pdo, $me, 'object_created', 'object', $id, $name, ['active' => $active]);
                 }
             }
         } elseif ($act === 'user_save') {
@@ -193,6 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $st->execute([':h' => password_hash($password, PASSWORD_DEFAULT), ':id' => $id]);
                             }
                             $pdo->commit();
+                            users_audit_log($pdo, $me, 'user_updated', 'user', $id, $username, ['role' => $role, 'object_ids' => $objectIds, 'active' => $isActive, 'password_changed' => $password !== '']);
                         } catch (Throwable $e) {
                             if ($pdo->inTransaction()) $pdo->rollBack();
                             throw $e;
@@ -210,6 +237,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 foreach ($objectIds as $oid) $link->execute([':u' => $newId, ':o' => $oid]);
                             }
                             $pdo->commit();
+                            users_audit_log($pdo, $me, 'user_created', 'user', $newId, $username, ['role' => $role, 'object_ids' => $objectIds, 'active' => 1]);
                         } catch (Throwable $e) {
                             if ($pdo->inTransaction()) $pdo->rollBack();
                             throw $e;
@@ -221,8 +249,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($id === (int)$me['id']) {
                 $err = 'Нельзя отключить собственную учётную запись.';
             } else {
+                $targetStmt = $pdo->prepare('SELECT username, is_active FROM sb_users WHERE id = :id');
+                $targetStmt->execute([':id' => $id]);
+                $toggleTarget = $targetStmt->fetch();
                 $st = $pdo->prepare('UPDATE sb_users SET is_active = 1 - is_active WHERE id = :id');
                 $st->execute([':id' => $id]);
+                if ($toggleTarget) users_audit_log($pdo, $me, !empty($toggleTarget['is_active']) ? 'user_disabled' : 'user_enabled', 'user', $id, (string)$toggleTarget['username']);
             }
         }
     }
@@ -243,6 +275,14 @@ foreach ($users as $u) {
     $uid = (int)$u['id'];
     if (empty($userObjectIds[$uid]) && !empty($u['object_id'])) $userObjectIds[$uid] = [(int)$u['object_id']];
 }
+$activeObjectIds = [];
+foreach ($objects as $o) if ((int)$o['is_active'] === 1) $activeObjectIds[(int)$o['id']] = true;
+$unassignedUsers = array_values(array_filter($users, function($u) use ($userObjectIds, $activeObjectIds) {
+    if ((int)$u['is_active'] !== 1 || !in_array($u['role'], ['user','moderator'], true)) return false;
+    foreach ($userObjectIds[(int)$u['id']] ?? [] as $oid) if (isset($activeObjectIds[(int)$oid])) return false;
+    return true;
+}));
+$auditRows = $pdo->query('SELECT actor_name, action, target_label, created_at FROM sb_audit_log ORDER BY id DESC LIMIT 50')->fetchAll();
 $roleNames = ['admin' => 'Администратор', 'moderator' => 'Модератор', 'user' => 'Пользователь'];
 ?>
 <!DOCTYPE html>
@@ -410,6 +450,7 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
 </div>
 
 <?php if ($err): ?><div class="alert"><?= h($err) ?></div><?php endif; ?>
+<?php if ($unassignedUsers): ?><div class="alert"><strong>Требуют назначения объектов:</strong> <?= h(implode(', ', array_map(function($u){ return $u['full_name'].' ('.$u['username'].')'; }, $unassignedUsers))) ?>. Эти сотрудники не смогут работать с отчётами, пока им не назначат активный объект.</div><?php endif; ?>
 
 <section class="panel">
   <div class="panel-head">
@@ -478,6 +519,7 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
       <div class="user-actions">
         <span class="status <?= $u['is_active'] ? 'active' : 'off' ?>"><?= $u['is_active'] ? 'Активен' : 'Отключён' ?></span>
         <form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_toggle"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>"><button class="btn danger small" type="submit" <?= (int)$u['id'] === (int)$me['id'] ? 'disabled' : '' ?>><?= $u['is_active'] ? 'Отключить' : 'Включить' ?></button></form>
+        <button class="btn secondary small" type="button" data-reset-user="<?= (int)$u['id'] ?>">Сбросить пароль</button>
         <form method="post" onsubmit="return confirm('Удалить пользователя «<?= h($u['username']) ?>»? Это действие нельзя отменить.');"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_delete"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>"><button class="btn danger small" type="submit" <?= (int)$u['id'] === (int)$me['id'] ? 'disabled' : '' ?>>Удалить</button></form>
       </div>
     </article>
@@ -485,9 +527,15 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
   </div>
   <div class="empty" id="noUsers" hidden>По вашему запросу ничего не найдено.</div>
 </section>
+
+<section class="panel">
+  <div class="panel-head"><div class="panel-heading"><div class="section-icon">◷</div><div><h2 class="panel-title">История действий</h2><div class="panel-subtitle">Последние 50 изменений пользователей и торговых объектов</div></div></div><span class="counter"><?= count($auditRows) ?> событий</span></div>
+  <?php if ($auditRows): ?><div class="table-wrap"><table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:9px;border-bottom:1px solid var(--line)">Дата и время</th><th style="text-align:left;padding:9px;border-bottom:1px solid var(--line)">Кто</th><th style="text-align:left;padding:9px;border-bottom:1px solid var(--line)">Действие</th><th style="text-align:left;padding:9px;border-bottom:1px solid var(--line)">Объект действия</th></tr></thead><tbody><?php foreach ($auditRows as $log): ?><tr><td style="padding:9px;border-bottom:1px solid var(--line);white-space:nowrap"><?= h($log['created_at']) ?></td><td style="padding:9px;border-bottom:1px solid var(--line)"><?= h($log['actor_name']) ?></td><td style="padding:9px;border-bottom:1px solid var(--line)"><?= h(['user_created'=>'Создание пользователя','user_updated'=>'Изменение пользователя','user_deleted'=>'Удаление пользователя','user_disabled'=>'Отключение пользователя','user_enabled'=>'Включение пользователя','object_created'=>'Создание объекта','object_updated'=>'Изменение объекта','object_deleted'=>'Удаление объекта'][$log['action']] ?? $log['action']) ?></td><td style="padding:9px;border-bottom:1px solid var(--line)"><?= h($log['target_label']) ?></td></tr><?php endforeach; ?></tbody></table></div><?php else: ?><div class="empty">История пока пуста. Новые действия будут фиксироваться автоматически.</div><?php endif; ?>
+</section>
 </div>
 <script>
 (function(){
+  const resetCsrf=<?= json_encode(csrf_token()) ?>;
   const input=document.getElementById('userSearch');
   const cards=Array.from(document.querySelectorAll('.user-card'));
   const count=document.getElementById('visibleCount');
@@ -510,6 +558,19 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
       if(!details.contains(event.target))details.open=false;
     });
   });
+  document.querySelectorAll('[data-reset-user]').forEach(button=>button.addEventListener('click',async()=>{
+    const userId=Number(button.dataset.resetUser);
+    if(!userId||!confirm('Создать одноразовую ссылку для смены пароля? Текущий пароль останется действовать до установки нового.'))return;
+    button.disabled=true;
+    try{
+      const response=await fetch('api.php?action=admin_password_reset',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:resetCsrf,user_id:userId})});
+      const data=await response.json();
+      if(!response.ok||!data.ok)throw new Error(data.error||'Не удалось создать ссылку.');
+      try{await navigator.clipboard.writeText(data.activation_url);alert('Одноразовая ссылка для смены пароля скопирована. Она действует 48 часов.');}
+      catch(e){prompt('Скопируйте одноразовую ссылку. Она действует 48 часов:',data.activation_url);}
+    }catch(e){alert(e.message);}
+    finally{button.disabled=false;}
+  }));
   if(input){
     input.addEventListener('input',function(){
       const q=this.value.trim().toLocaleLowerCase('ru');
