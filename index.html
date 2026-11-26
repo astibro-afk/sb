@@ -4970,16 +4970,18 @@ var colIdx = [];
   function applyRole(user, objects, employees) {
     window.__SB_USER = user;
     if (!user) return;
+    var assignedNames = Array.isArray(user.object_names) ? user.object_names : (user.object_name ? [user.object_name] : []);
+    var assignedIds = Array.isArray(user.object_ids) ? user.object_ids.map(Number) : (user.object_id ? [Number(user.object_id)] : []);
     var chip = $('#userChip');
     if (chip) {
       chip.style.display = 'flex';
       var cn = chip.querySelector('.user-chip-name');
       var cr = chip.querySelector('.user-chip-role');
       if (cn) cn.textContent = user.full_name || user.username;
-      if (cr) cr.textContent = roleLabel(user.role) + (user.object_name ? ' · ' + user.object_name : '');
+      if (cr) cr.textContent = roleLabel(user.role) + (assignedNames.length ? ' · ' + assignedNames.join(', ') : '');
     }
     var brandSub = document.querySelector('.brand-text span');
-    if (brandSub && user.object_name) brandSub.textContent = user.object_name;
+    if (brandSub && assignedNames.length) brandSub.textContent = assignedNames.join(' · ');
     var btnUsers = $('#btnUsers');
     if (btnUsers) btnUsers.style.display = (user.role === 'admin') ? '' : 'none';
     var btnAddUser = $('#btnAddUser');
@@ -4987,28 +4989,26 @@ var colIdx = [];
 
     var selTo = $('#b0_to');
     if (selTo) {
-      if (user.role !== 'admin' && user.object_name) {
-        var hasTo = false;
-        for (var i = 0; i < selTo.options.length; i++) if (selTo.options[i].value === user.object_name) hasTo = true;
-        if (!hasTo) selTo.appendChild(new Option(user.object_name, user.object_name));
-        selTo.value = user.object_name;
-        selTo.disabled = true;
-        selTo.classList.remove('empty');
-      } else if (user.role === 'admin' && objects && objects.length) {
-        var cur = selTo.value;
-        selTo.innerHTML = '<option value="">Выберите объект</option>';
-        for (var j = 0; j < objects.length; j++) {
-          var act = objects[j].is_active;
-          if (act === 1 || act === '1') selTo.appendChild(new Option(objects[j].name, objects[j].name));
-        }
-        if (cur) selTo.value = cur;
+      var currentObject = selTo.value;
+      selTo.innerHTML = '<option value="">Выберите объект</option>';
+      (objects || []).forEach(function(obj) {
+        if (Number(obj.is_active) === 1) selTo.appendChild(new Option(obj.name, obj.name));
+      });
+      if (currentObject && Array.from(selTo.options).some(function(option) { return option.value === currentObject; })) {
+        selTo.value = currentObject;
+      } else if (assignedNames.length && user.role !== 'admin') {
+        selTo.value = assignedNames[0];
       }
+      if (user.role !== 'admin') {
+        selTo.disabled = assignedNames.length <= 1;
+      } else {
+        selTo.disabled = false;
+      }
+      selTo.classList.toggle('empty', !selTo.value);
     }
 
     var selFio = $('#b0_fio');
     if (selFio) {
-      // Для администратора список сотрудников зависит от выбранного объекта.
-      // Для модератора API уже ограничивает список его объектом.
       function refreshEmployeeOptions() {
         var previous = selFio.value;
         selFio.innerHTML = '<option value="">Выберите сотрудника</option>';
@@ -5023,11 +5023,13 @@ var colIdx = [];
             var obj = objects.find(function(item) { return item.name === selectedObject; });
             if (obj) selectedObjectId = Number(obj.id);
           }
+          var seen = Object.create(null);
           (employees || []).forEach(function(employee) {
             if (!employee.full_name) return;
-            if (user.role === 'admin' && selectedObjectId !== null &&
-                Number(employee.object_id) !== selectedObjectId) return;
-            if (user.role === 'admin' && !selectedObject) return;
+            if (selectedObjectId !== null && Number(employee.object_id) !== selectedObjectId) return;
+            if (selectedObjectId === null) return;
+            if (seen[employee.full_name]) return;
+            seen[employee.full_name] = true;
             selFio.appendChild(new Option(employee.full_name, employee.full_name));
           });
           selFio.disabled = false;
@@ -5038,9 +5040,7 @@ var colIdx = [];
         selFio.classList.toggle('empty', !selFio.value);
       }
       refreshEmployeeOptions();
-      if (selTo && user.role === 'admin') {
-        selTo.onchange = refreshEmployeeOptions;
-      }
+      if (selTo) selTo.onchange = refreshEmployeeOptions;
     }
   }
 
@@ -5059,7 +5059,8 @@ var colIdx = [];
     $$('[data-field]').forEach(function(el) {
       if (viewOnly) { el.disabled = true; return; }
       var isFioLock = el.id === 'b0_fio' && u && u.role === 'user' && u.full_name;
-      var isToLock = el.id === 'b0_to' && u && u.role !== 'admin' && u.object_name;
+      var assignedCount = u && Array.isArray(u.object_ids) ? u.object_ids.length : (u && u.object_id ? 1 : 0);
+      var isToLock = el.id === 'b0_to' && u && u.role !== 'admin' && assignedCount <= 1;
       if (!isFioLock && !isToLock) el.disabled = false;
     });
     var vis = viewOnly ? 'none' : '';
