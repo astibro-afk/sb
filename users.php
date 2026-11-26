@@ -461,7 +461,7 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
         </div>
         <div class="field"><label>Статус</label><select name="is_active"><option value="1" <?= $u['is_active'] ? 'selected' : '' ?>>Активен</option><option value="0" <?= !$u['is_active'] ? 'selected' : '' ?>>Отключён</option></select></div>
         <div class="field password-field"><label>Новый пароль</label><input name="password" type="password" minlength="6" placeholder="Оставьте пустым, чтобы не менять"></div>
-        <div class="field save-field"><label>&nbsp;</label><button class="btn secondary" type="submit">Сохранить изменения</button></div>
+        <div class="field save-field"><label>&nbsp;</label><button class="btn secondary" type="submit">Сохранить</button></div>
       </form>
       <div class="user-actions">
         <span class="status <?= $u['is_active'] ? 'active' : 'off' ?>"><?= $u['is_active'] ? 'Активен' : 'Отключён' ?></span>
