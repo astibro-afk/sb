@@ -644,7 +644,12 @@ select.empty { color: var(--text-muted); }
   .astat-nums{flex:0 0 auto;font-size:12px;color:var(--text-secondary);font-family:'JetBrains Mono',monospace;white-space:nowrap}
   .astat-empty{font-size:13px;color:var(--text-muted);padding:6px 0}
   @media (max-width:640px){.astat-name{min-width:120px;font-size:12px}.astat-val{font-size:22px}}
-.app-footer{display:flex;align-items:center;justify-content:center;gap:12px;padding:14px 20px 22px;color:var(--text-muted);font-size:11px}.btn-test-footer{border:1px solid var(--border);background:transparent;color:var(--text-muted);border-radius:6px;padding:4px 8px;font:500 10px Inter,sans-serif;cursor:pointer;opacity:.72}.btn-test-footer:hover{opacity:1;color:var(--petrol);border-color:var(--border-hover);background:rgba(255,255,255,.65)}
+.app-footer{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px;padding:14px 20px 22px;color:var(--text-muted);font-size:11px}
+.footer-admin-actions{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:7px}
+.app-footer .footer-admin-btn{width:auto;min-height:30px;padding:6px 11px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.72);color:var(--text-muted);font:600 11px Inter,sans-serif;cursor:pointer;white-space:nowrap;transition:background .15s ease,border-color .15s ease,color .15s ease}
+.app-footer .footer-admin-btn:hover{background:#fff;border-color:var(--border-hover);color:var(--petrol)}
+@media(max-width:620px){.app-footer{gap:8px;padding:14px 12px 20px}.footer-admin-actions{width:100%}}
+.btn-test-footer{border:1px solid var(--border);background:transparent;color:var(--text-muted);border-radius:6px;padding:4px 8px;font:500 10px Inter,sans-serif;cursor:pointer;opacity:.72}.btn-test-footer:hover{opacity:1;color:var(--petrol);border-color:var(--border-hover);background:rgba(255,255,255,.65)}
 
 input[type="number"] { text-align: right; font-variant-numeric: tabular-nums; }
 input[type="number"]:focus,
@@ -1528,8 +1533,6 @@ body { background: #F3F8F7; }
         <span class="user-chip-name"></span>
         <span class="user-chip-role"></span>
       </div>
-      <button class="btn btn-ghost" id="btnUsers" type="button" style="display:none">Управление пользователями</button>
-      <button class="btn btn-ghost" id="btnAddUser" type="button" style="display:none">Добавить пользователя</button>
       <button class="btn btn-ghost" id="btnLogout" type="button">Выход</button>
     </div>
   </div>
@@ -1926,7 +1929,14 @@ body { background: #F3F8F7; }
   </div>
 </div>
 
-<footer class="app-footer"><button class="btn-test-footer" id="btnTest" type="button" title="Заполнить форму тестовыми данными">Тест-заполнение</button><span>ver <span class="version">1.3.20</span></span></footer>
+<footer class="app-footer">
+  <div class="footer-admin-actions">
+    <button class="btn btn-ghost footer-admin-btn" id="btnUsers" type="button" style="display:none">Управление пользователями</button>
+    <button class="btn btn-ghost footer-admin-btn" id="btnAddUser" type="button" style="display:none">Добавить пользователя</button>
+  </div>
+  <button class="btn-test-footer" id="btnTest" type="button" title="Заполнить форму тестовыми данными">Тест-заполнение</button>
+  <span>ver <span class="version">1.3.20</span></span>
+</footer>
 
 <div class="save-toast" id="saveToast">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
