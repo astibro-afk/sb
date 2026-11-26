@@ -165,11 +165,14 @@ function chopText() {
 function sumDetailSpec() {
   return [
     { t: '1. Кассовые операции', items: [
-      // M: количество в поле «количество» — проверено; сумма > 0 — одно выявленное нарушение по строке.
-      ['Отмена позиций в чеке', 'M', ['f','b1_pos_qty'], ['f','b1_pos_sum']],
-      ['Анулирование чека в отсутствии администратора', 'M', ['f','b1_chek_qty'], ['f','b1_chek_sum']],
-      ['Фиктивные возвраты', 'M', ['f','b1_ret_qty'], ['f','b1_ret_sum']],
-      ['Продажа товара с заниженным весом', 'M', ['f','b1_weight_qty'], ['f','b1_weight_sum']]
+      ['Проверок: отмена позиций в чеке', 'P', ['f','b1_pos_checks'], null],
+      ['Нарушения: отмена позиций в чеке', 'V', ['f','b1_pos_qty'], ['f','b1_pos_sum']],
+      ['Проверок: аннулирование чека', 'P', ['f','b1_chek_checks'], null],
+      ['Нарушения: аннулирование чека', 'V', ['f','b1_chek_qty'], ['f','b1_chek_sum']],
+      ['Проверок: фиктивные возвраты', 'P', ['f','b1_ret_checks'], null],
+      ['Нарушения: фиктивные возвраты', 'V', ['f','b1_ret_qty'], ['f','b1_ret_sum']],
+      ['Проверок: продажа с заниженным весом', 'P', ['f','b1_weight_checks'], null],
+      ['Нарушения: продажа с заниженным весом', 'V', ['f','b1_weight_qty'], ['f','b1_weight_sum']]
     ]},
     { t: '2. Работа с FaceID, реагирование, пополнение базы данных', items: [
       ['Срабатываний', 'S', ['f','b2_triggers'], null],
@@ -277,8 +280,15 @@ function sumDetailTotals(data) {
         if (it.v) { tv += it.v; any = true; }
         if (it.s !== null) { ts += it.s; any = true; }
       }
-      else if (it.k === 'V') { if (it.q !== null) { tv += it.q; any = true; } if (it.s !== null) { ts += it.s; any = true; } }
-      else if (it.k === 'R') { if (it.s !== null) { ts += it.s; any = true; } }
+      else if (it.k === 'V') {
+        // Количество нарушения учитывается только при положительной сумме ущерба.
+        if (it.s !== null && it.s > 0) {
+          if (it.q !== null) tv += it.q;
+          ts += it.s;
+          any = true;
+        }
+      }
+      else if (it.k === 'R') { if (it.s !== null && it.s > 0) { ts += it.s; any = true; } }
     });
   });
   return any ? { p: tp, v: tv, s: ts } : null;
