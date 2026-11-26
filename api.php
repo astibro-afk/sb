@@ -25,7 +25,12 @@ define('KEY_ARCH',   'spravka_control_v154__archive');
 
 function reply(int $status, array $body): void {
     http_response_code($status);
-    echo json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $json = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+    if ($json === false) {
+        error_log('SB API JSON encode error: ' . json_last_error_msg());
+        $json = '{"ok":false,"error":"Не удалось сформировать ответ сервера."}';
+    }
+    echo $json;
     exit;
 }
 
