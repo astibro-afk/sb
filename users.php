@@ -31,6 +31,13 @@ function users_audit_log(PDO $pdo, array $actor, string $action, string $type, ?
     } catch (Throwable $e) { error_log('SB users audit error: '.$e->getMessage()); }
 }
 
+function users_notification_add(PDO $pdo, int $userId, string $type, string $title, string $message, string $link = ''): void {
+    if ($userId < 1) return;
+    try {
+        $st=$pdo->prepare('INSERT INTO sb_notifications (user_id,type,title,message,link) VALUES (:uid,:type,:title,:message,:link)');
+        $st->execute([':uid'=>$userId,':type'=>$type,':title'=>$title,':message'=>$message,':link'=>$link]);
+    } catch (Throwable $e) { error_log('SB users notification error: '.$e->getMessage()); }
+}
 $err = '';
 $cfg = require __DIR__ . '/config.php';
 try {
@@ -78,6 +85,18 @@ try {
         details TEXT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_audit_created (created_at), INDEX idx_audit_actor (actor_user_id), INDEX idx_audit_action (action)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_notifications (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        user_id INT UNSIGNED NOT NULL,
+        type VARCHAR(48) NOT NULL DEFAULT 'info',
+        title VARCHAR(180) NOT NULL,
+        message TEXT NOT NULL,
+        link VARCHAR(255) NOT NULL DEFAULT '',
+        is_read TINYINT(1) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_notifications_user_read (user_id, is_read, created_at),
+        CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 } catch (Throwable $e) {
     error_log('SB users page database error: ' . $e->getMessage());
@@ -205,6 +224,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if ((int)$checkObjects->fetchColumn() !== count($objectIds)) $err = 'Один или несколько выбранных объектов не найдены.';
                     }
                     if ($err === '' && $id > 0) {
+                        $oldLinksStmt=$pdo->prepare('SELECT object_id FROM sb_user_objects WHERE user_id=:id ORDER BY object_id');
+                        $oldLinksStmt->execute([':id'=>$id]);
+                        $oldObjectIds=array_map('intval',$oldLinksStmt->fetchAll(PDO::FETCH_COLUMN));
+                        $newObjectIds=$objectIds; sort($oldObjectIds); sort($newObjectIds);
                         $pdo->beginTransaction();
                         try {
                             $st = $pdo->prepare('UPDATE sb_users SET username=:u, full_name=:f, role=:r, object_id=:o, is_active=:a WHERE id=:id');
@@ -220,6 +243,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                             $pdo->commit();
                             users_audit_log($pdo, $me, 'user_updated', 'user', $id, $username, ['role' => $role, 'object_ids' => $objectIds, 'active' => $isActive, 'password_changed' => $password !== '']);
+                            if ($oldObjectIds !== $newObjectIds) users_notification_add($pdo,$id,'access','Изменены назначенные объекты','Администратор обновил список торговых объектов, доступных в вашей учётной записи.','index.html');
+                            if (!$isActive) users_notification_add($pdo,$id,'security','Учётная запись отключена','Администратор отключил вашу учётную запись. Для уточнения обратитесь к руководителю.','index.html');
                         } catch (Throwable $e) {
                             if ($pdo->inTransaction()) $pdo->rollBack();
                             throw $e;
@@ -238,6 +263,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                             $pdo->commit();
                             users_audit_log($pdo, $me, 'user_created', 'user', $newId, $username, ['role' => $role, 'object_ids' => $objectIds, 'active' => 1]);
+                            users_notification_add($pdo,$newId,'account','Учётная запись создана','Для вас создана учётная запись на сайте СБ.','index.html');
                         } catch (Throwable $e) {
                             if ($pdo->inTransaction()) $pdo->rollBack();
                             throw $e;
@@ -255,6 +281,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $st = $pdo->prepare('UPDATE sb_users SET is_active = 1 - is_active WHERE id = :id');
                 $st->execute([':id' => $id]);
                 if ($toggleTarget) users_audit_log($pdo, $me, !empty($toggleTarget['is_active']) ? 'user_disabled' : 'user_enabled', 'user', $id, (string)$toggleTarget['username']);
+                if ($toggleTarget) users_notification_add($pdo,$id,!empty($toggleTarget['is_active'])?'security':'account',!empty($toggleTarget['is_active'])?'Учётная запись отключена':'Учётная запись включена',!empty($toggleTarget['is_active'])?'Администратор отключил вашу учётную запись.':'Администратор снова включил вашу учётную запись.','index.html');
             }
         }
     }
