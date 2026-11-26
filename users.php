@@ -151,97 +151,156 @@ foreach ($objects as $o) { $objName[(int)$o['id']] = $o['name']; }
 $roleNames = ['admin' => 'Администратор', 'moderator' => 'Модератор', 'user' => 'Пользователь'];
 ?>
 <!DOCTYPE html>
-<html lang="ru"><head><meta charset="UTF-8"><title>Управление пользователями — отчет СБ</title>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f3f7f8">
+<title>Управление — отчет СБ</title>
 <style>
-body{font-family:Arial,sans-serif;background:#F0F7F7;color:#1A2E35;margin:0;padding:24px}
-.wrap{max-width:1000px;margin:0 auto}
-.card{background:#fff;border-radius:16px;padding:24px;box-shadow:0 12px 48px rgba(13,115,119,.12);margin-bottom:24px}
-h2{color:#0A5C5F;margin:0 0 16px}h3{color:#0A5C5F;margin:24px 0 8px}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{padding:8px;border-bottom:1px solid rgba(13,115,119,.12);text-align:left}
-th{color:#5A7A80;font-size:12px;text-transform:uppercase}
-label{display:block;font-size:13px;color:#5A7A80;margin:10px 0 4px}
-input,select{width:100%;box-sizing:border-box;padding:9px;border:1px solid rgba(13,115,119,.25);border-radius:8px;font-size:14px}
-.btn{display:inline-block;padding:10px 18px;border:none;border-radius:8px;background:#0D7377;color:#fff;font-weight:700;cursor:pointer;font-size:14px;text-decoration:none}
-.btn.ghost{background:#E0F2F1;color:#0D7377}
-.btn.danger{background:#FFE8E0;color:#FF6B47}
-.row{display:flex;gap:12px;flex-wrap:wrap}.row>div{flex:1;min-width:160px}
-.badge{padding:2px 8px;border-radius:8px;font-size:12px;font-weight:700}
-.ok{color:#047857}.err{color:#FF6B47}
-.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-</style></head><body><div class="wrap">
-<div class="top">
-<h2 style="margin:0">Управление пользователями</h2>
-<a class="btn ghost" href="index.html">К отчетам</a>
-</div>
-<?php if ($err) echo '<p class="err">' . h($err) . '</p>'; ?>
+:root{--ink:#18343a;--muted:#71858a;--line:#e5edef;--teal:#08777b;--teal-dark:#075e62;--pale:#eaf5f5;--bg:#f3f7f8;--white:#fff;--red:#b94b35;--red-bg:#fff0ec;--green:#16734f;--green-bg:#eaf7f0;--shadow:0 8px 28px rgba(20,65,72,.07)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 Arial,sans-serif}
+button,input,select{font:inherit}
+.page{max-width:1180px;margin:0 auto;padding:22px 22px 40px}
+.header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+.heading{display:flex;align-items:center;gap:12px;min-width:0}
+.logo{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:var(--teal);color:#fff;font-weight:800;font-size:16px;box-shadow:0 5px 14px #08777b30}
+h1{font-size:21px;line-height:1.2;margin:0;letter-spacing:-.35px}
+.subtitle{font-size:12px;color:var(--muted);margin-top:3px}
+.panel{background:var(--white);border:1px solid #eaf0f1;border-radius:15px;padding:18px;margin-bottom:16px;box-shadow:var(--shadow)}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}
+.panel-title{font-size:16px;font-weight:750;margin:0}
+.counter{font-size:12px;color:var(--muted);background:#f1f5f6;border-radius:20px;padding:4px 9px;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:8px 13px;border:0;border-radius:9px;background:var(--teal);color:#fff;text-decoration:none;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--teal-dark)}
+.btn.secondary{background:var(--pale);color:var(--teal-dark)}
+.btn.secondary:hover{background:#dceeee}
+.btn.danger{background:var(--red-bg);color:var(--red)}
+.btn.danger:hover{background:#ffe2da}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:end}
+.field{min-width:0}
+label{display:block;margin:0 0 5px;color:var(--muted);font-size:11px;font-weight:700}
+input,select{width:100%;height:36px;padding:7px 10px;border:1px solid #dce6e8;border-radius:8px;background:#fff;color:var(--ink);outline:none;min-width:0}
+input:focus,select:focus{border-color:#65aeb0;box-shadow:0 0 0 3px #08777b16}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--teal);vertical-align:middle}
+.checkline{display:flex;align-items:center;gap:7px;height:36px;color:var(--muted);font-size:12px}
+.objects{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:13px}
+.object-item{display:grid;grid-template-columns:minmax(0,1fr) 115px auto;gap:8px;align-items:center;padding:9px;background:#f8fbfb;border:1px solid var(--line);border-radius:10px}
+.object-item input,.object-item select{height:34px}
+.user-tools{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+.user-tools input{max-width:340px}
+.user-list{display:grid;gap:9px}
+.user-card{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff}
+.user-main{display:grid;grid-template-columns:minmax(130px,1fr) minmax(160px,1.4fr) minmax(145px,1fr) minmax(150px,1.1fr) auto;gap:9px;align-items:end}
+.user-main .field label{font-size:10px}
+.user-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px;padding-top:8px;border-top:1px solid #f0f3f4}
+.user-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.status{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.status:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.status.active{color:var(--green);background:var(--green-bg)}
+.status.off{color:var(--red);background:var(--red-bg)}
+.password-form{display:flex;align-items:end;gap:7px;margin-top:9px}
+.password-form .field{width:min(260px,100%)}
+.created{font-size:11px;color:var(--muted)}
+.alert{padding:10px 12px;border-radius:9px;margin:0 0 13px;background:var(--red-bg);color:var(--red);font-size:13px}
+.empty{padding:22px;text-align:center;color:var(--muted);border:1px dashed #d8e3e5;border-radius:10px}
+@media(max-width:850px){.fields{grid-template-columns:repeat(2,minmax(0,1fr))}.user-main{grid-template-columns:repeat(2,minmax(0,1fr))}.user-main .save-cell{grid-column:1/-1}.user-main .save-cell .btn{width:100%}}
+@media(max-width:560px){.page{padding:14px 12px 28px}.header{align-items:flex-start}.logo{width:36px;height:36px;border-radius:11px}h1{font-size:18px}.subtitle{font-size:11px}.panel{padding:13px;border-radius:12px}.fields{grid-template-columns:1fr 1fr;gap:9px}.fields .wide{grid-column:1/-1}.objects{grid-template-columns:1fr}.object-item{grid-template-columns:minmax(0,1fr) 95px auto;gap:6px}.object-item .btn{padding:7px 9px}.user-tools{align-items:stretch}.user-tools input{max-width:none}.user-main{grid-template-columns:1fr 1fr;gap:8px}.user-main .field:nth-child(2){grid-column:1/-1}.user-main .save-cell{grid-column:1/-1}.user-meta{align-items:flex-start;flex-direction:column}.user-actions{width:100%}.user-actions form{flex:1}.user-actions .btn{width:100%}.password-form .field{flex:1;min-width:0}.created{font-size:10px}}
+</style>
+</head>
+<body>
+<div class="page">
+<header class="header">
+  <div class="heading"><div class="logo">СБ</div><div><h1>Управление</h1><div class="subtitle">Пользователи и торговые объекты</div></div></div>
+  <a class="btn secondary" href="index.html">← К отчетам</a>
+</header>
 
-<div class="card">
-<h3>Торговые объекты</h3>
-<form method="post">
-<input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="object_save">
-<div class="row"><div><label>Название объекта</label><input name="name" required></div>
-<div><label>Активен</label><select name="is_active"><option value="1" selected>Да</option><option value="0">Нет</option></select></div>
-<div><label>&nbsp;</label><button class="btn">Добавить объект</button></div></div>
-</form>
-<table><tr><th>ID</th><th>Название</th><th>Статус</th></tr>
-<?php foreach ($objects as $o): ?>
-<tr>
-<form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="object_save"><input type="hidden" name="id" value="<?= (int)$o['id'] ?>">
-<td><?= (int)$o['id'] ?></td>
-<td><input name="name" value="<?= h($o['name']) ?>"></td>
-<td><select name="is_active"><option value="1" <?= $o['is_active'] ? 'selected' : '' ?>>Активен</option><option value="0" <?= !$o['is_active'] ? 'selected' : '' ?>>Отключен</option></select></td>
-<td><button class="btn ghost">Сохранить</button></td>
-</form>
-</tr>
-<?php endforeach; ?>
-</table>
-</div>
+<?php if ($err): ?><div class="alert"><?= h($err) ?></div><?php endif; ?>
 
-<div class="card">
-<h3>Пользователи</h3>
-<form method="post">
-<input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_save">
-<div class="row">
-<div><label>Логин</label><input name="username" required></div>
-<div><label>ФИО</label><input name="full_name" required></div>
-<div><label>Пароль (не менее 6)</label><input name="password" type="password" required></div>
-<div><label>Роль</label><select name="role"><option value="user">Пользователь</option><option value="moderator">Модератор</option><option value="admin">Администратор</option></select></div>
-<div><label>Объект</label><select name="object_id"><option value="">— не назначен —</option>
-<?php foreach ($objects as $o) echo '<option value="' . (int)$o['id'] . '">' . h($o['name']) . '</option>'; ?>
-</select></div>
-<div><label>&nbsp;</label><button class="btn">Создать</button></div>
+<section class="panel">
+  <div class="panel-head"><h2 class="panel-title">Торговые объекты</h2><span class="counter"><?= count($objects) ?> объектов</span></div>
+  <form method="post" class="fields">
+    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="object_save">
+    <div class="field wide"><label>Название нового объекта</label><input name="name" placeholder="Введите название" required></div>
+    <div class="field"><label>Статус</label><select name="is_active"><option value="1" selected>Активен</option><option value="0">Отключен</option></select></div>
+    <div class="field"><label>&nbsp;</label><button class="btn" type="submit">＋ Добавить объект</button></div>
+  </form>
+  <?php if ($objects): ?><div class="objects">
+    <?php foreach ($objects as $o): ?>
+    <form method="post" class="object-item">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="object_save"><input type="hidden" name="id" value="<?= (int)$o['id'] ?>">
+      <input name="name" aria-label="Название объекта" value="<?= h($o['name']) ?>" required>
+      <select name="is_active" aria-label="Статус объекта"><option value="1" <?= $o['is_active'] ? 'selected' : '' ?>>Активен</option><option value="0" <?= !$o['is_active'] ? 'selected' : '' ?>>Отключен</option></select>
+      <button class="btn secondary" type="submit">Сохранить</button>
+    </form>
+    <?php endforeach; ?>
+  </div><?php endif; ?>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2 class="panel-title">Пользователи</h2><span class="counter"><?= count($users) ?> учётных записей</span></div>
+  <form method="post" class="fields">
+    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_save">
+    <div class="field"><label>Логин</label><input name="username" placeholder="Логин" required></div>
+    <div class="field"><label>ФИО</label><input name="full_name" placeholder="Фамилия Имя Отчество" required></div>
+    <div class="field"><label>Пароль</label><input name="password" type="password" minlength="6" placeholder="От 6 символов" required></div>
+    <div class="field"><label>Роль</label><select name="role"><option value="user">Пользователь</option><option value="moderator">Модератор</option><option value="admin">Администратор</option></select></div>
+    <div class="field"><label>Объект</label><select name="object_id"><option value="">— не назначен —</option><?php foreach ($objects as $o): ?><option value="<?= (int)$o['id'] ?>"><?= h($o['name']) ?></option><?php endforeach; ?></select></div>
+    <div class="field"><label>&nbsp;</label><button class="btn" type="submit">＋ Создать пользователя</button></div>
+  </form>
+
+  <div class="user-tools" style="margin-top:16px"><input id="userSearch" type="search" placeholder="Поиск по логину или ФИО…" aria-label="Поиск пользователей"><span class="counter" id="visibleCount"><?= count($users) ?> показано</span></div>
+  <div class="user-list" id="userList">
+  <?php foreach ($users as $u): ?>
+    <article class="user-card" data-search="<?= h(mb_strtolower($u['username'].' '.$u['full_name'].' '.($objName[(int)$u['object_id']] ?? ''), 'UTF-8')) ?>">
+      <form method="post" class="user-main">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_save"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+        <div class="field"><label>Логин</label><input name="username" value="<?= h($u['username']) ?>" required></div>
+        <div class="field"><label>ФИО</label><input name="full_name" value="<?= h($u['full_name']) ?>" required></div>
+        <div class="field"><label>Роль</label><select name="role"><?php foreach ($roleNames as $rk => $rn): ?><option value="<?= h($rk) ?>" <?= $u['role'] === $rk ? 'selected' : '' ?>><?= h($rn) ?></option><?php endforeach; ?></select></div>
+        <div class="field"><label>Торговый объект</label><select name="object_id"><option value="">— не назначен —</option><?php foreach ($objects as $o): ?><option value="<?= (int)$o['id'] ?>" <?= (int)$o['id'] === (int)$u['object_id'] ? 'selected' : '' ?>><?= h($o['name']) ?></option><?php endforeach; ?></select></div>
+        <div class="field"><label>Статус</label><select name="is_active"><option value="1" <?= $u['is_active'] ? 'selected' : '' ?>>Активен</option><option value="0" <?= !$u['is_active'] ? 'selected' : '' ?>>Отключен</option></select></div>
+        <div class="save-cell"><button class="btn secondary" type="submit">Сохранить изменения</button></div>
+      </form>
+      <div class="user-meta">
+        <span class="created">Создан: <?= h((string)$u['created_at']) ?> · ID <?= (int)$u['id'] ?></span>
+        <div class="user-actions">
+          <span class="status <?= $u['is_active'] ? 'active' : 'off' ?>"><?= $u['is_active'] ? 'Активен' : 'Отключен' ?></span>
+          <form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_toggle"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>"><button class="btn danger" type="submit" <?= (int)$u['id'] === (int)$me['id'] ? 'disabled' : '' ?>><?= $u['is_active'] ? 'Отключить' : 'Включить' ?></button></form>
+        </div>
+      </div>
+      <form method="post" class="password-form">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_save"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+        <div class="field"><label>Новый пароль (оставьте пустым, чтобы не менять)</label><input name="password" type="password" minlength="6" placeholder="Не менее 6 символов"></div>
+        <button class="btn secondary" type="submit">Сменить пароль</button>
+      </form>
+    </article>
+  <?php endforeach; ?>
+  </div>
+  <div class="empty" id="noUsers" hidden>Пользователи не найдены.</div>
+</section>
 </div>
-</form>
-<table><tr><th>Логин</th><th>ФИО</th><th>Роль</th><th>Объект</th><th>Статус</th><th>Создан</th><th></th></tr>
-<?php foreach ($users as $u): ?>
-<tr>
-<form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_save"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
-<td><input name="username" value="<?= h($u['username']) ?>" style="width:120px"></td>
-<td><input name="full_name" value="<?= h($u['full_name']) ?>"></td>
-<td><select name="role"><?php foreach ($roleNames as $rk => $rn) echo '<option value="' . $rk . '"' . ($u['role'] === $rk ? ' selected' : '') . '>' . h($rn) . '</option>'; ?></select></td>
-<td><select name="object_id"><option value="">— не назначен —</option>
-<?php foreach ($objects as $o) echo '<option value="' . (int)$o['id'] . '"' . ((int)$o['id'] === (int)$u['object_id'] ? ' selected' : '') . '>' . h($o['name']) . '</option>'; ?>
-</select></td>
-<td><select name="is_active"><option value="1" <?= $u['is_active'] ? 'selected' : '' ?>>Активен</option><option value="0" <?= !$u['is_active'] ? 'selected' : '' ?>>Отключен</option></select></td>
-<td><?= h((string)$u['created_at']) ?></td>
-<td><button class="btn ghost">Сохранить</button></td>
-</form>
-</tr>
-<tr>
-<form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_save"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
-<td colspan="7"><div class="row" style="max-width:420px"><div><label>Новый пароль (пусто — не менять)</label><input name="password" type="password"></div><div><label>&nbsp;</label><button class="btn ghost">Сменить пароль</button></div></div></td>
-</form>
-</tr>
-<tr>
-<form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_toggle"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
-<td colspan="7">
-<span class="badge <?= $u['is_active'] ? 'ok' : 'err' ?>"><?= $u['is_active'] ? 'активен' : 'отключен' ?></span>
-<button class="btn danger" <?= (int)$u['id'] === (int)$me['id'] ? 'disabled' : '' ?>><?= $u['is_active'] ? 'Отключить' : 'Включить' ?></button>
-</td>
-</form>
-</tr>
-<?php endforeach; ?>
-</table>
-</div>
-</div></body></html>
+<script>
+(function(){
+  const input=document.getElementById('userSearch');
+  const cards=Array.from(document.querySelectorAll('.user-card'));
+  const count=document.getElementById('visibleCount');
+  const empty=document.getElementById('noUsers');
+  if(!input)return;
+  input.addEventListener('input',function(){
+    const q=this.value.trim().toLocaleLowerCase('ru');
+    let shown=0;
+    cards.forEach(card=>{
+      const match=(card.dataset.search||'').includes(q);
+      card.hidden=!match;
+      if(match)shown++;
+    });
+    count.textContent=shown+' показано';
+    empty.hidden=shown!==0;
+  });
+})();
+</script>
+</body>
+</html>
