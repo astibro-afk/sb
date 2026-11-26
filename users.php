@@ -50,6 +50,17 @@ try {
         is_active TINYINT(1) NOT NULL DEFAULT 1,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_user_objects (
+        user_id INT UNSIGNED NOT NULL,
+        object_id INT UNSIGNED NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, object_id),
+        INDEX idx_user_objects_object (object_id),
+        CONSTRAINT fk_user_objects_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE,
+        CONSTRAINT fk_user_objects_object FOREIGN KEY (object_id) REFERENCES sb_objects(id) ON DELETE RESTRICT
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("INSERT IGNORE INTO sb_user_objects (user_id, object_id)
+        SELECT id, object_id FROM sb_users WHERE object_id IS NOT NULL");
 } catch (Throwable $e) {
     error_log('SB users page database error: ' . $e->getMessage());
     http_response_code(500);
@@ -80,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
 
         if ($act === 'object_delete') {
-            $check = $pdo->prepare('SELECT COUNT(*) FROM sb_users WHERE object_id = :id');
+            $check = $pdo->prepare('SELECT COUNT(*) FROM sb_user_objects WHERE object_id = :id');
             $check->execute([':id' => $id]);
             if ($id < 1) {
                 $err = 'Не выбран объект для удаления.';
@@ -140,7 +151,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $username = trim((string)($_POST['username'] ?? ''));
             $fullName = trim((string)($_POST['full_name'] ?? ''));
             $role = (string)($_POST['role'] ?? 'user');
-            $objectId = ($_POST['object_id'] ?? '') === '' ? null : (int)$_POST['object_id'];
+            $rawObjectIds = $_POST['object_ids'] ?? [];
+            if (!is_array($rawObjectIds)) $rawObjectIds = [];
+            $objectIds = array_values(array_unique(array_filter(array_map('intval', $rawObjectIds), function($v) { return $v > 0; })));
+            $objectId = $objectIds ? $objectIds[0] : null;
             $isActive = !empty($_POST['is_active']) ? 1 : 0;
             $password = (string)($_POST['password'] ?? '');
             if (!preg_match('/^[A-Za-z0-9._-]{3,64}$/', $username)) {
@@ -158,14 +172,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $dup->execute([':u' => $username, ':i' => $id]);
                 if ((int)$dup->fetchColumn() > 0) {
                     $err = 'Такой логин уже занят.';
-                } elseif ($id > 0) {
-                    $st = $pdo->prepare('UPDATE sb_users SET username=:u, full_name=:f, role=:r, object_id=:o, is_active=:a WHERE id=:id');
-                    $st->execute([':u' => $username, ':f' => $fullName, ':r' => $role, ':o' => $objectId, ':a' => $isActive, ':id' => $id]);
-                    if ($password !== '') {
-                        $st = $pdo->prepare('UPDATE sb_users SET password_hash = :h WHERE id = :id');
-                        $st->execute([':h' => password_hash($password, PASSWORD_DEFAULT), ':id' => $id]);
+                } else {
+                    if ($objectIds) {
+                        $checkObjects = $pdo->prepare('SELECT COUNT(*) FROM sb_objects WHERE id IN (' . implode(',', array_fill(0, count($objectIds), '?')) . ')');
+                        $checkObjects->execute($objectIds);
+                        if ((int)$checkObjects->fetchColumn() !== count($objectIds)) $err = 'Один или несколько выбранных объектов не найдены.';
                     }
-                } elseif (strlen($password) < 6) {
+                    if ($err === '' && $id > 0) {
+                        $pdo->beginTransaction();
+                        try {
+                            $st = $pdo->prepare('UPDATE sb_users SET username=:u, full_name=:f, role=:r, object_id=:o, is_active=:a WHERE id=:id');
+                            $st->execute([':u' => $username, ':f' => $fullName, ':r' => $role, ':o' => $objectId, ':a' => $isActive, ':id' => $id]);
+                            $pdo->prepare('DELETE FROM sb_user_objects WHERE user_id=:id')->execute([':id' => $id]);
+                            if ($objectIds) {
+                                $link = $pdo->prepare('INSERT INTO sb_user_objects (user_id, object_id) VALUES (:u, :o)');
+                                foreach ($objectIds as $oid) $link->execute([':u' => $id, ':o' => $oid]);
+                            }
+                            if ($password !== '') {
+                                $st = $pdo->prepare('UPDATE sb_users SET password_hash = :h WHERE id = :id');
+                                $st->execute([':h' => password_hash($password, PASSWORD_DEFAULT), ':id' => $id]);
+                            }
+                            $pdo->commit();
+                        } catch (Throwable $e) {
+                            if ($pdo->inTransaction()) $pdo->rollBack();
+                            throw $e;
+                        }
+                    } elseif ($err === '' && strlen($password) < 6) {
+                        $err = 'Пароль нового пользователя — не менее 6 символов.';
+                    } elseif ($err === '') {
+                        $pdo->beginTransaction();
+                        try {
+                            $st = $pdo->prepare('INSERT INTO sb_users (username, password_hash, full_name, role, object_id, is_active) VALUES (:u, :h, :f, :r, :o, 1)');
+                            $st->execute([':u' => $username, ':h' => password_hash($password, PASSWORD_DEFAULT), ':f' => $fullName, ':r' => $role, ':o' => $objectId]);
+                            $newId = (int)$pdo->lastInsertId();
+                            if ($objectIds) {
+                                $link = $pdo->prepare('INSERT INTO sb_user_objects (user_id, object_id) VALUES (:u, :o)');
+                                foreach ($objectIds as $oid) $link->execute([':u' => $newId, ':o' => $oid]);
+                            }
+                            $pdo->commit();
+                        } catch (Throwable $e) {
+                            if ($pdo->inTransaction()) $pdo->rollBack();
+                            throw $e;
+                        }
+                    }
+                }
+            }
+        } elseif ($act === 'user_toggle') {
                     $err = 'Пароль нового пользователя — не менее 6 символов.';
                 } else {
                     $st = $pdo->prepare('INSERT INTO sb_users (username, password_hash, full_name, role, object_id, is_active) VALUES (:u, :h, :f, :r, :o, 1)');
@@ -187,6 +239,17 @@ $users = $pdo->query('SELECT id, username, full_name, role, object_id, is_active
 $objects = $pdo->query('SELECT id, name, is_active FROM sb_objects ORDER BY name')->fetchAll();
 $objName = [];
 foreach ($objects as $o) { $objName[(int)$o['id']] = $o['name']; }
+$userObjectIds = [];
+$linkRows = $pdo->query('SELECT user_id, object_id FROM sb_user_objects ORDER BY object_id')->fetchAll();
+foreach ($linkRows as $link) {
+    $uid = (int)$link['user_id'];
+    if (!isset($userObjectIds[$uid])) $userObjectIds[$uid] = [];
+    $userObjectIds[$uid][] = (int)$link['object_id'];
+}
+foreach ($users as $u) {
+    $uid = (int)$u['id'];
+    if (empty($userObjectIds[$uid]) && !empty($u['object_id'])) $userObjectIds[$uid] = [(int)$u['object_id']];
+}
 $roleNames = ['admin' => 'Администратор', 'moderator' => 'Модератор', 'user' => 'Пользователь'];
 ?>
 <!DOCTYPE html>
@@ -204,7 +267,7 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
 .btn{display:inline-flex;align-items:center;justify-content:center;min-height:31px;padding:5px 10px;border:0;border-radius:7px;background:var(--teal);color:#fff;text-decoration:none;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap}.btn:hover{background:var(--teal-dark)}.btn.secondary{background:var(--pale);color:var(--teal-dark)}.btn.danger{background:var(--red-bg);color:var(--red)}.btn:disabled{opacity:.4;cursor:not-allowed}
 .fields{display:grid;grid-template-columns:1.2fr 1.4fr 1fr 1fr auto;gap:8px;align-items:end}.field{min-width:0}label{display:block;margin:0 0 3px;color:var(--muted);font-size:10px;font-weight:700}input,select{width:100%;height:31px;padding:5px 8px;border:1px solid #dce6e8;border-radius:7px;background:#fff;color:var(--ink);outline:none;min-width:0;font-size:12px}input:focus,select:focus{border-color:#65aeb0;box-shadow:0 0 0 2px #08777b16}
 .objects{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:10px}.object-item{display:grid;grid-template-columns:minmax(0,1fr) 100px auto auto;gap:6px;align-items:center;padding:6px;background:#f8fbfb;border:1px solid var(--line);border-radius:8px}.object-item input,.object-item select{height:29px}.object-item form{margin:0}
-.user-tools{display:flex;gap:8px;align-items:center;margin:10px 0}.user-tools input{max-width:300px}.user-list{display:grid;gap:5px;overflow-x:auto}.user-card{min-width:1080px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fff}.user-main{display:grid;grid-template-columns:105px minmax(150px,1.3fr) 120px minmax(140px,1fr) 88px 130px 150px;gap:6px;align-items:end}.user-main label{font-size:9px}.user-main input,.user-main select{height:30px}.user-main .btn{width:100%;height:30px}.mini-form{margin:0}.mini-form input{width:115px}.status{font-size:10px;font-weight:700;padding:4px 7px;border-radius:20px;white-space:nowrap}.active{color:var(--green);background:var(--green-bg)}.off{color:var(--red);background:var(--red-bg)}.created{font-size:10px;color:var(--muted);white-space:nowrap}.alert{padding:9px 11px;border-radius:8px;margin:0 0 10px;background:var(--red-bg);color:var(--red);font-size:12px}.empty{padding:18px;text-align:center;color:var(--muted);border:1px dashed #d8e3e5;border-radius:9px}
+.user-tools{display:flex;gap:8px;align-items:center;margin:10px 0}.user-tools input{max-width:300px}.user-list{display:grid;gap:5px;overflow-x:auto}.user-card{min-width:1080px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fff}.user-main{display:grid;grid-template-columns:105px minmax(150px,1.3fr) 120px minmax(140px,1fr) 88px 130px 150px;gap:6px;align-items:end}.user-main label{font-size:9px}.user-main input,.user-main select{height:30px}.user-main select[multiple]{height:54px;padding:3px 5px}.fields select[multiple]{height:74px;padding:4px 6px}.user-main .btn{width:100%;height:30px}.mini-form{margin:0}.mini-form input{width:115px}.status{font-size:10px;font-weight:700;padding:4px 7px;border-radius:20px;white-space:nowrap}.active{color:var(--green);background:var(--green-bg)}.off{color:var(--red);background:var(--red-bg)}.created{font-size:10px;color:var(--muted);white-space:nowrap}.alert{padding:9px 11px;border-radius:8px;margin:0 0 10px;background:var(--red-bg);color:var(--red);font-size:12px}.empty{padding:18px;text-align:center;color:var(--muted);border:1px dashed #d8e3e5;border-radius:9px}
 @media(max-width:760px){.page{padding:12px}.fields{grid-template-columns:repeat(2,minmax(0,1fr))}.objects{grid-template-columns:1fr}.object-item{grid-template-columns:minmax(0,1fr) 90px auto auto}.panel{padding:11px}}
 </style>
 </head>
@@ -245,20 +308,20 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
     <div class="field"><label>ФИО</label><input name="full_name" placeholder="Фамилия Имя Отчество" required></div>
     <div class="field"><label>Пароль</label><input name="password" type="password" minlength="6" placeholder="От 6 символов" required></div>
     <div class="field"><label>Роль</label><select name="role"><option value="user">Пользователь</option><option value="moderator">Модератор</option><option value="admin">Администратор</option></select></div>
-    <div class="field"><label>Объект</label><select name="object_id"><option value="">— не назначен —</option><?php foreach ($objects as $o): ?><option value="<?= (int)$o['id'] ?>"><?= h($o['name']) ?></option><?php endforeach; ?></select></div>
+    <div class="field"><label>Объекты (можно несколько)</label><select name="object_ids[]" multiple size="3" aria-label="Назначенные объекты"><?php foreach ($objects as $o): ?><option value="<?= (int)$o['id'] ?>"><?= h($o['name']) ?></option><?php endforeach; ?></select></div>
     <div class="field"><label>&nbsp;</label><button class="btn" type="submit">＋ Создать пользователя</button></div>
   </form>
 
   <div class="user-tools" style="margin-top:16px"><input id="userSearch" type="search" placeholder="Поиск по логину или ФИО…" aria-label="Поиск пользователей"><span class="counter" id="visibleCount"><?= count($users) ?> показано</span></div>
   <div class="user-list" id="userList">
   <?php foreach ($users as $u): ?>
-    <article class="user-card" data-search="<?= h(mb_strtolower($u['username'].' '.$u['full_name'].' '.($objName[(int)$u['object_id']] ?? ''), 'UTF-8')) ?>">
+    <article class="user-card" data-search="<?= h(mb_strtolower($u['username'].' '.$u['full_name'].' '.implode(' ', array_map(function($oid) use ($objName) { return $objName[$oid] ?? ''; }, $userObjectIds[(int)$u['id']] ?? [])), 'UTF-8')) ?>">
       <form method="post" class="user-main">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_save"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
         <div class="field"><label>Логин · ID <?= (int)$u['id'] ?></label><input name="username" value="<?= h($u['username']) ?>" required></div>
         <div class="field"><label>ФИО</label><input name="full_name" value="<?= h($u['full_name']) ?>" required></div>
         <div class="field"><label>Роль</label><select name="role"><?php foreach ($roleNames as $rk => $rn): ?><option value="<?= h($rk) ?>" <?= $u['role'] === $rk ? 'selected' : '' ?>><?= h($rn) ?></option><?php endforeach; ?></select></div>
-        <div class="field"><label>Объект</label><select name="object_id"><option value="">— не назначен —</option><?php foreach ($objects as $o): ?><option value="<?= (int)$o['id'] ?>" <?= (int)$o['id'] === (int)$u['object_id'] ? 'selected' : '' ?>><?= h($o['name']) ?></option><?php endforeach; ?></select></div>
+        <div class="field"><label>Объекты</label><select name="object_ids[]" multiple size="2" aria-label="Назначенные объекты"><?php foreach ($objects as $o): ?><option value="<?= (int)$o['id'] ?>" <?= in_array((int)$o['id'], $userObjectIds[(int)$u['id']] ?? [], true) ? 'selected' : '' ?>><?= h($o['name']) ?></option><?php endforeach; ?></select></div>
         <div class="field"><label>Статус</label><select name="is_active"><option value="1" <?= $u['is_active'] ? 'selected' : '' ?>>Активен</option><option value="0" <?= !$u['is_active'] ? 'selected' : '' ?>>Отключен</option></select></div>
         <div class="field"><label>Новый пароль (необязательно)</label><input name="password" type="password" minlength="6" placeholder="Не менять"></div>
         <div class="field"><label>&nbsp;</label><button class="btn secondary" type="submit">Сохранить</button></div>
