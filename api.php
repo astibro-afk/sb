@@ -670,7 +670,11 @@ if ($action === 'moderator_user_create' && $method === 'POST') {
 
     if ($ctx['role'] === 'moderator') {
         $objectRows = array_filter(get_user_object_rows($pdo, (int)$ctx['id']), function($row) { return (int)$row['is_active'] === 1; });
-        $objectIds = array_map(function($row) { return (int)$row['id']; }, array_values($objectRows));
+        $assignedIds = array_map(function($row) { return (int)$row['id']; }, array_values($objectRows));
+        $rawIds = $body['object_ids'] ?? $assignedIds;
+        if (!is_array($rawIds)) reply(400, ['ok' => false, 'error' => 'Некорректный список объектов.']);
+        $objectIds = array_values(array_unique(array_filter(array_map('intval', $rawIds), function($v) { return $v > 0; })));
+        if (array_diff($objectIds, $assignedIds)) reply(403, ['ok' => false, 'error' => 'Нельзя назначить сотруднику объект, который не закреплён за вами.']);
     } else {
         $rawIds = $body['object_ids'] ?? (($body['object_id'] ?? '') === '' ? [] : [$body['object_id']]);
         if (!is_array($rawIds)) reply(400, ['ok' => false, 'error' => 'Некорректный список объектов.']);
@@ -788,7 +792,10 @@ if ($action === 'user_save' && $method === 'POST') {
 if ($action === 'objects_list' && $method === 'GET') {
     $rows = $pdo->query('SELECT id, name, is_active FROM sb_objects ORDER BY name')->fetchAll();
     if ($ctx['role'] !== 'admin') {
-        $rows = array_values(array_filter($rows, function($r) { return (int)$r['is_active'] === 1; }));
+        $allowed = array_fill_keys(user_object_ids($pdo, (int)$ctx['id']), true);
+        $rows = array_values(array_filter($rows, function($r) use ($allowed) {
+            return (int)$r['is_active'] === 1 && isset($allowed[(int)$r['id']]);
+        }));
     }
     reply(200, ['ok' => true, 'objects' => $rows, 'csrf' => csrf_token()]);
 }
