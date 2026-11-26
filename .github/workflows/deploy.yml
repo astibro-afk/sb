@@ -1,21 +1,29 @@
-name: Deploy to Hosting
+name: Deploy to InfinityFree
+
 on:
   push:
-    branches: [main]        # или master — как называется ваша ветка
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Deploy to Hosting
+      - name: Upload site to InfinityFree
         uses: SamKirkland/FTP-Deploy-Action@v4
         with:
-          server: ${{ secrets.FTP_SERVER }}
+          server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./              # что заливаем
-          server-dir: sbmagnit.rf.gd   # папка сайта на хостинге
-          protocol: ftps             # если хостер поддерживает — безопаснее
+          protocol: ftp
+          port: 21
+          server-dir: htdocs/
+          local-dir: ./
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.github/**
+            README.md
