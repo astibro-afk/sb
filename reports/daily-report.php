@@ -1546,7 +1546,7 @@ body { background: #F3F8F7; }
         <span class="sb-user-name user-chip-name"></span>
         <span class="sb-user-meta user-chip-role"></span>
       </div>
-      <a class="sb-header-btn" href="../add-user.php">Добавить пользователя</a>
+      <a class="sb-header-btn" id="btnHeaderAddUser" href="../add-user.php" style="display:none">Добавить пользователя</a>
       <a class="sb-header-btn" id="btnHeaderManage" href="../users.php" style="display:none">Управление</a>
       <a class="sb-header-btn" id="btnNotifications" href="../notifications.php" aria-label="Уведомления">Уведомления <span id="notificationBadge" hidden></span></a>
       <button class="sb-header-btn" id="btnLogout" type="button">Выход</button>
@@ -1562,6 +1562,21 @@ body { background: #F3F8F7; }
     </div>
   </nav>
 </header>
+<script>
+(function(){
+  'use strict';
+  var add=document.getElementById('sbHeaderAddUser')||document.getElementById('btnHeaderAddUser');
+  var manage=document.getElementById('adminManageLink')||document.getElementById('sbHeaderManage')||document.getElementById('btnHeaderManage');
+  fetch('/api.php?action=status',{credentials:'same-origin',cache:'no-store'})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var role=d&&d.authenticated&&d.user?d.user.role:'';
+      if(add)add.hidden=!(role==='admin'||role==='moderator');
+      if(manage)manage.hidden=role!=='admin';
+    })
+    .catch(function(){if(add)add.hidden=true;if(manage)manage.hidden=true;});
+})();
+</script>
 
 
 <div class="progress-wrap">
