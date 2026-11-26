@@ -2079,7 +2079,7 @@ body { background: #F3F8F7; }
       var loaded = await request('load');
       cache = loaded.data || Object.create(null);
       window.__SB_CSRF = loaded.csrf || window.__SB_CSRF;
-      if (typeof applyRole === 'function') applyRole(loaded.user || null, loaded.objects || []);
+      if (typeof applyRole === 'function') applyRole(loaded.user || null, loaded.objects || [], loaded.employees || []);
 
       // Однократный перенос старых данных из прежней версии сайта.
       // Серверные значения всегда имеют приоритет над локальными.
