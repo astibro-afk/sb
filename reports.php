@@ -41,8 +41,9 @@ button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inte
 <div class="summary" id="summary"></div>
 <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Объект</th><th>Сотрудник</th><th>Автор записи</th><th>Обновлён</th><th>Действие</th></tr></thead><tbody id="rows"><tr><td colspan="6" class="empty">Загрузка отчётов…</td></tr></tbody></table></div>
 </section>
-<div class="modal-backdrop" id="downloadModal" aria-hidden="true"><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><div><h2>Скачать отчёт</h2><p class="sub" id="downloadMeta" style="margin:5px 0 0"></p></div><button class="outline" id="closeModal" type="button">Закрыть</button></div><p class="sub" style="margin:16px 0 10px">Выберите формат документа:</p><div class="actions"><button class="primary" id="word" type="button">Word (.docx)</button><button class="secondary" id="excel" type="button">Excel (.xlsx)</button></div><div class="status" id="downloadStatus"></div></div></div>
+<div class="modal-backdrop" id="downloadModal" aria-hidden="true"><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><div><h2>Скачать отчёт</h2><p class="sub" id="downloadMeta" style="margin:5px 0 0"></p></div><button class="outline" id="closeModal" type="button">Закрыть</button></div><p class="sub" style="margin:16px 0 10px">Выберите формат документа:</p><div class="actions"><button class="primary" id="word" type="button">Word (.doc)</button><button class="secondary" id="excel" type="button">Excel (.xlsx)</button></div><div class="status" id="downloadStatus"></div></div></div>
 </main>
+<script src="report-document.js"></script>
 <script>
 (function(){
 'use strict';
@@ -134,82 +135,14 @@ function recordSections(){
  return out;
 }
 function wordReportHtml(){
- const sections=recordSections();
- let out='<div class="doc-wrap">'+docMasthead('ЕЖЕДНЕВНЫЙ ОТЧЕТ');
- out+='<h1 style="margin:0 0 4pt 0;font-family:Calibri,Arial,sans-serif;font-size:17pt;line-height:1.15;font-weight:bold;color:#000000;text-align:left;page-break-after:avoid;">Отчёт по итогам контрольных мероприятий</h1>';
- out+='<p style="margin:0 0 15pt 0;font-family:Calibri,Arial,sans-serif;font-size:10pt;color:#000000;text-align:left;">Ежедневный отчет за '+esc(selected.date||'')+'</p>';
- out+=docMetaTable([['Объект (ТО)',esc(selected.object||'—')],['Составитель',esc(selected.employee||'—')],['Дата',esc(selected.date||'—')],['Автор записи',esc(selected.author||'—')]]);
- sections.forEach(sec=>{out+=docSection(sec.title,sec.lines,sec.note||[]);});
- out+='<div class="doc-sign"><p><strong>Отчёт составил:</strong> '+esc(selected.employee||'_______________________')+'</p><p><strong>Подпись:</strong> ____________________</p></div></div>';
- return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Отчёт по итогам контрольных мероприятий</title><style>'+docCss()+'</style></head><body>'+out+'</body></html>';
+ const source=Object.assign({},selected.data||{},{
+  b0_to:selected.object||(selected.data&&selected.data.b0_to)||'',
+  b0_fio:selected.employee||(selected.data&&selected.data.b0_fio)||'',
+  b0_date:selected.date||(selected.data&&selected.data.b0_date)||''
+ });
+ const documentData=window.SBDocument.build(source,selected.dyn||{});
+ return window.SBDocument.wordHtml(documentData);
 }
-function docCss() {
-    return '' +
-      '@page{size:A4;margin:1.5cm 1.6cm 1.5cm 1.5cm} ' +
-      'html,body{margin:0;padding:0;background:#fff} ' +
-      'body{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff} ' +
-      '.doc-wrap{font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.38;color:#000;width:100%;mso-line-height-rule:at-least} ' +
-      '.doc-wrap p{orphans:3;widows:3;color:#000} ' +
-      '.doc-brand{margin:0 0 17pt 0;padding:0 0 6pt 0;border-bottom:.55pt solid #777;font-size:8.5pt;line-height:1.2;font-weight:bold;letter-spacing:.3pt;color:#000;text-transform:uppercase} ' +
-      '.doc-meta{margin:0 0 17pt 0;padding:0} ' +
-      '.doc-meta p{margin:4pt 0;font-size:9.7pt;line-height:1.3;color:#000} ' +
-      '.doc-meta strong{font-weight:bold;color:#000} ' +
-      '.doc-section{margin:0 0 11pt 0;padding:0;page-break-inside:auto} ' +
-      '.sec-title{margin:18pt 0 8pt 0;padding:0 0 5pt 0;font-size:11pt;line-height:1.22;font-weight:bold;color:#000;background:#fff;border:0;border-bottom:.65pt solid #888;text-indent:0;text-align:left;page-break-after:avoid;mso-pagination:keep-with-next} ' +
-      '.doc-line{margin:0 0 6pt 11pt;padding:0;text-indent:0;font-size:10pt;line-height:1.38;color:#000;page-break-inside:avoid} ' +
-      '.doc-line-label{font-weight:bold;color:#000} ' +
-      '.doc-line-sub{margin:0 0 5pt 22pt;padding:0;font-size:9.7pt;line-height:1.34;color:#000;page-break-inside:avoid} ' +
-      '.doc-note{margin:8pt 0 10pt 11pt;padding:0 0 0 7pt;border-left:.6pt solid #888;font-size:9.5pt;line-height:1.38;color:#000;text-indent:0;text-align:left} ' +
-      '.doc-note strong{font-weight:bold;color:#000} ' +
-      '.doc-totals{margin:19pt 0 0 0;padding:9pt 0 0 0;border-top:.9pt solid #555;page-break-inside:avoid} ' +
-      '.doc-totals-title{margin:0 0 8pt 0;font-size:11pt;line-height:1.2;font-weight:bold;color:#000} ' +
-      '.doc-total-line{margin:4pt 0 4pt 11pt;font-size:10pt;line-height:1.35;color:#000} ' +
-      '.doc-total-line strong{font-weight:bold;color:#000} ' +
-      '.doc-sign{margin:23pt 0 0 0;padding:9pt 0 0 0;border-top:.6pt solid #777;font-size:9.7pt;line-height:1.45;color:#000;page-break-inside:avoid} ' +
-      '.doc-sign p{margin:5pt 0;color:#000} ' +
-      '.doc-ver{margin:15pt 0 0 0;padding-top:4pt;border-top:.4pt solid #999;font-size:7.5pt;color:#000;text-align:right;font-family:Arial,Helvetica,sans-serif}';
-  }
-function docMetaTable(rows) {
-    var h = '<div class="doc-meta">';
-    for (var i = 0; i < rows.length; i++) {
-      h += '<p style="margin:4pt 0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:9.7pt;line-height:1.3;color:#000000;"><strong style="font-weight:bold;color:#000000;">' + rows[i][0] + ':</strong> ' + rows[i][1] + '</p>';
-    }
-    return h + '</div>';
-  }
-  function docMasthead(tag) {
-    return '<p class="doc-brand" style="margin:0 0 15pt 0;padding:0 0 5pt 0;border-bottom:.6pt solid #777777;font-family:Arial,Helvetica,sans-serif;font-size:8.5pt;line-height:1.2;font-weight:bold;letter-spacing:.35pt;color:#000000;text-transform:uppercase;">Группа БФ Волгоград 1&nbsp;&nbsp; / &nbsp;&nbsp;' + (tag || 'СЛУЖЕБНЫЙ ДОКУМЕНТ') + '</p>';
-  }
-  function docLineHtml(line) {
-    var raw = String(line || '');
-    var chunks = raw.split(/\s+(?=Выявлено(?: нарушений| расхождений)?\s*:|В том числе\s*:)/);
-    var h = '';
-    for (var c = 0; c < chunks.length; c++) {
-      var part = chunks[c].trim();
-      if (!part) continue;
-      var colon = part.indexOf(':');
-      if (colon > 0 && colon < 90 && part.slice(colon + 1, colon + 2) === ' ') {
-        var label = part.slice(0, colon + 1);
-        var value = part.slice(colon + 1).trim();
-        h += '<p class="doc-line" style="margin:0 0 6pt 11pt;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.38;color:#000000;page-break-inside:avoid;"><strong style="font-weight:bold;color:#000000;">' + esc(label) + '</strong>' + (value ? ' ' + esc(value) : '') + '</p>';
-      } else {
-        h += '<p class="doc-line-sub" style="margin:0 0 5pt 22pt;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:9.7pt;line-height:1.34;color:#000000;page-break-inside:avoid;">' + esc(part) + '</p>';
-      }
-    }
-    return h;
-  }
-  function docSection(title, lines, notes) {
-    var h = '<div class="doc-section" style="margin:0 0 11pt 0;padding:0;">';
-    h += '<p class="sec-title" style="margin:18pt 0 8pt 0;padding:0 0 5pt 0;border-bottom:.65pt solid #888888;font-family:Arial,Helvetica,sans-serif;font-size:11pt;line-height:1.22;font-weight:bold;color:#000000;text-align:left;text-indent:0;page-break-after:avoid;">' + esc(title) + '</p>';
-    if (lines && lines.length) {
-      for (var i = 0; i < lines.length; i++) {
-        if (lines[i]) h += docLineHtml(lines[i]);
-      }
-    }
-    if (notes && notes.length) for (var j = 0; j < notes.length; j++) {
-      h += '<p class="doc-note" style="margin:8pt 0 10pt 11pt;padding:0 0 0 7pt;border-left:.6pt solid #888888;font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;line-height:1.38;color:#000000;"><strong style="font-weight:bold;color:#000000;">Комментарий:</strong> ' + esc(notes[j]) + '</p>';
-    }
-    return h + '</div>';
-  }
 function exportRows(){
  if(!selected)return [];
  const rows=[['Поле','Значение'],['Дата',selected.date],['Объект',selected.object],['Сотрудник',selected.employee],['Автор записи',selected.author]];
