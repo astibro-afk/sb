@@ -440,7 +440,7 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
 <body>
 <div class="page">
 <header class="topbar">
-  <div class="brand"><div class="logo">СБ</div><div><h1>Управление</h1><div class="subtitle">Пользователи, роли и торговые объекты</div></div></div>
+  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M9 13h6M9 17h6"></path></svg></div><div><h1>Управление</h1><div class="subtitle">Пользователи, роли и торговые объекты</div></div></div>
   <div class="top-actions"><a class="btn secondary" href="index.html">← <span>К отчетам</span></a></div>
 </header>
 
