@@ -203,11 +203,63 @@ function db(array $cfg): PDO {
                 CONSTRAINT fk_activation_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         ensure_archive_columns($pdo);
+        ensure_user_objects($pdo);
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
         reply(500, ['ok' => false, 'error' => 'Не удалось подключиться к MySQL. Проверьте config.php и наличие базы данных.']);
     }
     return $pdo;
+}
+
+function ensure_user_objects(PDO $pdo): void {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_user_objects (
+        user_id INT UNSIGNED NOT NULL,
+        object_id INT UNSIGNED NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, object_id),
+        INDEX idx_user_objects_object (object_id),
+        CONSTRAINT fk_user_objects_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE,
+        CONSTRAINT fk_user_objects_object FOREIGN KEY (object_id) REFERENCES sb_objects(id) ON DELETE RESTRICT
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Идемпотентный перенос прежней одиночной привязки.
+    $pdo->exec("INSERT IGNORE INTO sb_user_objects (user_id, object_id)
+        SELECT id, object_id FROM sb_users WHERE object_id IS NOT NULL");
+}
+
+function get_user_object_rows(PDO $pdo, int $userId): array {
+    $stmt = $pdo->prepare("SELECT o.id, o.name, o.is_active
+        FROM sb_user_objects uo JOIN sb_objects o ON o.id = uo.object_id
+        WHERE uo.user_id = :id ORDER BY o.name");
+    $stmt->execute([':id' => $userId]);
+    $rows = $stmt->fetchAll();
+    if (!$rows) {
+        $legacy = $pdo->prepare("SELECT o.id, o.name, o.is_active FROM sb_users u
+            JOIN sb_objects o ON o.id = u.object_id WHERE u.id = :id AND u.object_id IS NOT NULL");
+        $legacy->execute([':id' => $userId]);
+        $row = $legacy->fetch();
+        if ($row) $rows[] = $row;
+    }
+    return $rows;
+}
+
+function user_object_ids(PDO $pdo, int $userId): array {
+    return array_map(function($row) { return (int)$row['id']; }, get_user_object_rows($pdo, $userId));
+}
+
+function user_ctx(PDO $pdo, array $u): array {
+    $objectRows = get_user_object_rows($pdo, (int)$u['id']);
+    $objectIds = array_map(function($row) { return (int)$row['id']; }, $objectRows);
+    $objectNames = array_map(function($row) { return (string)$row['name']; }, $objectRows);
+    return [
+        'id' => (int)$u['id'],
+        'username' => (string)$u['username'],
+        'full_name' => (string)$u['full_name'],
+        'role' => (string)$u['role'],
+        'object_id' => $objectIds ? $objectIds[0] : ($u['object_id'] !== null ? (int)$u['object_id'] : null),
+        'object_name' => $objectNames ? $objectNames[0] : '',
+        'object_ids' => $objectIds,
+        'object_names' => $objectNames,
+    ];
 }
 
 function current_user(PDO $pdo): ?array {
@@ -263,7 +315,13 @@ function save_archive(PDO $pdo, array $records, array $ctx): void {
         reply(413, ['ok' => false, 'error' => 'Слишком много записей архива в одном запросе.']);
     }
     $isAdmin = $ctx['role'] === 'admin';
-    $ownObject = (string)($ctx['object_name'] ?? '');
+    $allowedObjectNames = [];
+    if (!$isAdmin) {
+        foreach (get_user_object_rows($pdo, (int)$ctx['id']) as $assigned) {
+            if ((int)$assigned['is_active'] === 1) $allowedObjectNames[(string)$assigned['name']] = true;
+        }
+    }
+    $defaultObject = (string)($ctx['object_name'] ?? '');
 
     $pdo->beginTransaction();
     try {
@@ -286,10 +344,10 @@ function save_archive(PDO $pdo, array $records, array $ctx): void {
             $object = (string)($data['b0_to'] ?? '');
             $fio = (string)($record['fio'] ?? '');
 
-            // Разграничение по объекту: не-администратор работает только со своим объектом.
+            // Ограниченный пользователь может работать только с назначенными активными объектами.
             if (!$isAdmin) {
-                if ($object === '') $object = $ownObject;
-                if ($object !== $ownObject) continue; // чужой объект — запись игнорируется
+                if ($object === '') $object = $defaultObject;
+                if ($object === '' || !isset($allowedObjectNames[$object])) continue;
                 $data['b0_to'] = $object;
             }
 
@@ -482,9 +540,19 @@ if ($action === 'load' && $method === 'GET') {
     }
 
     $objects = $pdo->query('SELECT id, name, is_active FROM sb_objects ORDER BY name')->fetchAll();
+    $allowedIds = $ctx['role'] === 'admin' ? [] : user_object_ids($pdo, (int)$ctx['id']);
+    if ($ctx['role'] !== 'admin') {
+        $allowedLookup = array_fill_keys($allowedIds, true);
+        $objects = array_values(array_filter($objects, function($obj) use ($allowedLookup) {
+            return (int)$obj['is_active'] === 1 && isset($allowedLookup[(int)$obj['id']]);
+        }));
+    }
 
-    // Архив фильтруется на сервере по роли.
-    $ownObject = (string)$ctx['object_name'];
+    // Архив фильтруется на сервере по всем назначенным объектам.
+    $allowedNames = [];
+    if ($ctx['role'] !== 'admin') {
+        foreach ($objects as $obj) $allowedNames[(string)$obj['name']] = true;
+    }
     $archiveStmt = $pdo->query('SELECT payload FROM sb_archive_records ORDER BY report_date DESC, updated_at DESC');
     $archive = [];
     foreach ($archiveStmt->fetchAll() as $row) {
@@ -492,16 +560,17 @@ if ($action === 'load' && $method === 'GET') {
         if (!is_array($item)) continue;
         if ($ctx['role'] !== 'admin') {
             $obj = (string)($item['data']['b0_to'] ?? '');
-            if ($obj !== $ownObject) continue;
+            if (!isset($allowedNames[$obj])) continue;
         }
         $archive[] = $item;
     }
     $data[KEY_ARCH] = $archive;
 
-    // Сотрудники для поля «Составитель»: активные пользователи и новые учётные записи,
-    // ожидающие активации по одноразовой ссылке. Отключённые пользователи не показываются.
-    $employeeSql = "SELECT u.id, u.full_name, u.object_id
+    // Сотрудники возвращаются с привязкой к каждому назначенному объекту.
+    $employeeSql = "SELECT DISTINCT u.id, u.full_name, uo.object_id
                     FROM sb_users u
+                    JOIN sb_user_objects uo ON uo.user_id = u.id
+                    JOIN sb_objects o ON o.id = uo.object_id AND o.is_active = 1
                     WHERE u.role = 'user'
                       AND (u.is_active = 1 OR EXISTS (
                           SELECT 1 FROM sb_user_activation_tokens t
@@ -509,10 +578,17 @@ if ($action === 'load' && $method === 'GET') {
                       ))";
     $employeeParams = [];
     if ($ctx['role'] === 'moderator') {
-        $employeeSql .= " AND u.object_id = ?";
-        $employeeParams[] = (int)$ctx['object_id'];
+        if (!$allowedIds) {
+            $employeeSql .= " AND 1 = 0";
+        } else {
+            $employeeSql .= " AND uo.object_id IN (" . implode(',', array_fill(0, count($allowedIds), '?')) . ")";
+            $employeeParams = array_merge($employeeParams, $allowedIds);
+        }
+    } elseif ($ctx['role'] === 'user') {
+        $employeeSql .= " AND u.id = ?";
+        $employeeParams[] = (int)$ctx['id'];
     }
-    $employeeSql .= " ORDER BY u.full_name, u.id";
+    $employeeSql .= " ORDER BY u.full_name, u.id, uo.object_id";
     $employeeStmt = $pdo->prepare($employeeSql);
     $employeeStmt->execute($employeeParams);
     $employees = $employeeStmt->fetchAll();
@@ -530,7 +606,7 @@ if ($action === 'save' && $method === 'POST') {
 
     if ($key === KEY_ARCH) {
         if (!is_array($body['value'])) reply(400, ['ok' => false, 'error' => 'Архив должен быть массивом записей.']);
-        if ($ctx['role'] !== 'admin' && $ctx['object_name'] === '') {
+        if ($ctx['role'] !== 'admin' && !$ctx['object_ids']) {
             reply(403, ['ok' => false, 'error' => 'Администратор ещё не назначил вам торговый объект. Сохранение отчета невозможно.']);
         }
         try {
@@ -587,8 +663,12 @@ if ($action === 'archive_delete' && $method === 'POST') {
     if ($ctx['role'] === 'user') {
         reply(403, ['ok' => false, 'error' => 'Удаление записей архива запрещено для вашей роли.']);
     }
-    if ($ctx['role'] === 'moderator' && $object !== $ctx['object_name']) {
-        reply(403, ['ok' => false, 'error' => 'Можно удалять записи только своего торгового объекта.']);
+    if ($ctx['role'] === 'moderator') {
+        $allowed = [];
+        foreach (get_user_object_rows($pdo, (int)$ctx['id']) as $assigned) {
+            if ((int)$assigned['is_active'] === 1) $allowed[(string)$assigned['name']] = true;
+        }
+        if (!isset($allowed[$object])) reply(403, ['ok' => false, 'error' => 'Можно удалять записи только назначенных вам торговых объектов.']);
     }
 
     $stmt = $pdo->prepare('DELETE FROM sb_archive_records WHERE record_key = :k');
@@ -604,12 +684,19 @@ if ($action === 'moderator_user_create' && $method === 'POST') {
     $fullName = trim((string)($body['full_name'] ?? ''));
     if (!preg_match('/^[A-Za-z0-9._-]{3,64}$/', $username)) reply(400, ['ok' => false, 'error' => 'Логин: 3–64 символа — латиница, цифры, точка, подчёркивание, дефис.']);
     if ($fullName === '' || mb_strlen($fullName) > 255) reply(400, ['ok' => false, 'error' => 'Укажите ФИО (до 255 символов).']);
-    $objectId = $ctx['role'] === 'moderator' ? $ctx['object_id'] : (($body['object_id'] ?? '') === '' ? null : (int)$body['object_id']);
-    if ($ctx['role'] === 'moderator' && !$objectId) reply(403, ['ok' => false, 'error' => 'Ваш профиль не привязан к торговому объекту. Обратитесь к администратору.']);
-    if ($objectId !== null) {
-        $chk = $pdo->prepare('SELECT COUNT(*) FROM sb_objects WHERE id=:id AND is_active=1');
-        $chk->execute([':id' => $objectId]);
-        if (!(int)$chk->fetchColumn()) reply(400, ['ok' => false, 'error' => 'Торговый объект не найден или отключён.']);
+
+    if ($ctx['role'] === 'moderator') {
+        $objectIds = user_object_ids($pdo, (int)$ctx['id']);
+    } else {
+        $rawIds = $body['object_ids'] ?? (($body['object_id'] ?? '') === '' ? [] : [$body['object_id']]);
+        if (!is_array($rawIds)) reply(400, ['ok' => false, 'error' => 'Некорректный список объектов.']);
+        $objectIds = array_values(array_unique(array_filter(array_map('intval', $rawIds), function($v) { return $v > 0; })));
+    }
+    if ($ctx['role'] === 'moderator' && !$objectIds) reply(403, ['ok' => false, 'error' => 'Ваш профиль не привязан к торговым объектам. Обратитесь к администратору.']);
+    if ($objectIds) {
+        $check = $pdo->prepare('SELECT COUNT(*) FROM sb_objects WHERE id IN (' . implode(',', array_fill(0, count($objectIds), '?')) . ') AND is_active=1');
+        $check->execute($objectIds);
+        if ((int)$check->fetchColumn() !== count($objectIds)) reply(400, ['ok' => false, 'error' => 'Один или несколько объектов не найдены либо отключены.']);
     }
     $dup = $pdo->prepare('SELECT COUNT(*) FROM sb_users WHERE username=:u');
     $dup->execute([':u' => $username]);
@@ -618,9 +705,14 @@ if ($action === 'moderator_user_create' && $method === 'POST') {
     $placeholderHash = password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT);
     try {
         $pdo->beginTransaction();
+        $primaryObject = $objectIds ? $objectIds[0] : null;
         $st = $pdo->prepare("INSERT INTO sb_users (username,password_hash,full_name,role,object_id,is_active) VALUES (:u,:p,:f,'user',:o,0)");
-        $st->execute([':u'=>$username, ':p'=>$placeholderHash, ':f'=>$fullName, ':o'=>$objectId]);
+        $st->execute([':u'=>$username, ':p'=>$placeholderHash, ':f'=>$fullName, ':o'=>$primaryObject]);
         $newId = (int)$pdo->lastInsertId();
+        if ($objectIds) {
+            $link = $pdo->prepare('INSERT IGNORE INTO sb_user_objects (user_id, object_id) VALUES (:u, :o)');
+            foreach ($objectIds as $oid) $link->execute([':u'=>$newId, ':o'=>$oid]);
+        }
         $st = $pdo->prepare('INSERT INTO sb_user_activation_tokens (user_id,token_hash,expires_at) VALUES (:u,:h,DATE_ADD(NOW(), INTERVAL 48 HOUR))');
         $st->execute([':u'=>$newId, ':h'=>hash('sha256',$token)]);
         $pdo->commit();
@@ -649,55 +741,64 @@ if ($action === 'user_save' && $method === 'POST') {
     $username = trim((string)($body['username'] ?? ''));
     $fullName = trim((string)($body['full_name'] ?? ''));
     $role = (string)($body['role'] ?? 'user');
-    $objectId = ($body['object_id'] ?? null) === null || $body['object_id'] === '' ? null : (int)$body['object_id'];
+    $rawIds = $body['object_ids'] ?? (($body['object_id'] ?? null) === null || $body['object_id'] === '' ? [] : [$body['object_id']]);
+    if (!is_array($rawIds)) reply(400, ['ok' => false, 'error' => 'Некорректный список объектов.']);
+    $objectIds = array_values(array_unique(array_filter(array_map('intval', $rawIds), function($v) { return $v > 0; })));
+    $objectId = $objectIds ? $objectIds[0] : null;
     $isActive = !empty($body['is_active']) ? 1 : 0;
     $password = (string)($body['password'] ?? '');
 
-    if (!preg_match('/^[A-Za-z0-9._-]{3,64}$/', $username)) {
-        reply(400, ['ok' => false, 'error' => 'Логин: 3–64 символа — латиница, цифры, точка, подчёркивание, дефис.']);
+    if (!preg_match('/^[A-Za-z0-9._-]{3,64}$/', $username)) reply(400, ['ok' => false, 'error' => 'Логин: 3–64 символа — латиница, цифры, точка, подчёркивание, дефис.']);
+    if ($fullName === '' || mb_strlen($fullName) > 255) reply(400, ['ok' => false, 'error' => 'Укажите ФИО (до 255 символов).']);
+    if (!in_array($role, ['admin', 'moderator', 'user'], true)) reply(400, ['ok' => false, 'error' => 'Недопустимая роль.']);
+    if ($objectIds) {
+        $chk = $pdo->prepare('SELECT COUNT(*) FROM sb_objects WHERE id IN (' . implode(',', array_fill(0, count($objectIds), '?')) . ')');
+        $chk->execute($objectIds);
+        if ((int)$chk->fetchColumn() !== count($objectIds)) reply(400, ['ok' => false, 'error' => 'Один или несколько торговых объектов не найдены.']);
     }
-    if ($fullName === '' || mb_strlen($fullName) > 255) {
-        reply(400, ['ok' => false, 'error' => 'Укажите ФИО (до 255 символов).']);
-    }
-    if (!in_array($role, ['admin', 'moderator', 'user'], true)) {
-        reply(400, ['ok' => false, 'error' => 'Недопустимая роль.']);
-    }
-    if ($objectId !== null) {
-        $chk = $pdo->prepare('SELECT COUNT(*) FROM sb_objects WHERE id = :id');
-        $chk->execute([':id' => $objectId]);
-        if (!(int)$chk->fetchColumn()) {
-            reply(400, ['ok' => false, 'error' => 'Указанный торговый объект не найден.']);
-        }
-    }
-
     $dup = $pdo->prepare('SELECT COUNT(*) FROM sb_users WHERE username = :u AND id <> :id');
     $dup->execute([':u' => $username, ':id' => $id]);
-    if ((int)$dup->fetchColumn() > 0) {
-        reply(400, ['ok' => false, 'error' => 'Такой логин уже занят.']);
-    }
+    if ((int)$dup->fetchColumn() > 0) reply(400, ['ok' => false, 'error' => 'Такой логин уже занят.']);
 
     if ($id > 0) {
-        if ($id === (int)$ctx['id'] && (!$isActive || $role !== 'admin')) {
-            reply(400, ['ok' => false, 'error' => 'Нельзя отключить себя или снять с себя роль администратора.']);
-        }
-        if ($password !== '' && strlen($password) < 6) {
-            reply(400, ['ok' => false, 'error' => 'Новый пароль — не менее 6 символов.']);
-        }
-        $stmt = $pdo->prepare('UPDATE sb_users SET username = :u, full_name = :f, role = :r, object_id = :o, is_active = :a WHERE id = :id');
-        $stmt->execute([':u' => $username, ':f' => $fullName, ':r' => $role, ':o' => $objectId, ':a' => $isActive, ':id' => $id]);
-        if ($password !== '') {
-            $stmt = $pdo->prepare('UPDATE sb_users SET password_hash = :h WHERE id = :id');
-            $stmt->execute([':h' => password_hash($password, PASSWORD_DEFAULT), ':id' => $id]);
+        if ($id === (int)$ctx['id'] && (!$isActive || $role !== 'admin')) reply(400, ['ok' => false, 'error' => 'Нельзя отключить себя или снять с себя роль администратора.']);
+        if ($password !== '' && strlen($password) < 6) reply(400, ['ok' => false, 'error' => 'Новый пароль — не менее 6 символов.']);
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare('UPDATE sb_users SET username=:u, full_name=:f, role=:r, object_id=:o, is_active=:a WHERE id=:id');
+            $stmt->execute([':u'=>$username, ':f'=>$fullName, ':r'=>$role, ':o'=>$objectId, ':a'=>$isActive, ':id'=>$id]);
+            $pdo->prepare('DELETE FROM sb_user_objects WHERE user_id=:id')->execute([':id'=>$id]);
+            if ($objectIds) {
+                $link = $pdo->prepare('INSERT INTO sb_user_objects (user_id, object_id) VALUES (:u, :o)');
+                foreach ($objectIds as $oid) $link->execute([':u'=>$id, ':o'=>$oid]);
+            }
+            if ($password !== '') {
+                $stmt = $pdo->prepare('UPDATE sb_users SET password_hash=:h WHERE id=:id');
+                $stmt->execute([':h'=>password_hash($password, PASSWORD_DEFAULT), ':id'=>$id]);
+            }
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
         }
         reply(200, ['ok' => true]);
     }
-
-    if (strlen($password) < 6) {
-        reply(400, ['ok' => false, 'error' => 'Пароль нового пользователя — не менее 6 символов.']);
+    if (strlen($password) < 6) reply(400, ['ok' => false, 'error' => 'Пароль нового пользователя — не менее 6 символов.']);
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare('INSERT INTO sb_users (username,password_hash,full_name,role,object_id,is_active) VALUES (:u,:h,:f,:r,:o,:a)');
+        $stmt->execute([':u'=>$username, ':h'=>password_hash($password, PASSWORD_DEFAULT), ':f'=>$fullName, ':r'=>$role, ':o'=>$objectId, ':a'=>$isActive]);
+        $newId = (int)$pdo->lastInsertId();
+        if ($objectIds) {
+            $link = $pdo->prepare('INSERT INTO sb_user_objects (user_id, object_id) VALUES (:u, :o)');
+            foreach ($objectIds as $oid) $link->execute([':u'=>$newId, ':o'=>$oid]);
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
     }
-    $stmt = $pdo->prepare('INSERT INTO sb_users (username, password_hash, full_name, role, object_id, is_active) VALUES (:u, :h, :f, :r, :o, :a)');
-    $stmt->execute([':u' => $username, ':h' => password_hash($password, PASSWORD_DEFAULT), ':f' => $fullName, ':r' => $role, ':o' => $objectId, ':a' => $isActive]);
-    reply(200, ['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+    reply(200, ['ok' => true, 'id' => $newId]);
 }
 
 if ($action === 'objects_list' && $method === 'GET') {
