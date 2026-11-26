@@ -17,7 +17,7 @@ h2{font-size:21px;margin:0 0 7px}p.sub{color:var(--muted);margin:0 0 20px;font-s
 .filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;align-items:end}.field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:0 0 6px}.field input,.field select{width:100%;height:42px;border:1px solid var(--line);border-radius:10px;padding:0 11px;background:white;color:var(--text);font:inherit;font-size:14px;min-width:0}
 button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inter,Arial;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:7px}.primary{background:var(--grad);color:white}.secondary{background:#E0F2F1;color:var(--pd)}.outline{background:white;color:var(--text);border:1px solid var(--line)}button:disabled{opacity:.45;cursor:not-allowed}.danger{background:#FEE4E2;color:#B42318}
 .actions{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;white-space:nowrap}.actions button{flex:0 0 auto;white-space:nowrap;padding:8px 11px;font-size:12px}.status{font-size:13px;color:var(--muted);margin-top:12px}.status.error{color:#b42318}.summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.pill{background:#E0F2F1;color:var(--pd);padding:7px 11px;border-radius:20px;font-size:12px;font-weight:700}
-.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:720px}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}th{font-size:11px;text-transform:uppercase;letter-spacing:.35px;color:var(--muted);background:#F7FBFB;position:sticky;top:0}tr:hover td{background:#FAFDFD}.empty{text-align:center;padding:32px;color:var(--muted)}
+.report-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}.report-search{flex:1;max-width:420px;height:40px;border:1px solid var(--line);border-radius:10px;padding:0 12px;font:inherit;font-size:13px;background:#fff;color:var(--text)}.report-search:focus{outline:none;border-color:var(--p);box-shadow:0 0 0 3px rgba(13,115,119,.1)}.pagination{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-top:14px}.pagination-info{font-size:12px;color:var(--muted);margin-right:auto}.pagination select{height:34px;border:1px solid var(--line);border-radius:8px;padding:0 8px;background:#fff;color:var(--text)}.pagination button{padding:8px 11px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:720px}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}th{font-size:11px;text-transform:uppercase;letter-spacing:.35px;color:var(--muted);background:#F7FBFB;position:sticky;top:0}tr:hover td{background:#FAFDFD}.empty{text-align:center;padding:32px;color:var(--muted)}
 .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(12,35,40,.48);z-index:20;align-items:center;justify-content:center;padding:18px}.modal-backdrop.open{display:flex}.modal{width:min(460px,100%);background:#fff;border-radius:18px;padding:22px;box-shadow:0 20px 70px rgba(0,0,0,.22)}.modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.modal h2{margin:0;font-size:20px}.modal .actions{display:grid;grid-template-columns:1fr 1fr}.modal .actions button{min-height:48px}@media(max-width:440px){.modal .actions{grid-template-columns:1fr}}
 @media(max-width:760px){header{padding:13px 15px}.head{align-items:flex-start}.brand h1{font-size:15px}main{padding:18px 13px 40px}.panel{padding:16px}.filters{grid-template-columns:repeat(2,minmax(0,1fr))}.detail-grid{grid-template-columns:1fr}}
 @media(max-width:440px){.filters{grid-template-columns:1fr}.head .outline{padding:9px 10px}}
@@ -46,8 +46,8 @@ button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inte
 <div class="status" id="status" role="status"></div>
 </section>
 <section class="panel">
-<div class="summary" id="summary"></div>
-<div class="table-wrap"><table><thead><tr><th>Дата</th><th>Объект</th><th>Сотрудник</th><th>Автор записи</th><th>Обновлён</th><th>Действие</th></tr></thead><tbody id="rows"><tr><td colspan="6" class="empty">Загрузка отчётов…</td></tr></tbody></table></div>
+<div class="report-tools"><input class="report-search" id="reportSearch" type="search" placeholder="Быстрый поиск по дате, объекту или сотруднику…" aria-label="Поиск по отчётам"><span class="pill" id="searchCount">—</span></div><div class="summary" id="summary"></div>
+<div class="table-wrap"><table><thead><tr><th>Дата</th><th>Объект</th><th>Сотрудник</th><th>Автор записи</th><th>Обновлён</th><th>Действие</th></tr></thead><tbody id="rows"><tr><td colspan="6" class="empty">Загрузка отчётов…</td></tr></tbody></table></div><div class="pagination" id="pagination"><span class="pagination-info" id="pageInfo"></span><label for="pageSize" style="font-size:12px;color:var(--muted)">На странице</label><select id="pageSize" aria-label="Количество отчётов на странице"><option value="10">10</option><option value="25" selected>25</option><option value="50">50</option><option value="100">100</option></select><button class="outline" id="prevPage" type="button">Назад</button><button class="outline" id="nextPage" type="button">Вперёд</button></div>
 </section>
 <div class="modal-backdrop" id="downloadModal" aria-hidden="true"><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><div><h2>Скачать отчёт</h2><p class="sub" id="downloadMeta" style="margin:5px 0 0"></p></div><button class="outline" id="closeModal" type="button">Закрыть</button></div><p class="sub" style="margin:16px 0 10px">Выберите формат документа:</p><div class="actions"><button class="primary" id="word" type="button">Word (.doc)</button><button class="secondary" id="excel" type="button">Excel (.xlsx)</button></div><div class="status" id="downloadStatus"></div></div></div>
 <div class="preview-modal" id="previewModal" aria-hidden="true">
@@ -65,7 +65,7 @@ button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inte
 (function(){
 'use strict';
 const $=id=>document.getElementById(id);
-let allRecords=[], selected=null, currentUser=null, csrfToken='';
+let allRecords=[], selected=null, currentUser=null, csrfToken='', currentPage=1, pageSize=25, searchTerm='';
 function loadScript(src,test){return new Promise((resolve,reject)=>{if(test())return resolve();const s=document.createElement('script');s.src=src;s.async=true;s.onload=()=>test()?resolve():reject(new Error('Библиотека не загрузилась.'));s.onerror=()=>reject(new Error('Не удалось загрузить библиотеку. Проверьте интернет.'));document.head.appendChild(s);});}
 const today=new Date(), iso=d=>{const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,10)};
 $('from').value='2026-01-01';$('to').value=iso(today);
@@ -91,10 +91,16 @@ async function load(){
  setStatus('Найдено отчётов: '+allRecords.length+'.');
 }
 function render(){
- const objectId=$('object').value, employeeId=$('employee').value;
- const filtered=allRecords.filter(r=>(!objectId||(r.object_id?String(r.object_id)===objectId:true))&&(!employeeId||String(r.owner_user_id||'')===employeeId));
+ const objectId=$('object').value, employeeId=$('employee').value, q=searchTerm.trim().toLocaleLowerCase('ru');
+ const filtered=allRecords.filter(r=>(!objectId||(r.object_id?String(r.object_id)===objectId:true))&&(!employeeId||String(r.owner_user_id||'')===employeeId)&&(!q||[r.date,r.object,r.employee,r.author].some(v=>String(v||'').toLocaleLowerCase('ru').includes(q))));
+ const pages=Math.max(1,Math.ceil(filtered.length/pageSize));currentPage=Math.min(currentPage,pages);
+ const start=(currentPage-1)*pageSize, visible=filtered.slice(start,start+pageSize);
  $('summary').innerHTML='<span class="pill">Отчётов: '+filtered.length+'</span><span class="pill">Объектов: '+new Set(filtered.map(r=>r.object)).size+'</span><span class="pill">Сотрудников: '+new Set(filtered.map(r=>r.owner_user_id||r.author)).size+'</span>';
- $('rows').innerHTML=filtered.length?filtered.map((r)=>'<tr><td>'+esc(r.date)+'</td><td>'+esc(r.object)+'</td><td>'+esc(r.employee)+'</td><td>'+esc(r.author)+'</td><td>'+esc(r.updated_at||'')+'</td><td><div class="actions"><button class="secondary" data-key="'+esc(r.record_key)+'">Открыть</button><button class="outline" data-download="'+esc(r.record_key)+'">Скачать</button><button class="danger" data-delete="'+esc(r.record_key)+'">Удалить</button></div></td></tr>').join(''):'<tr><td colspan="6" class="empty">За выбранный период отчётов нет.</td></tr>';
+ $('searchCount').textContent=filtered.length+' найдено';
+ $('pageInfo').textContent=filtered.length?(start+1)+'–'+Math.min(start+pageSize,filtered.length)+' из '+filtered.length:'0 из 0';
+ $('prevPage').disabled=currentPage<=1;$('nextPage').disabled=currentPage>=pages;
+ $('pagination').hidden=filtered.length===0;
+ $('rows').innerHTML=visible.length?visible.map((r)=>'<tr><td>'+esc(r.date)+'</td><td>'+esc(r.object)+'</td><td>'+esc(r.employee)+'</td><td>'+esc(r.author)+'</td><td>'+esc(r.updated_at||'')+'</td><td><div class="actions"><button class="secondary" data-key="'+esc(r.record_key)+'">Открыть</button><button class="outline" data-download="'+esc(r.record_key)+'">Скачать</button><button class="danger" data-delete="'+esc(r.record_key)+'">Удалить</button></div></td></tr>').join(''):'<tr><td colspan="6" class="empty">По заданным условиям отчёты не найдены.</td></tr>';
  $('rows').querySelectorAll('button[data-key]').forEach(b=>b.addEventListener('click',()=>openRecord(b.dataset.key)));
  $('rows').querySelectorAll('button[data-download]').forEach(b=>b.addEventListener('click',()=>showDownload(b.dataset.download)));
  $('rows').querySelectorAll('button[data-delete]').forEach(b=>b.addEventListener('click',()=>deleteRecord(b.dataset.delete)));
@@ -227,9 +233,13 @@ $('excel').addEventListener('click',()=>{
 });
 function safe(s){return String(s||'Отчёт').replace(/[^\p{L}\p{N}_-]+/gu,'_').slice(0,70);}
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);}
-$('search').addEventListener('click',()=>load().catch(e=>setStatus(e.message,true)));
-$('object').addEventListener('change',()=>load().catch(e=>setStatus(e.message,true)));
-$('employee').addEventListener('change',render);
+$('search').addEventListener('click',()=>{currentPage=1;load().catch(e=>setStatus(e.message,true));});
+$('object').addEventListener('change',()=>{currentPage=1;load().catch(e=>setStatus(e.message,true));});
+$('employee').addEventListener('change',()=>{currentPage=1;render();});
+$('reportSearch').addEventListener('input',()=>{searchTerm=$('reportSearch').value;currentPage=1;render();});
+$('pageSize').addEventListener('change',()=>{pageSize=Math.max(1,Number($('pageSize').value)||25);currentPage=1;render();});
+$('prevPage').addEventListener('click',()=>{if(currentPage>1){currentPage--;render();}});
+$('nextPage').addEventListener('click',()=>{currentPage++;render();});
 load().catch(e=>{setStatus(e.message,true);$('rows').innerHTML='<tr><td colspan="6" class="empty">Не удалось загрузить архив.</td></tr>';});
 })();
 </script>
