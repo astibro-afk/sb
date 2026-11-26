@@ -8,35 +8,137 @@ session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>$isHttps,'httponl
 session_name('sbapp_session'); session_start();
 if (empty($_SESSION['sb_user_id'])) { header('Location: index.html'); exit; }
 ?>
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f3f7f8"><title>Карточки сотрудников — СБ</title><link rel="stylesheet" href="site-theme.css">
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f3f8f7">
+<title>Сотрудники — СБ</title>
+<link rel="stylesheet" href="site-theme.css">
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f3f7f8;color:#18343a;font:14px/1.5 Inter,Arial,sans-serif}.page{max-width:1250px;margin:auto;padding:24px 16px 48px}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}.top h1{font-size:24px;margin:0}.sub{color:#71858a;margin:4px 0 0}.btn{border:1px solid #dce7e9;background:#fff;color:#18343a;border-radius:9px;padding:9px 13px;text-decoration:none;font-weight:700;cursor:pointer}.tools{display:flex;gap:10px;margin-bottom:14px}.tools input{flex:1;min-width:0;padding:11px 13px;border:1px solid #dce7e9;border-radius:9px;font:inherit}.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:12px}.card{background:#fff;border:1px solid #e4ecee;border-radius:14px;padding:16px;box-shadow:0 5px 20px rgba(24,52,58,.04)}.card h2{font-size:16px;margin:0}.login{font-size:11px;color:#829398;margin-top:2px}.role{display:inline-flex;margin:9px 0 12px;padding:4px 8px;border-radius:20px;background:#eaf5f5;color:#08777b;font-size:11px;font-weight:700}.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}.stat{background:#f6f9fa;border-radius:9px;padding:9px}.stat strong{display:block;font-size:18px}.stat span{font-size:11px;color:#71858a}.objects{font-size:12px;color:#536a70;margin:11px 0}.card button{margin-top:10px;width:100%}.details{margin-top:12px;border-top:1px solid #e4ecee;padding-top:10px}.history{display:grid;gap:8px;margin-top:8px}.event{font-size:12px;padding:8px 9px;background:#f6f9fa;border-radius:8px}.event small{display:block;color:#829398;margin-top:2px}.empty{background:#fff;border:1px dashed #cbd9dc;border-radius:13px;padding:34px;text-align:center;color:#71858a}.status{font-size:11px;font-weight:700}.off{color:#b94b35}.active{color:#16734f}@media(max-width:620px){.top{align-items:flex-start;flex-direction:column}.tools{flex-direction:column}}
-</style></head><body><main class="page"><header class="top"><div><h1 id="heading">Карточки сотрудников</h1><p class="sub" id="subtitle">Сводная информация, отчёты и история активности</p></div><a class="btn" href="index.html">К отчётам</a></header><div class="tools"><input id="search" type="search" placeholder="Поиск по ФИО, логину или объекту…"></div><section class="cards" id="cards"><div class="empty">Загружаем данные…</div></section></main>
+:root{--brand:var(--sb-brand,#0d7377);--ink:var(--sb-ink,#1a3438);--muted:var(--sb-muted,#5a777b);--line:var(--sb-line,#dce9e7);--paper:#fff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--sb-page,#f3f8f7)!important;color:var(--ink);font:14px/1.45 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+.page{width:min(1120px,100%);margin:0 auto;padding:24px 22px 48px}
+.header{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:20px}
+.heading{display:flex;align-items:center;gap:13px;min-width:0}
+.heading-icon{width:44px;height:44px;flex:0 0 44px;display:grid;place-items:center;border-radius:14px;background:#e4f2ef;color:var(--brand)}
+h1{margin:0;font-size:23px;line-height:1.2;letter-spacing:-.45px;font-weight:750}
+.subtitle{margin:5px 0 0;color:var(--muted);font-size:13px}
+.back{display:inline-flex;align-items:center;gap:8px;padding:9px 13px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font-weight:650;text-decoration:none;white-space:nowrap;transition:.16s ease}
+.back:hover{border-color:#a8c9c5;background:#fafffe}
+.toolbar{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.search-wrap{position:relative;flex:1;min-width:0}
+.search-wrap svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:#789195;pointer-events:none}
+.search{width:100%;height:42px;padding:0 14px 0 40px;border:1px solid var(--line);border-radius:11px;background:#fff;color:var(--ink);font:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+.search:focus{border-color:#81b9b4;box-shadow:0 0 0 3px rgba(13,115,119,.1)}
+.count{flex:0 0 auto;padding:8px 11px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--muted);font-size:12px;font-weight:650;white-space:nowrap}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:12px}
+.employee{min-width:0;padding:15px 16px 13px;border:1px solid var(--line);border-radius:15px;background:var(--paper);box-shadow:0 3px 12px rgba(22,58,59,.035);transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
+.employee:hover{transform:translateY(-1px);border-color:#c4dcda;box-shadow:0 7px 20px rgba(22,58,59,.07)}
+.person{display:flex;align-items:center;gap:11px;min-width:0}
+.avatar{width:42px;height:42px;flex:0 0 42px;display:grid;place-items:center;border-radius:13px;background:#e9f3f1;color:var(--brand);font-size:14px;font-weight:800;letter-spacing:.3px}
+.person-main{min-width:0;flex:1}
+.name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:750;letter-spacing:-.15px}
+.login{margin-top:2px;color:var(--muted);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.state{width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:#2d9a70;box-shadow:0 0 0 3px #e9f6ef}
+.state.inactive{background:#c56a56;box-shadow:0 0 0 3px #faeeeb}
+.meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:12px 0 11px}
+.role{padding:4px 8px;border-radius:7px;background:#e8f4f2;color:#176c6c;font-size:10.5px;font-weight:750}
+.status{font-size:10.5px;font-weight:650;color:#27815d}
+.status.off{color:#b65a47}
+.metrics{display:grid;grid-template-columns:.75fr 1.15fr 1.15fr;gap:7px}
+.metric{min-width:0;padding:9px 9px 8px;border-radius:9px;background:#f5f9f8}
+.metric strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:750;color:var(--ink);font-variant-numeric:tabular-nums}
+.metric span{display:block;margin-top:2px;color:var(--muted);font-size:10px;line-height:1.25}
+.objects{display:flex;gap:6px;align-items:flex-start;margin-top:11px;color:var(--muted);font-size:11.5px}
+.objects svg{flex:0 0 14px;margin-top:1px;color:#7d9999}
+.objects span{min-width:0;overflow-wrap:anywhere}
+.card-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid #edf2f1}
+.joined{color:#8a9b9d;font-size:10.5px}
+.history-btn{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--brand);padding:5px 2px;font:650 11.5px inherit;cursor:pointer}
+.history-btn:hover{color:#07585b}
+.history-btn:disabled{opacity:.55;cursor:wait}
+.details{margin-top:10px;padding-top:10px;border-top:1px solid #edf2f1}
+.details-title{font-size:11.5px;font-weight:750;margin-bottom:7px}
+.history{display:grid;gap:6px}
+.event{padding:8px 9px;border-radius:8px;background:#f5f9f8;font-size:11px;color:#38585a;overflow-wrap:anywhere}
+.event small{display:block;margin-top:3px;color:#829698;font-size:10px}
+.empty{grid-column:1/-1;padding:34px 18px;border:1px dashed #cbdcda;border-radius:14px;background:rgba(255,255,255,.72);text-align:center;color:var(--muted)}
+.empty strong{display:block;margin-bottom:4px;color:var(--ink);font-size:14px}
+[hidden]{display:none!important}
+@media(max-width:620px){.page{padding:17px 13px 32px}.header{align-items:flex-start;margin-bottom:16px}.heading{gap:10px}.heading-icon{width:39px;height:39px;flex-basis:39px;border-radius:12px}h1{font-size:20px}.subtitle{font-size:12px}.back{padding:8px 10px;font-size:12px}.cards{grid-template-columns:1fr;gap:10px}.employee{padding:14px}.toolbar{gap:8px}.count{padding:8px 9px;font-size:11px}}
+@media(max-width:390px){.header{flex-wrap:wrap}.back{margin-left:49px;margin-top:-7px}.metrics{grid-template-columns:.7fr 1.15fr 1.15fr}.metric{padding:8px 7px}.metric strong{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.employee,.back,.search{transition:none}}
+</style>
+</head>
+<body>
+<main class="page">
+<header class="header">
+  <div class="heading">
+    <div class="heading-icon" aria-hidden="true">
+      <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    </div>
+    <div><h1 id="heading">Сотрудники</h1><p class="subtitle" id="subtitle">Команда, отчёты и история активности</p></div>
+  </div>
+  <a class="back" href="index.html"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h12"/></svg>К отчётам</a>
+</header>
+<div class="toolbar" id="toolbar">
+  <label class="search-wrap">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+    <input class="search" id="search" type="search" placeholder="Найти сотрудника или объект…" autocomplete="off">
+  </label>
+  <div class="count" id="count" aria-live="polite">Загрузка…</div>
+</div>
+<section class="cards" id="cards" aria-live="polite"><div class="empty">Загружаем данные сотрудников…</div></section>
+</main>
 <script>
 (function(){
 'use strict';
-const cards=document.getElementById('cards'),search=document.getElementById('search');
+const cards=document.getElementById('cards'),search=document.getElementById('search'),count=document.getElementById('count');
 const labels={admin:'Администратор',moderator:'Модератор',user:'Специалист СБ'};
 function node(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n;}
-function date(v){if(!v)return 'Нет данных';const d=new Date(String(v).replace(' ','T'));return isNaN(d)?v:d.toLocaleString('ru-RU');}
+function date(v,withTime){if(!v)return '—';const d=new Date(String(v).replace(' ','T'));if(isNaN(d))return String(v);return d.toLocaleString('ru-RU',withTime?{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}:{day:'2-digit',month:'2-digit',year:'2-digit'});}
+function initials(name){const parts=String(name||'СБ').trim().split(/\s+/).filter(Boolean);return (parts.length>1?parts[0][0]+parts[1][0]:parts[0].slice(0,2)).toLocaleUpperCase('ru');}
 let all=[];
 function render(){
- const q=search.value.trim().toLocaleLowerCase('ru');cards.replaceChildren();
- const rows=all.filter(u=>(u.full_name+' '+u.username+' '+(u.objects||[]).join(' ')).toLocaleLowerCase('ru').includes(q));
- if(!rows.length){cards.append(node('div','empty','Сотрудники не найдены.'));return;}
+ const q=search.value.trim().toLocaleLowerCase('ru');
+ const rows=all.filter(u=>(String(u.full_name||'')+' '+String(u.username||'')+' '+(u.objects||[]).join(' ')).toLocaleLowerCase('ru').includes(q));
+ cards.replaceChildren();count.textContent=q?rows.length+' из '+all.length:all.length+' сотрудников';
+ if(!rows.length){const e=node('div','empty');e.append(node('strong','',q?'Ничего не найдено':'Список пока пуст'),node('span','',q?'Попробуйте изменить поисковый запрос.':'Нет сотрудников для отображения.'));cards.append(e);return;}
  rows.forEach(u=>{
-  const card=node('article','card');card.dataset.id=u.id;
-  const head=node('div');head.append(node('h2','',u.full_name||u.username),node('div','login',u.username+' · '+(u.is_active?'Активна':'Отключена')),node('span','role',labels[u.role]||u.role));card.append(head);
-  const stats=node('div','stats');
-  [[u.reports_count,'Отчётов'],[date(u.last_login),'Последний вход'],[date(u.last_report),'Последний отчёт'],[date(u.created_at),'В системе с']].forEach(([v,l])=>{const s=node('div','stat');s.append(node('strong','',String(v)),node('span','',l));stats.append(s);});
-  card.append(stats,node('div','objects','Объекты: '+((u.objects||[]).join(', ')||'не назначены')));
-  const btn=node('button','btn','История активности');btn.type='button';card.append(btn);
+  const card=node('article','employee');
+  const person=node('div','person'),avatar=node('div','avatar',initials(u.full_name||u.username));avatar.setAttribute('aria-hidden','true');
+  const main=node('div','person-main');main.append(node('div','name',u.full_name||u.username||'Без имени'),node('div','login','@'+(u.username||'—')));
+  const state=node('span','state'+(u.is_active?'':' inactive'));state.title=u.is_active?'Активный аккаунт':'Аккаунт отключён';state.setAttribute('aria-label',state.title);
+  person.append(avatar,main,state);card.append(person);
+  const meta=node('div','meta');meta.append(node('span','role',labels[u.role]||u.role||'Сотрудник'),node('span','status '+(u.is_active?'':'off'),u.is_active?'Активен':'Отключён'));card.append(meta);
+  const metrics=node('div','metrics');
+  [[u.reports_count??0,'Отчётов'],[date(u.last_login,true),'Последний вход'],[date(u.last_report,true),'Последний отчёт']].forEach(([v,l])=>{const m=node('div','metric');m.append(node('strong','',String(v)),node('span','',l));metrics.append(m);});
+  card.append(metrics);
+  const objects=node('div','objects');objects.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01"/></svg>';objects.append(node('span','',(u.objects||[]).length?(u.objects||[]).join(' · '):'Объекты не назначены'));card.append(objects);
+  const footer=node('div','card-footer'),joined=node('span','joined','В системе с '+date(u.created_at,false)),btn=node('button','history-btn');btn.type='button';btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg><span>История</span>';footer.append(joined,btn);card.append(footer);
   const detail=node('div','details');detail.hidden=true;card.append(detail);
-  btn.addEventListener('click',async()=>{if(!detail.hidden){detail.hidden=true;btn.textContent='История активности';return;}btn.disabled=true;try{const r=await fetch('api.php?action=employee_history&user_id='+encodeURIComponent(u.id),{credentials:'same-origin',cache:'no-store'}),d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось загрузить историю.');detail.replaceChildren();detail.append(node('strong','','Последние события'));const list=node('div','history');(d.history||[]).forEach(e=>{const item=node('div','event');item.append(node('div','',e.action+' · '+(e.target_label||'')),node('small','',date(e.created_at)));list.append(item);});if(!(d.history||[]).length)list.append(node('div','event','История пока пуста.'));detail.append(list);detail.hidden=false;btn.textContent='Скрыть историю';}catch(e){detail.replaceChildren(node('div','event',e.message));detail.hidden=false;}finally{btn.disabled=false;}});
+  btn.addEventListener('click',async()=>{
+   if(!detail.hidden){detail.hidden=true;btn.querySelector('span').textContent='История';return;}
+   btn.disabled=true;
+   try{
+    const r=await fetch('api.php?action=employee_history&user_id='+encodeURIComponent(u.id),{credentials:'same-origin',cache:'no-store'}),d=await r.json();
+    if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось загрузить историю.');
+    detail.replaceChildren(node('div','details-title','Последние события'));const list=node('div','history');
+    (d.history||[]).forEach(e=>{const item=node('div','event');item.append(node('div','',String(e.action||'Событие')+(e.target_label?' · '+e.target_label:'')),node('small','',date(e.created_at,true)));list.append(item);});
+    if(!(d.history||[]).length)list.append(node('div','event','История пока пуста.'));
+    detail.append(list);detail.hidden=false;btn.querySelector('span').textContent='Скрыть';
+   }catch(e){detail.replaceChildren(node('div','event',e.message));detail.hidden=false;}
+   finally{btn.disabled=false;}
+  });
   cards.append(card);
  });
 }
 search.addEventListener('input',render);
-fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось загрузить сотрудников.');all=d.employees||[];if(d.user&&d.user.role==='user'){document.getElementById('heading').textContent='Моя карточка';document.getElementById('subtitle').textContent='Ваши отчёты и история активности';search.hidden=true;}render();}).catch(e=>cards.replaceChildren(node('div','empty',e.message)));
+fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось загрузить сотрудников.');all=d.employees||[];if(d.user&&d.user.role==='user'){document.getElementById('heading').textContent='Моя карточка';document.getElementById('subtitle').textContent='Ваши отчёты и история активности';document.getElementById('toolbar').hidden=true;}render();}).catch(e=>{count.textContent='Ошибка';cards.replaceChildren(node('div','empty',e.message));});
 })();
-</script></body></html>
+</script>
+</body>
+</html>
