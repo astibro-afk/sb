@@ -166,7 +166,9 @@
   display:none!important;
 }
 
-/* Ролевые кнопки шапки: атрибут hidden не должен переопределяться стилями кнопок */
+/* Ролевые кнопки шапки: hidden должен иметь приоритет над стилями кнопок */
 .sb-site-actions [hidden],
-.header-right [hidden],
-.app-header .header-actions [hidden]{display:none!important;}
+.topbar .header-right>.btn[hidden],
+.app-header .header-actions>.btn[hidden],
+.sb-header-btn[hidden],
+.sb-site-manage[hidden]{display:none!important;}
