@@ -830,6 +830,63 @@ if ($action === 'delete' && $method === 'POST') {
     reply(200, ['ok' => true]);
 }
 
+if ($action === 'reports_delete' && $method === 'POST') {
+    $body = input_json();
+    check_csrf($body);
+    $recordKey = trim((string)($body['record_key'] ?? ''));
+    if (!preg_match('/^[rd]:[a-f0-9]{64}$/i', $recordKey)) {
+        reply(400, ['ok' => false, 'error' => 'Некорректный идентификатор отчёта.']);
+    }
+
+    try {
+        $pdo->beginTransaction();
+        $find = $pdo->prepare('SELECT record_key, object_id, object_name, owner_user_id
+            FROM sb_archive_records WHERE record_key = :k LIMIT 1 FOR UPDATE');
+        $find->execute([':k' => $recordKey]);
+        $record = $find->fetch();
+        if (!$record) {
+            $pdo->rollBack();
+            reply(404, ['ok' => false, 'error' => 'Отчёт уже удалён или не найден.']);
+        }
+
+        if ($ctx['role'] === 'user') {
+            if ($record['owner_user_id'] === null || (int)$record['owner_user_id'] !== (int)$ctx['id']) {
+                $pdo->rollBack();
+                reply(403, ['ok' => false, 'error' => 'Можно удалять только собственные отчёты.']);
+            }
+        } elseif ($ctx['role'] === 'moderator') {
+            $assignedIds = [];
+            $assignedNames = [];
+            foreach (get_user_object_rows($pdo, (int)$ctx['id']) as $assigned) {
+                if ((int)$assigned['is_active'] !== 1) continue;
+                $assignedIds[(int)$assigned['id']] = true;
+                $assignedNames[(string)$assigned['name']] = true;
+            }
+            $objectAllowed = $record['object_id'] !== null
+                ? isset($assignedIds[(int)$record['object_id']])
+                : isset($assignedNames[(string)$record['object_name']]);
+            if (!$objectAllowed) {
+                $pdo->rollBack();
+                reply(403, ['ok' => false, 'error' => 'Можно удалять отчёты только по закреплённым за вами объектам.']);
+            }
+        } elseif ($ctx['role'] !== 'admin') {
+            $pdo->rollBack();
+            reply(403, ['ok' => false, 'error' => 'Недостаточно прав для удаления отчётов.']);
+        }
+
+        $delComment = $pdo->prepare('DELETE FROM sb_report_comments WHERE record_key = :k');
+        $delComment->execute([':k' => $recordKey]);
+        $del = $pdo->prepare('DELETE FROM sb_archive_records WHERE record_key = :k');
+        $del->execute([':k' => $recordKey]);
+        $pdo->commit();
+        reply(200, ['ok' => true]);
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('SB report delete error: ' . $e->getMessage());
+        reply(500, ['ok' => false, 'error' => 'Не удалось удалить отчёт.']);
+    }
+}
+
 if ($action === 'archive_delete' && $method === 'POST') {
     $body = input_json();
     check_csrf($body);
