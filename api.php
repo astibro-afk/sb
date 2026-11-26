@@ -549,29 +549,43 @@ if ($action === 'load' && $method === 'GET') {
     }
     $data[KEY_ARCH] = $archive;
 
-    // Сотрудники возвращаются с привязкой к каждому назначенному объекту.
-    $employeeSql = "SELECT DISTINCT u.id, u.full_name, uo.object_id
-                    FROM sb_users u
-                    JOIN sb_user_objects uo ON uo.user_id = u.id
-                    JOIN sb_objects o ON o.id = uo.object_id AND o.is_active = 1
-                    WHERE u.role = 'user'
-                      AND (u.is_active = 1 OR EXISTS (
-                          SELECT 1 FROM sb_user_activation_tokens t
-                          WHERE t.user_id = u.id AND t.expires_at > NOW()
-                      ))";
+    // Сотрудниками в отчётах считаются пользователи и модераторы,
+    // закреплённые за объектом. Администратор доступен для выбора на любом
+    // активном объекте, поскольку его права не ограничены назначениями.
+    $employeeSql = "SELECT staff.id, staff.full_name, staff.object_id
+                    FROM (
+                        SELECT DISTINCT u.id, u.full_name, uo.object_id
+                        FROM sb_users u
+                        JOIN sb_user_objects uo ON uo.user_id = u.id
+                        JOIN sb_objects o ON o.id = uo.object_id AND o.is_active = 1
+                        WHERE u.role IN ('user', 'moderator')
+                          AND (u.is_active = 1 OR EXISTS (
+                              SELECT 1 FROM sb_user_activation_tokens t
+                              WHERE t.user_id = u.id AND t.expires_at > NOW()
+                          ))
+                        UNION
+                        SELECT u.id, u.full_name, o.id AS object_id
+                        FROM sb_users u
+                        CROSS JOIN sb_objects o
+                        WHERE u.role = 'admin' AND o.is_active = 1
+                          AND (u.is_active = 1 OR EXISTS (
+                              SELECT 1 FROM sb_user_activation_tokens t
+                              WHERE t.user_id = u.id AND t.expires_at > NOW()
+                          ))
+                    ) AS staff";
     $employeeParams = [];
     if ($ctx['role'] === 'moderator') {
         if (!$allowedIds) {
-            $employeeSql .= " AND 1 = 0";
+            $employeeSql .= " WHERE 1 = 0";
         } else {
-            $employeeSql .= " AND uo.object_id IN (" . implode(',', array_fill(0, count($allowedIds), '?')) . ")";
+            $employeeSql .= " WHERE staff.object_id IN (" . implode(',', array_fill(0, count($allowedIds), '?')) . ")";
             $employeeParams = array_merge($employeeParams, $allowedIds);
         }
     } elseif ($ctx['role'] === 'user') {
-        $employeeSql .= " AND u.id = ?";
+        $employeeSql .= " WHERE staff.id = ?";
         $employeeParams[] = (int)$ctx['id'];
     }
-    $employeeSql .= " ORDER BY u.full_name, u.id, uo.object_id";
+    $employeeSql .= " ORDER BY staff.full_name, staff.id, staff.object_id";
     $employeeStmt = $pdo->prepare($employeeSql);
     $employeeStmt->execute($employeeParams);
     $employees = $employeeStmt->fetchAll();
