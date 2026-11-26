@@ -1109,6 +1109,7 @@ if ($action === 'moderator_user_create' && $method === 'POST') {
         $st->execute([':u'=>$newId, ':h'=>hash('sha256',$token)]);
         $pdo->commit();
         audit_log($pdo, $ctx, 'user_created', 'user', $newId, $username, ['role' => 'user', 'object_ids' => $objectIds]);
+        notification_add($pdo, $newId, 'account', 'Учётная запись создана', 'Для вас создана учётная запись на сайте СБ. Используйте одноразовую ссылку для установки пароля.', 'activate.php');
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         error_log('SB user create error: '.$e->getMessage());
