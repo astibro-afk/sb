@@ -41,10 +41,10 @@ main{max-width:1440px;margin:26px auto;padding:0 28px 40px}.intro{display:flex;j
 /* Компактная управленческая панель */
 main{max-width:1320px;margin:22px auto;padding:0 24px 38px}
 .intro{align-items:center;margin-bottom:14px}.intro h2{font-size:22px}.intro p{font-size:13px}
-.filters{padding:13px 15px;grid-template-columns:145px 100px 120px minmax(190px,1fr) minmax(150px,1fr) auto;gap:9px;margin-bottom:14px;box-shadow:none;border-radius:11px}
-.field label{font-size:11px;margin-bottom:4px}.field input,.field select{height:36px;font-size:13px}.field select[multiple]{height:36px;min-height:36px;overflow:hidden;padding:5px 8px}
-.field select[multiple] option{display:none}.field select[multiple]:focus{height:110px;position:relative;z-index:3;background:#fff}
-.filters .field:nth-last-of-type(2),.filters .field:nth-last-of-type(1){display:none}
+.filters{padding:13px 15px;grid-template-columns:repeat(4,minmax(130px,1fr));gap:9px;margin-bottom:14px;box-shadow:none;border-radius:11px}
+.field label{font-size:11px;margin-bottom:4px}.field input,.field select{height:36px;font-size:13px}.field select[multiple]{height:66px;min-height:66px;overflow:auto;padding:5px 8px}
+
+
 .compact-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
 .stat{padding:13px 17px;box-shadow:none;border-radius:11px}.stat strong{font-size:25px}.stat small{font-size:11px}
 .tabs{display:flex;gap:5px;border-bottom:1px solid var(--line);margin:4px 0 16px;padding:0 2px}
@@ -57,7 +57,7 @@ main{max-width:1320px;margin:22px auto;padding:0 24px 38px}
 .chart-area{padding:12px 18px 8px;min-height:220px}.chart-area svg{width:100%;height:auto;display:block;overflow:visible}
 .legend{display:flex;gap:14px;color:var(--muted);font-size:11px}.legend span{display:flex;align-items:center;gap:6px}.legend i{width:15px;height:3px;background:#087f83;border-radius:2px}.legend span+span i{background:#aab9c2}
 .comment-cell{min-width:200px}.comment-cell>span:first-child{max-width:260px}
-@media(max-width:900px){.filters{grid-template-columns:repeat(3,minmax(0,1fr))}.compact-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:900px){.filters{grid-template-columns:repeat(2,minmax(0,1fr))}.compact-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:600px){main{padding:0 12px 25px;margin:15px auto}.filters{grid-template-columns:1fr 1fr;padding:11px}.compact-stats{grid-template-columns:1fr 1fr}.stat:last-child{grid-column:1/-1}.stat{padding:11px 13px}.tabs{overflow:auto}.tab{padding:9px 11px;white-space:nowrap}.panel-head{flex-direction:row;align-items:center}.legend{display:none}.chart-area{padding:8px}.intro{display:flex;flex-direction:column;align-items:flex-start}.intro>div:last-child{width:100%}}
 
 </style>
@@ -213,7 +213,7 @@ var records=[],filtered=[],previousFiltered=[],user=null,objects=[],fieldLabels=
  var y=Number($('dateFrom').value.slice(0,4)),labels=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'],now=[],old=[];
  function sum(list,m){return list.filter(function(r){return String(r.date||'').slice(5,7)===pad(m);}).reduce(function(n,r){return n+['b10_crim_qty','b10_adm_qty','b10_local_qty'].reduce(function(v,k){return v+(numericValue((r.data||{})[k])||0);},0);},0);}
  for(var m=1;m<=12;m++){now.push(sum(filtered,m));old.push(sum(previousFiltered,m));}
- var max=Math.max(1).concat?1:1;max=Math.max.apply(null,now.concat(old).concat([1]));
+ var max=Math.max.apply(null,now.concat(old).concat([1]));
  var W=900,H=205,L=36,R=16,T=12,B=30,plotH=H-T-B,plotW=W-L-R;
  function points(arr){return arr.map(function(v,i){return (L+i*plotW/11)+','+(T+plotH-(v/max)*plotH);}).join(' ');}
  var grid='';for(var g=0;g<=4;g++){var yy=T+plotH*g/4;grid+='<line x1="'+L+'" y1="'+yy+'" x2="'+(W-R)+'" y2="'+yy+'" stroke="#e8eef0"/><text x="'+(L-9)+'" y="'+(yy+4)+'" text-anchor="end" font-size="10" fill="#82919a">'+Math.round(max*(4-g)/4)+'</text>';}
