@@ -1599,22 +1599,10 @@ body { background: #F3F8F7; }
       <div class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></div>
     </div>
     <div class="card-body-wrap"><div class="card-body-inner"><div class="card-body">
-      <div class="row">
-        <div class="form-group"><label>Отмена позиций в чеке — количество, шт.</label><input type="number" id="b1_pos_qty" data-field placeholder="шт." min="0"></div>
-        <div class="form-group"><label>выявлены нарушения на сумму, руб.</label><input type="number" id="b1_pos_sum" data-field placeholder="руб." min="0"></div>
-      </div>
-      <div class="row">
-        <div class="form-group"><label>Анулирование чека в отсутствии администратора — количество, шт.</label><input type="number" id="b1_chek_qty" data-field placeholder="шт." min="0"></div>
-        <div class="form-group"><label>выявлены нарушения на сумму, руб.</label><input type="number" id="b1_chek_sum" data-field placeholder="руб." min="0"></div>
-      </div>
-      <div class="row">
-        <div class="form-group"><label>Фиктивные возвраты — количество, шт.</label><input type="number" id="b1_ret_qty" data-field placeholder="шт." min="0"></div>
-        <div class="form-group"><label>выявлены нарушения на сумму, руб.</label><input type="number" id="b1_ret_sum" data-field placeholder="руб." min="0"></div>
-      </div>
-      <div class="row">
-        <div class="form-group"><label>Продажа товара с заниженным весом — количество, шт.</label><input type="number" id="b1_weight_qty" data-field placeholder="шт." min="0"></div>
-        <div class="form-group"><label>выявлены нарушения на сумму, руб.</label><input type="number" id="b1_weight_sum" data-field placeholder="руб." min="0"></div>
-      </div>
+      <div class="row">\n        <div class="form-group"><label>Отмена позиций в чеке — проверок, шт.</label><input type="number" id="b1_pos_checks" data-field placeholder="шт." min="0"></div>\n        <div class="form-group"><label>нарушений, шт.</label><input type="number" id="b1_pos_qty" data-field placeholder="шт." min="0"></div>\n        <div class="form-group"><label>на сумму, руб.</label><input type="number" id="b1_pos_sum" data-field placeholder="руб." min="0"></div>\n      </div>
+      <div class="row">\n        <div class="form-group"><label>Анулирование чека в отсутствии администратора — проверок, шт.</label><input type="number" id="b1_chek_checks" data-field placeholder="шт." min="0"></div>\n        <div class="form-group"><label>нарушений, шт.</label><input type="number" id="b1_chek_qty" data-field placeholder="шт." min="0"></div>\n        <div class="form-group"><label>на сумму, руб.</label><input type="number" id="b1_chek_sum" data-field placeholder="руб." min="0"></div>\n      </div>
+      <div class="row">\n        <div class="form-group"><label>Фиктивные возвраты — проверок, шт.</label><input type="number" id="b1_ret_checks" data-field placeholder="шт." min="0"></div>\n        <div class="form-group"><label>нарушений, шт.</label><input type="number" id="b1_ret_qty" data-field placeholder="шт." min="0"></div>\n        <div class="form-group"><label>на сумму, руб.</label><input type="number" id="b1_ret_sum" data-field placeholder="руб." min="0"></div>\n      </div>
+      <div class="row">\n        <div class="form-group"><label>Продажа товара с заниженным весом — проверок, шт.</label><input type="number" id="b1_weight_checks" data-field placeholder="шт." min="0"></div>\n        <div class="form-group"><label>нарушений, шт.</label><input type="number" id="b1_weight_qty" data-field placeholder="шт." min="0"></div>\n        <div class="form-group"><label>на сумму, руб.</label><input type="number" id="b1_weight_sum" data-field placeholder="руб." min="0"></div>\n      </div>
       <div class="form-group"><label>Комментарий</label><textarea id="b1_comment" data-field placeholder="Пояснения по проверкам кассовых операций"></textarea></div>
     </div></div></div>
   </div>
@@ -2636,10 +2624,10 @@ function safeFname(x) { return String(x || '').replace(/[\\\\/:*?"<>|]/g, '_').r
     }
 
     sec('1. Проверка кассовых операций (удаление позиций из чека, удаление чека, возвраты, низкий вес товара)', [
-      pair('Отмена позиций в чеке', 'b1_pos_qty', 'b1_pos_sum', 'шт.'),
-      pair('Анулирование чека в отсутствии администратора', 'b1_chek_qty', 'b1_chek_sum', 'шт.'),
-      pair('Фиктивные возвраты', 'b1_ret_qty', 'b1_ret_sum', 'шт.'),
-      pair('Продажа товара с заниженным весом', 'b1_weight_qty', 'b1_weight_sum', 'шт.')
+      checkPair('Отмена позиций в чеке', 'b1_pos_checks', 'b1_pos_qty', 'b1_pos_sum'),
+      checkPair('Анулирование чека в отсутствии администратора', 'b1_chek_checks', 'b1_chek_qty', 'b1_chek_sum'),
+      checkPair('Фиктивные возвраты', 'b1_ret_checks', 'b1_ret_qty', 'b1_ret_sum'),
+      checkPair('Продажа товара с заниженным весом', 'b1_weight_checks', 'b1_weight_qty', 'b1_weight_sum')
     ]);
 
     sec('2. Работа с FaceID, реагирование, пополнение базы данных', [
@@ -3962,10 +3950,10 @@ function monthRecords(month, object) {
     }
 
     sec('1. Проверка кассовых операций (удаление позиций из чека, удаление чека, возвраты, низкий вес товара)', [
-      pairLine('Отмена позиций в чеке', 'b1_pos_qty', 'b1_pos_sum', 'шт.'),
-      pairLine('Анулирование чека в отсутствии администратора', 'b1_chek_qty', 'b1_chek_sum', 'шт.'),
-      pairLine('Фиктивные возвраты', 'b1_ret_qty', 'b1_ret_sum', 'шт.'),
-      pairLine('Продажа товара с заниженным весом', 'b1_weight_qty', 'b1_weight_sum', 'шт.')
+      checkPairS('Отмена позиций в чеке', 'b1_pos_checks', 'b1_pos_qty', 'b1_pos_sum'),
+      checkPairS('Анулирование чека в отсутствии администратора', 'b1_chek_checks', 'b1_chek_qty', 'b1_chek_sum'),
+      checkPairS('Фиктивные возвраты', 'b1_ret_checks', 'b1_ret_qty', 'b1_ret_sum'),
+      checkPairS('Продажа товара с заниженным весом', 'b1_weight_checks', 'b1_weight_qty', 'b1_weight_sum')
     ]);
 
     sec('2. Работа с FaceID, реагирование, пополнение базы данных',
