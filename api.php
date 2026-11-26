@@ -66,8 +66,11 @@ function archive_record_key(array $record): string {
     $data = isset($record['data']) && is_array($record['data']) ? $record['data'] : [];
     $date = (string)($data['b0_date'] ?? '');
     $object = (string)($data['b0_to'] ?? '');
+    $ownerId = (int)($record['owner_user_id'] ?? 0);
     if ($date !== '' && $object !== '') {
-        return 'r:' . hash('sha256', $date . "\0" . $object);
+        $identity = $date . "\0" . $object;
+        if ($ownerId > 0) $identity .= "\0" . $ownerId;
+        return 'r:' . hash('sha256', $identity);
     }
     return 'd:' . hash('sha256', (string)($record['t'] ?? 0) . "\0" . (string)($record['fio'] ?? ''));
 }
@@ -334,9 +337,43 @@ function save_archive(PDO $pdo, array $records, array $ctx): void {
                 $data['b0_to'] = $object;
             }
 
-            $key = archive_record_key(['data' => ['b0_date' => $date, 'b0_to' => $object], 't' => (int)($record['t'] ?? 0), 'fio' => $fio]);
+            $requestedOwnerId = (int)($record['owner_user_id'] ?? 0);
+            $keyOwnerId = $ctx['role'] === 'user'
+                ? (int)$ctx['id']
+                : ($requestedOwnerId > 0 ? $requestedOwnerId : (int)$ctx['id']);
+            $key = archive_record_key([
+                'data' => ['b0_date' => $date, 'b0_to' => $object],
+                'owner_user_id' => $keyOwnerId,
+                't' => (int)($record['t'] ?? 0),
+                'fio' => $fio
+            ]);
             $select->execute([':k' => $key]);
             $row = $select->fetch();
+            $legacyKey = null;
+            if (!$row) {
+                $legacyKey = archive_record_key([
+                    'data' => ['b0_date' => $date, 'b0_to' => $object],
+                    't' => (int)($record['t'] ?? 0),
+                    'fio' => $fio
+                ]);
+                if ($legacyKey !== $key) {
+                    $select->execute([':k' => $legacyKey]);
+                    $legacyRow = $select->fetch();
+                    if ($legacyRow) {
+                        $legacyPayload = json_decode((string)$legacyRow['payload'], true);
+                        $legacyOwner = is_array($legacyPayload) ? (int)($legacyPayload['owner_user_id'] ?? 0) : 0;
+                        if ($legacyOwner > 0 && $legacyOwner === $keyOwnerId) {
+                            $row = $legacyRow;
+                        } else {
+                            $legacyKey = null;
+                        }
+                    } else {
+                        $legacyKey = null;
+                    }
+                } else {
+                    $legacyKey = null;
+                }
+            }
             $existing = $row ? json_decode((string)$row['payload'], true) : null;
             if (!is_array($existing)) $existing = null;
 
@@ -381,6 +418,10 @@ function save_archive(PDO $pdo, array $records, array $ctx): void {
                 ':oi' => $objId,
                 ':p' => $payload,
             ]);
+            if ($legacyKey !== null) {
+                $deleteLegacy = $pdo->prepare('DELETE FROM sb_archive_records WHERE record_key = :k');
+                $deleteLegacy->execute([':k' => $legacyKey]);
+            }
         }
 
         // Архив хранится без автоматического ограничения по количеству записей.
@@ -713,6 +754,7 @@ if ($action === 'archive_delete' && $method === 'POST') {
     $object = (string)($body['object'] ?? '');
     $record = [
         'data' => ['b0_date' => $date, 'b0_to' => $object],
+        'owner_user_id' => (int)($body['owner_user_id'] ?? 0),
         't' => (int)($body['t'] ?? 0),
         'fio' => (string)($body['fio'] ?? ''),
     ];
