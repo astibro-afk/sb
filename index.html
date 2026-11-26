@@ -5007,20 +5007,40 @@ var colIdx = [];
 
     var selFio = $('#b0_fio');
     if (selFio) {
-      var selectedFio = selFio.value;
-      selFio.innerHTML = '<option value="">Выберите сотрудника</option>';
-      if (user.role === 'user' && user.full_name) {
-        selFio.appendChild(new Option(user.full_name, user.full_name));
-        selFio.value = user.full_name;
-        selFio.disabled = true;
-      } else {
-        (employees || []).forEach(function(employee) {
-          if (employee.full_name) selFio.appendChild(new Option(employee.full_name, employee.full_name));
-        });
-        selFio.disabled = false;
-        if (selectedFio) selFio.value = selectedFio;
+      // Для администратора список сотрудников зависит от выбранного объекта.
+      // Для модератора API уже ограничивает список его объектом.
+      function refreshEmployeeOptions() {
+        var previous = selFio.value;
+        selFio.innerHTML = '<option value="">Выберите сотрудника</option>';
+        if (user.role === 'user' && user.full_name) {
+          selFio.appendChild(new Option(user.full_name, user.full_name));
+          selFio.value = user.full_name;
+          selFio.disabled = true;
+        } else {
+          var selectedObject = selTo ? selTo.value : '';
+          var selectedObjectId = null;
+          if (selectedObject && objects) {
+            var obj = objects.find(function(item) { return item.name === selectedObject; });
+            if (obj) selectedObjectId = Number(obj.id);
+          }
+          (employees || []).forEach(function(employee) {
+            if (!employee.full_name) return;
+            if (user.role === 'admin' && selectedObjectId !== null &&
+                Number(employee.object_id) !== selectedObjectId) return;
+            if (user.role === 'admin' && !selectedObject) return;
+            selFio.appendChild(new Option(employee.full_name, employee.full_name));
+          });
+          selFio.disabled = false;
+          if (previous && Array.from(selFio.options).some(function(option) { return option.value === previous; })) {
+            selFio.value = previous;
+          }
+        }
+        selFio.classList.toggle('empty', !selFio.value);
       }
-      selFio.classList.toggle('empty', !selFio.value);
+      refreshEmployeeOptions();
+      if (selTo && user.role === 'admin') {
+        selTo.onchange = refreshEmployeeOptions;
+      }
     }
   }
 
