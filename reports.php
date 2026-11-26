@@ -54,7 +54,7 @@ button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inte
 const $=id=>document.getElementById(id);
 let allRecords=[], selected=null, currentUser=null;
 const today=new Date(), iso=d=>{const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,10)};
-$('from').value=iso(new Date(today.getFullYear(),today.getMonth(),1));$('to').value=iso(today);
+$('from').value='2000-01-01';$('to').value=iso(today);
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function val(v){if(v==null||v==='')return '—';if(typeof v==='object')return JSON.stringify(v);return String(v);}
 function setStatus(s,error){$('status').textContent=s;$('status').className='status'+(error?' error':'');}
