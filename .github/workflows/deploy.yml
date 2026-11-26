@@ -17,5 +17,5 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./              # что заливаем
-          server-dir: mysite.ru/public_html/   # папка сайта на хостинге
+          server-dir: sbmagnit.rf.gd   # папка сайта на хостинге
           protocol: ftps             # если хостер поддерживает — безопаснее
