@@ -642,12 +642,12 @@ if ($action === 'employees_data' && $method === 'GET') {
     if ($ctx['role'] === 'user') {
         $sql .= ' AND u.id=:self_id'; $params[':self_id']=(int)$ctx['id'];
     } elseif ($ctx['role'] === 'moderator') {
-        $sql .= " AND u.id=:self_id OR (u.id<>:self_id2 AND EXISTS (
+        $sql .= " AND (u.id=:self_id OR (u.id<>:self_id2 AND EXISTS (
             SELECT 1 FROM sb_user_objects tuo
             JOIN sb_user_objects muo ON muo.object_id=tuo.object_id
             JOIN sb_objects ob ON ob.id=tuo.object_id AND ob.is_active=1
             WHERE tuo.user_id=u.id AND muo.user_id=:moderator_id
-        ))";
+        )))";
         $params[':self_id']=(int)$ctx['id']; $params[':self_id2']=(int)$ctx['id']; $params[':moderator_id']=(int)$ctx['id'];
     }
     if ($targetId > 0) { $sql .= ' AND u.id=:target_id'; $params[':target_id']=$targetId; }
@@ -1155,6 +1155,7 @@ if ($action === 'user_save' && $method === 'POST') {
 
     if ($id > 0) {
         $oldObjectIds = user_object_ids($pdo, $id);
+        sort($oldObjectIds); $newObjectIdsSorted = $objectIds; sort($newObjectIdsSorted);
         if ($id === (int)$ctx['id'] && (!$isActive || $role !== 'admin')) reply(400, ['ok' => false, 'error' => 'Нельзя отключить себя или снять с себя роль администратора.']);
         if ($password !== '' && strlen($password) < 8) reply(400, ['ok' => false, 'error' => 'Новый пароль — не менее 8 символов.']);
         $pdo->beginTransaction();
@@ -1176,7 +1177,7 @@ if ($action === 'user_save' && $method === 'POST') {
             throw $e;
         }
         audit_log($pdo, $ctx, 'user_updated', 'user', $id, $username, ['role' => $role, 'object_ids' => $objectIds, 'active' => $isActive]);
-        if ($oldObjectIds !== $objectIds) notification_add($pdo, $id, 'access', 'Изменены назначенные объекты', 'Руководитель обновил список торговых объектов, доступных в вашей учётной записи.', 'index.html');
+        if ($oldObjectIds !== $newObjectIdsSorted) notification_add($pdo, $id, 'access', 'Изменены назначенные объекты', 'Руководитель обновил список торговых объектов, доступных в вашей учётной записи.', 'index.html');
         reply(200, ['ok' => true]);
     }
     if (strlen($password) < 8) reply(400, ['ok' => false, 'error' => 'Пароль нового пользователя — не менее 8 символов.']);
