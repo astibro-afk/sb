@@ -57,7 +57,7 @@ h1{margin:0;font-size:23px;line-height:1.2;letter-spacing:-.45px;font-weight:750
 .objects span{min-width:0;overflow-wrap:anywhere}
 .card-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid #edf2f1}
 .joined{color:#8a9b9d;font-size:10.5px}
-.history-btn{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--brand);padding:5px 2px;font:650 11.5px inherit;cursor:pointer}
+.history-btn{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--brand);padding:5px 2px;font-family:inherit;font-size:11.5px;font-weight:650;cursor:pointer}
 .history-btn:hover{color:#07585b}
 .history-btn:disabled{opacity:.55;cursor:wait}
 .details{margin-top:10px;padding-top:10px;border-top:1px solid #edf2f1}
