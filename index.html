@@ -1516,10 +1516,6 @@ body { background: #F3F8F7; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         Предпросмотр
       </button>
-      <button class="btn btn-ghost" id="btnArchive">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
-        Архив
-      </button>
       <a class="btn btn-ghost" href="reports.php" style="display:inline-flex;align-items:center;text-decoration:none">
         Отчёты сотрудников
       </a>
@@ -1975,28 +1971,6 @@ body { background: #F3F8F7; }
     <div class="download-title">Формирую и сохраняю отчет</div>
     <div class="download-progress-track"><div class="download-progress-fill" id="dlFill"></div></div>
     <div class="download-progress-text" id="dlText">0%</div>
-  </div>
-</div>
-
-<div class="summary-overlay" id="archiveOverlay">
-  <div class="summary-card archive-card archive-card--wide">
-    <div class="summary-title">Архив отчетов</div>
-    <div class="summary-subtitle">Каждый скачанный отчет сохраняется здесь автоматически</div>
-    <div class="row" style="margin-bottom:10px">
-      <div class="form-group"><label>Период сводной</label><select id="sumPeriodType"><option value="month">Месяц</option><option value="week">Неделя</option></select></div>
-      <div class="form-group" id="sumMonthWrap"><label>Месяц</label><input type="month" id="sumMonth"></div>
-      <div class="form-group" id="sumWeekWrap" style="display:none"><label>Неделя (номер и год)</label><input type="week" id="sumWeek"></div>
-      <div class="form-group"><label>Объект</label><select id="sumObject" class="empty"><option value="">Все объекты</option></select></div>
-    </div>
-    <div class="summary-actions" style="justify-content:flex-start; flex-wrap:wrap; margin-bottom:10px">
-      <button class="btn btn-primary" id="buildSummary">Собрать сводный отчёт</button>
-      <button class="btn btn-ghost" id="btnSumExcel">Сводная в Excel</button>
-    </div>
-    <div class="archive-stats" id="archiveStats"></div>
-    <div class="archive-list" id="archiveList"></div>
-    <div class="summary-actions">
-      <button class="btn btn-outline" id="archiveClose">Закрыть</button>
-    </div>
   </div>
 </div>
 
@@ -3361,124 +3335,7 @@ function safeFname(x) { return String(x || '').replace(/[\\\\/:*?"<>|]/g, '_').r
     if (a.length > 400) a = a.slice(0, 400);
     setArchive(a);
     if (!silent) {
-      renderArchive();
-      $('#archiveOverlay').classList.add('show');
     }
-  }
-
-  function openArchiveOverlay() {
-    renderArchive();
-    $('#archiveOverlay').classList.add('show');
-  }
-
-  function renderArchive() {
-    var a = getArchive();
-    // v1.98: карточки сортируются по дате отчета — новые сверху (30-е выше 15-го).
-    // Хранилище не пересортировываем: индексы кнопок «Открыть/Удалить» и дедупликация
-    // работают по исходному порядку массива, поэтому сортируем отображение с картой индексов.
-    var view = a.map(function(it, i) {
-      var dk = (it && it.data && (it.data.b0_date || it.data.date)) || '';
-      return { it: it, i: i, k: String(dk), t: (it && it.t) || 0 };
-    });
-    view.sort(function(x, y) {
-      if (x.k !== y.k) return x.k < y.k ? 1 : -1; // YYYY-MM-DD сравнивается лексикографически
-      return y.t - x.t; // при одинаковой дате — свежесохраненная выше
-    });
-    var list = $('#archiveList');
-    list.innerHTML = '';
-    if (!a.length) {
-      list.innerHTML = '<div class="archive-empty">Архив пуст. Скачайте отчет — он сохранится здесь автоматически.</div>';
-      fillSumObjects(a);
-      renderArchiveStats();
-      return;
-    }
-    view.forEach(function(v) {
-      var it = v.it, idx = v.i;
-      var row = document.createElement('div');
-      row.className = 'archive-item';
-      var info = document.createElement('div');
-      info.className = 'archive-item-info';
-      var when = '';
-      try {
-        when = new Date(it.t).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-      } catch (e) {}
-      var stBadge = '';
-      if (it.fstatus === 'ok') stBadge = '<span class="arc-status ok">файлы в папке на месте</span>';
-      else if (it.fstatus === 'missing-word') stBadge = '<span class="arc-status bad">Word-файл не найден в папке</span>';
-      else if (it.fstatus === 'missing-json') stBadge = '<span class="arc-status bad">запись в «Архив_СБ» отсутствует</span>';
-      info.innerHTML = '<span class="archive-item-title">' + esc(it.label) + '</span>' + stBadge +
-        '<span class="archive-item-sub">Составитель: ' + esc(it.fio) + ' · заполнено ' + it.done + ' из ' + it.total + ' · сохранено ' + esc(when) + '</span>';
-      var act = document.createElement('div');
-      act.className = 'archive-item-actions';
-      var open = document.createElement('button');
-      open.type = 'button';
-      open.className = 'mini-btn';
-      open.textContent = 'Открыть';
-      open.addEventListener('click', function() { loadFromArchive(idx); });
-      var del = document.createElement('button');
-      del.type = 'button';
-      del.className = 'mini-btn danger';
-      del.textContent = 'Удалить';
-      del.addEventListener('click', function() { deleteArchiveEntry(idx); });
-      act.appendChild(open);
-      if ((window.__SB_USER && window.__SB_USER.role) !== 'user') act.appendChild(del);
-      row.appendChild(info);
-      row.appendChild(act);
-      list.appendChild(row);
-    });
-    fillSumObjects(a);
-    renderArchiveStats();
-  }
-
-  async function deleteArchiveEntry(idx) {
-    var a = getArchive();
-    var it = a[idx];
-    if (!it) return;
-    if (!confirm('Удалить запись из общего серверного архива?\n\nЛокальные Word-файлы на компьютере не затрагиваются.')) return;
-    try {
-      await serverStore.deleteArchiveRecord(it);
-      renderArchive();
-      alert('Запись удалена из серверного архива.');
-    } catch (e) {
-      alert('Не удалось удалить запись на сервере. Проверьте соединение и повторите попытку.');
-    }
-  }
-
-  function loadFromArchive(idx) {
-    var a = getArchive();
-    var it = a[idx];
-    if (!it) return;
-    $$('[data-field]').forEach(function(el) {
-      el.value = (it.data && it.data[el.id] !== undefined) ? it.data[el.id] : '';
-    });
-    b11Sync();
-    dynData = { b4_inv: [], b6_sup: [], b7_sup: [], b8_sp: [] };
-    if (it.dyn) {
-      for (var k in DYN) if (it.dyn[k] && it.dyn[k].length) dynData[k] = it.dyn[k];
-    }
-    for (var k2 in DYN) renderDyn(k2);
-var roleNow = (window.__SB_USER && window.__SB_USER.role) || 'user';
-    var viewOnly = false;
-    if (roleNow === 'user') {
-      var recOwner = it && it.owner_user_id ? parseInt(it.owner_user_id, 10) : null;
-      var myId = window.__SB_USER && window.__SB_USER.id ? parseInt(window.__SB_USER.id, 10) : null;
-      var recObj = (it && it.data && it.data.b0_to) || '';
-      var myObj = (window.__SB_USER && window.__SB_USER.object_name) || '';
-      if (myObj !== '' && recObj !== myObj) viewOnly = true;
-      else if (recOwner === null) viewOnly = true;          // старые записи без владельца — только просмотр
-      else if (myId !== null && recOwner !== myId) viewOnly = true;
-    }
-    if (!viewOnly) {
-      try { serverStore.setItem(KEY, JSON.stringify(it.data || {})); } catch (e) {}
-      saveDyn();
-    }
-    applyViewMode(viewOnly, it);
-    updateProgress();
-    $('#archiveOverlay').classList.remove('show');
-    buildPreview();
-    $('#previewSection').classList.add('active');
-    showToast();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   // ================= СВОДНАЯ ЗА МЕСЯЦ (v1.74) =================
@@ -3585,82 +3442,6 @@ function monthRecords(month, object) {
     return (y === now.getFullYear() && m === now.getMonth() + 1) ? Math.min(now.getDate(), total) : total;
   }
 
-  function renderArchiveStats() {
-    var box = document.getElementById('archiveStats');
-    if (!box) return;
-    var period = selectedSummaryPeriod();
-    if (!period) { box.innerHTML = '<div class="astat-empty">Выберите месяц или неделю — статистика появится автоматически.</div>'; return; }
-    var object = $('#sumObject').value;
-    var recs = periodRecords(period, object);
-    if (!recs.length) { box.innerHTML = '<div class="astat-empty">За ' + esc(period.label) + (object ? ' (объект: ' + esc(object) + ')' : '') + ' отчётов в архиве нет.</div>'; return; }
-    var days = $('#sumPeriodType').value === 'week' ? 7 : daysInMonth(period.key), uniqueDays = Object.create(null);
-    recs.forEach(function(it) { var day = it && it.data && (it.data.b0_date || it.data.date); if (day) uniqueDays[day] = true; });
-    var filledDays = Object.keys(uniqueDays).length;
-    // Статистика нарушений строится по той же спецификации, что и дневные/сводные итоги.
-    // Кассовые операции (M): количество проверенных операций не является нарушениями;
-    // нарушение = одна строка, где сумма больше нуля. Для остальных разделов (V)
-    // количество берётся из отдельного поля «нарушений, шт.». Денежные расхождения (R)
-    // и справочные показатели не включаются в рейтинг нарушений.
-    var tsum = 0, tcnt = 0, bySec = Object.create(null);
-    var detailBySection = sumDetailData(recs);
-    detailBySection.forEach(function(sec) {
-      var sectionCount = 0, sectionSum = 0;
-      sec.items.forEach(function(item) {
-        if (item.k !== 'M' && item.k !== 'V') return;
-        var q = item.k === 'M' ? (item.v || 0) : (item.q || 0);
-        var sm = item.s || 0;
-        sectionCount += q;
-        sectionSum += sm;
-      });
-      tsum += sectionSum;
-      tcnt += sectionCount;
-      if (sectionCount > 0) bySec[sec.t] = { q: sectionCount, s: sectionSum };
-    });
-    var pct = days ? Math.min(100, Math.round(filledDays / days * 100)) : 0;
-    var top = Object.keys(bySec).map(function(k) { return { n: k, q: bySec[k].q, s: bySec[k].s }; })
-      .sort(function(a, b) { return b.q - a.q || b.s - a.s; }).slice(0, 3);
-    var maxQ = top.length ? top[0].q : 0;
-    var tone = tsum > 0 ? ' bad' : ' ok';
-    var h = '';
-    h += '<div class="astat' + tone + '">'
-      + '<div class="astat-head"><span class="astat-label">Заполнено дней</span><span class="astat-val">' + recs.length + ' из ' + days + '</span></div>'
-      + '<div class="astat-sub">' + pct + '% дней периода' + (object ? ' · ' + esc(object) : '') + '</div>'
-      + '<div class="astat-bar"><div class="astat-bar-fill" style="width:' + pct + '%"></div></div></div>';
-    h += '<div class="astat' + tone + '">'
-      + '<div class="astat-head"><span class="astat-label">Сумма нарушений</span><span class="astat-val">' + num(tsum) + ' руб.</span></div>'
-      + '<div class="astat-sub">нарушений: ' + tcnt + (tsum > 0 ? '' : ' · Нарушений не выявлено') + '</div></div>';
-    h += '<div class="astat">'
-      + '<div class="astat-head"><span class="astat-label">Топ-3 раздела по нарушениям</span></div>';
-    if (!top.length) h += '<div class="astat-empty">Нарушений не выявлено.</div>';
-    else top.forEach(function(t, i) {
-      var w = maxQ ? Math.round(t.q / maxQ * 100) : 0;
-      h += '<div class="astat-row"><span class="astat-rank">' + (i + 1) + '</span>'
-        + '<span class="astat-name">' + esc(t.n) + '</span>'
-        + '<span class="astat-track"><span class="astat-track-fill" style="width:' + w + '%"></span></span>'
-        + '<span class="astat-nums">' + t.q + ' шт. · ' + num(t.s) + ' руб.</span></div>';
-    });
-    h += '</div>';
-    box.innerHTML = h;
-  }
-
-  function fillSumObjects(a) {
-    var so = document.getElementById('sumObject');
-    if (!so) return;
-    var objs = [];
-    for (var i = 0; i < a.length; i++) {
-      var o = (a[i].data && a[i].data.b0_to) || '';
-      if (o && objs.indexOf(o) < 0) objs.push(o);
-    }
-    var prev = so.value;
-    so.innerHTML = '<option value="">Все объекты</option>';
-    for (var j = 0; j < objs.length; j++) {
-      var op = document.createElement('option');
-      op.value = objs[j]; op.textContent = objs[j];
-      so.appendChild(op);
-    }
-    so.value = (prev && objs.indexOf(prev) >= 0) ? prev : '';
-    if (so.value === '') so.classList.add('empty'); else so.classList.remove('empty');
-  }
   function buildSummaryWord(recs, periodLabel, object) {
     function S(id) { var s = 0; for (var i = 0; i < recs.length; i++) s += recNum(recs[i].data, id); return s; }
     function D(key, f) { var s = 0; for (var i = 0; i < recs.length; i++) s += dynSum(recs[i].dyn, key, f); return s; }
@@ -3936,7 +3717,6 @@ function monthRecords(month, object) {
         setTimeout(function() { URL.revokeObjectURL(url); a2.remove(); }, 800);
       }
       $('#downloadOverlay').classList.remove('show');
-      $('#archiveOverlay').classList.remove('show');
       showToast();
     });
   }
@@ -4146,23 +3926,6 @@ function monthRecords(month, object) {
       if (e.target === this) closeSummary();
     });
 
-    $('#btnArchive').addEventListener('click', openArchiveOverlay);
-    $('#archiveClose').addEventListener('click', function() { $('#archiveOverlay').classList.remove('show'); });
-    $('#archiveOverlay').addEventListener('click', function(e) {
-      if (e.target === this) this.classList.remove('show');
-    });
-    $('#buildSummary').addEventListener('click', saveSummaryDoc);
-    $('#sumMonth').addEventListener('change', renderArchiveStats);
-    $('#sumWeek').value = currentIsoWeekValue();
-    $('#sumWeek').addEventListener('change', renderArchiveStats);
-    $('#sumPeriodType').addEventListener('change', function() {
-      var weekly = this.value === 'week';
-      $('#sumMonthWrap').style.display = weekly ? 'none' : '';
-      $('#sumWeekWrap').style.display = weekly ? '' : 'none';
-      $('#buildSummary').textContent = weekly ? 'Собрать сводную за неделю' : 'Собрать сводную за месяц';
-      renderArchiveStats();
-    });
-    $('#sumObject').addEventListener('change', renderArchiveStats);
     $('#btnTest').addEventListener('click', testFill);
 
     $$('.list-edit-btn').forEach(function(b) {
@@ -4554,7 +4317,6 @@ var colIdx = [];
         showToast();
       } finally {
         $('#downloadOverlay').classList.remove('show');
-        $('#archiveOverlay').classList.remove('show');
       }
     });
   }
