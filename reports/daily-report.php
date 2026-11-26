@@ -2044,14 +2044,6 @@ body { background: #F3F8F7; }
         throw new Error((result && result.error) || ('Ошибка сервера: HTTP ' + response.status));
       }
       return result;
-      var response = await fetch('../api.php?action=' + encodeURIComponent(action), options);
-      var result;
-      try { result = await response.json(); }
-      catch (e) { throw new Error('Сервер вернул некорректный ответ. Проверьте api.php.'); }
-      if (!response.ok || !result || result.ok !== true) {
-        throw new Error((result && result.error) || ('Ошибка сервера: HTTP ' + response.status));
-      }
-      return result;
     }
 
     function parseStored(value) {
