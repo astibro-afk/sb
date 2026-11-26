@@ -193,6 +193,15 @@ function db(array $cfg): PDO {
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+        $pdo->exec("CREATE TABLE IF NOT EXISTS sb_user_activation_tokens (
+                id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                user_id INT UNSIGNED NOT NULL,
+                token_hash CHAR(64) NOT NULL UNIQUE,
+                expires_at DATETIME NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_activation_user (user_id),
+                CONSTRAINT fk_activation_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         ensure_archive_columns($pdo);
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
@@ -356,6 +365,44 @@ function save_archive(PDO $pdo, array $records, array $ctx): void {
 $cfg = require __DIR__ . '/config.php';
 $action = (string)($_GET['action'] ?? '');
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+
+// Активация учётной записи по одноразовой ссылке (без авторизованной сессии).
+if ($action === 'activate_info' && $method === 'GET') {
+    $token = (string)($_GET['token'] ?? '');
+    if (!preg_match('/^[a-f0-9]{64}$/', $token)) reply(400, ['ok' => false, 'error' => 'Некорректная ссылка активации.']);
+    $pdo = db($cfg);
+    $st = $pdo->prepare('SELECT u.username, u.full_name, t.expires_at FROM sb_user_activation_tokens t JOIN sb_users u ON u.id=t.user_id WHERE t.token_hash=:h AND t.expires_at > NOW() AND u.is_active=0 LIMIT 1');
+    $st->execute([':h' => hash('sha256', $token)]);
+    $row = $st->fetch();
+    if (!$row) reply(404, ['ok' => false, 'error' => 'Ссылка недействительна или срок её действия истёк. Обратитесь к модератору за новой ссылкой.']);
+    reply(200, ['ok' => true, 'username' => $row['username'], 'full_name' => $row['full_name']]);
+}
+if ($action === 'activate_complete' && $method === 'POST') {
+    $body = input_json();
+    $token = (string)($body['token'] ?? '');
+    $password = (string)($body['password'] ?? '');
+    if (!preg_match('/^[a-f0-9]{64}$/', $token)) reply(400, ['ok' => false, 'error' => 'Некорректная ссылка активации.']);
+    if (strlen($password) < 8 || strlen($password) > 4096) reply(400, ['ok' => false, 'error' => 'Пароль должен содержать не менее 8 символов.']);
+    $pdo = db($cfg);
+    try {
+        $pdo->beginTransaction();
+        $st = $pdo->prepare('SELECT user_id FROM sb_user_activation_tokens WHERE token_hash=:h AND expires_at > NOW() LIMIT 1 FOR UPDATE');
+        $st->execute([':h' => hash('sha256', $token)]);
+        $userId = $st->fetchColumn();
+        if (!$userId) { $pdo->rollBack(); reply(404, ['ok' => false, 'error' => 'Ссылка недействительна или срок её действия истёк.']); }
+        $st = $pdo->prepare('UPDATE sb_users SET password_hash=:p, is_active=1 WHERE id=:id AND is_active=0');
+        $st->execute([':p' => password_hash($password, PASSWORD_DEFAULT), ':id' => (int)$userId]);
+        if ($st->rowCount() !== 1) { $pdo->rollBack(); reply(409, ['ok' => false, 'error' => 'Учётная запись уже активирована или отключена.']); }
+        $st = $pdo->prepare('DELETE FROM sb_user_activation_tokens WHERE user_id=:id');
+        $st->execute([':id' => (int)$userId]);
+        $pdo->commit();
+        reply(200, ['ok' => true]);
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('SB activation error: ' . $e->getMessage());
+        reply(500, ['ok' => false, 'error' => 'Не удалось активировать учётную запись.']);
+    }
+}
 
 if ($action === 'status' && $method === 'GET') {
     $u = null;
@@ -523,6 +570,45 @@ if ($action === 'archive_delete' && $method === 'POST') {
     $stmt = $pdo->prepare('DELETE FROM sb_archive_records WHERE record_key = :k');
     $stmt->execute([':k' => $key]);
     reply(200, ['ok' => true]);
+}
+
+if ($action === 'moderator_user_create' && $method === 'POST') {
+    $body = input_json();
+    check_csrf($body);
+    if (!in_array($ctx['role'], ['admin', 'moderator'], true)) reply(403, ['ok' => false, 'error' => 'Недостаточно прав.']);
+    $username = trim((string)($body['username'] ?? ''));
+    $fullName = trim((string)($body['full_name'] ?? ''));
+    if (!preg_match('/^[A-Za-z0-9._-]{3,64}$/', $username)) reply(400, ['ok' => false, 'error' => 'Логин: 3–64 символа — латиница, цифры, точка, подчёркивание, дефис.']);
+    if ($fullName === '' || mb_strlen($fullName) > 255) reply(400, ['ok' => false, 'error' => 'Укажите ФИО (до 255 символов).']);
+    $objectId = $ctx['role'] === 'moderator' ? $ctx['object_id'] : (($body['object_id'] ?? '') === '' ? null : (int)$body['object_id']);
+    if ($ctx['role'] === 'moderator' && !$objectId) reply(403, ['ok' => false, 'error' => 'Ваш профиль не привязан к торговому объекту. Обратитесь к администратору.']);
+    if ($objectId !== null) {
+        $chk = $pdo->prepare('SELECT COUNT(*) FROM sb_objects WHERE id=:id AND is_active=1');
+        $chk->execute([':id' => $objectId]);
+        if (!(int)$chk->fetchColumn()) reply(400, ['ok' => false, 'error' => 'Торговый объект не найден или отключён.']);
+    }
+    $dup = $pdo->prepare('SELECT COUNT(*) FROM sb_users WHERE username=:u');
+    $dup->execute([':u' => $username]);
+    if ((int)$dup->fetchColumn()) reply(400, ['ok' => false, 'error' => 'Такой логин уже занят.']);
+    $token = bin2hex(random_bytes(32));
+    $placeholderHash = password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT);
+    try {
+        $pdo->beginTransaction();
+        $st = $pdo->prepare("INSERT INTO sb_users (username,password_hash,full_name,role,object_id,is_active) VALUES (:u,:p,:f,'user',:o,0)");
+        $st->execute([':u'=>$username, ':p'=>$placeholderHash, ':f'=>$fullName, ':o'=>$objectId]);
+        $newId = (int)$pdo->lastInsertId();
+        $st = $pdo->prepare('INSERT INTO sb_user_activation_tokens (user_id,token_hash,expires_at) VALUES (:u,:h,DATE_ADD(NOW(), INTERVAL 48 HOUR))');
+        $st->execute([':u'=>$newId, ':h'=>hash('sha256',$token)]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('SB user create error: '.$e->getMessage());
+        reply(500, ['ok'=>false, 'error'=>'Не удалось создать пользователя.']);
+    }
+    $base = rtrim(dirname((string)($_SERVER['SCRIPT_NAME'] ?? '/')), '/\\');
+    $url = ((!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off') ? 'https' : 'http')
+        . '://' . (string)($_SERVER['HTTP_HOST'] ?? '') . ($base ? $base : '') . '/activate.php?token=' . $token;
+    reply(200, ['ok'=>true, 'id'=>$newId, 'activation_url'=>$url, 'expires_in_hours'=>48]);
 }
 
 if ($action === 'users_list' && $method === 'GET') {
