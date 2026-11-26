@@ -30,6 +30,7 @@ button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inte
 .preview-frame{display:block;width:100%;height:100%;border:0;background:#eef2f2}
 @media(max-width:600px){.preview-modal{padding:0}.preview-dialog{height:100vh;border-radius:0}.preview-dialog-head{padding:12px}.preview-dialog-head h2{font-size:15px}}
 </style>
+<link rel="stylesheet" href="site-theme.css">
 </head>
 <body>
 <header><div class="head"><div class="brand"><div class="logo">СБ</div><div><h1>Отчёты сотрудников</h1><small>Архив ежедневных отчётов</small></div></div><a class="linkbtn outline" href="index.html">К ежедневному отчёту</a></div></header>
