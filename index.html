@@ -2145,7 +2145,8 @@ body { background: #F3F8F7; }
           date: record && record.data ? (record.data.b0_date || '') : '',
           object: record && record.data ? (record.data.b0_to || '') : '',
           t: record ? (record.t || 0) : 0,
-          fio: record ? (record.fio || '') : ''
+          fio: record ? (record.fio || '') : '',
+          owner_user_id: record ? (record.owner_user_id || 0) : 0
         });
         var latest = await request('load');
         cache[KEY + '__archive'] = (latest.data && latest.data[KEY + '__archive']) || [];
