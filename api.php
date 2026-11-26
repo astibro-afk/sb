@@ -374,6 +374,21 @@ function save_archive(PDO $pdo, array $records, array $ctx): void {
                     $legacyKey = null;
                 }
             }
+            // If the client supplied another author's ID but no matching
+            // stored report exists, this is a new report by the current user.
+            if (!$row && $keyOwnerId !== (int)$ctx['id']) {
+                $keyOwnerId = (int)$ctx['id'];
+                $key = archive_record_key([
+                    'data' => ['b0_date' => $date, 'b0_to' => $object],
+                    'owner_user_id' => $keyOwnerId,
+                    't' => (int)($record['t'] ?? 0),
+                    'fio' => $fio
+                ]);
+                $select->execute([':k' => $key]);
+                $row = $select->fetch();
+                $legacyKey = null;
+            }
+
             $existing = $row ? json_decode((string)$row['payload'], true) : null;
             if (!is_array($existing)) $existing = null;
 
