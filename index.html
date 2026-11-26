@@ -4929,12 +4929,31 @@ var colIdx = [];
     var options = { method: body ? 'POST' : 'GET', credentials: 'same-origin',
       cache: 'no-store', headers: { 'Accept': 'application/json' } };
     if (body) {
-      options.headers['Content-Type'] = 'application/json';
       if (window.__SB_CSRF && !body.csrf) body = Object.assign({}, body, { csrf: window.__SB_CSRF });
-      options.body = JSON.stringify(body);
+      if (action === 'login') {
+        // Обычная form-urlencoded отправка вместо application/json.
+        options.headers['Content-Type'] = 'application/x-www-form-urlencoded;charset=UTF-8';
+        options.body = new URLSearchParams(body).toString();
+      } else {
+        options.headers['Content-Type'] = 'application/json';
+        options.body = JSON.stringify(body);
+      }
     }
     return fetch('api.php?action=' + encodeURIComponent(action), options)
-      .then(function(r) { return r.json(); })
+      .then(function(r) {
+        return r.text().then(function(raw) {
+          var result;
+          try { result = JSON.parse(raw); }
+          catch (_) {
+            if (/<html|<!doctype html/i.test(raw)) {
+              throw new Error('Хостинг вернул HTML-проверку вместо ответа сервера. Обновите страницу и попробуйте ещё раз.');
+            }
+            throw new Error('Сервер вернул некорректный ответ (HTTP ' + r.status + ').');
+          }
+          if (!r.ok && !result.error) result.error = 'Ошибка сервера (HTTP ' + r.status + ').';
+          return result;
+        });
+      })
       .then(function(result) {
         if (result && result.csrf) window.__SB_CSRF = result.csrf;
         return result;
