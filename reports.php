@@ -85,23 +85,143 @@ function showDownload(key){selected=allRecords.find(r=>r.record_key===key);if(!s
 function closeDownload(){$('downloadModal').classList.remove('open');$('downloadModal').setAttribute('aria-hidden','true');}
 $('closeModal').addEventListener('click',closeDownload);
 $('downloadModal').addEventListener('click',e=>{if(e.target===$('downloadModal'))closeDownload();});
+const FIELD_LABELS={
+ b1_pos_checks:'Отмена позиций — проверено',b1_pos_qty:'Отмена позиций — нарушений',b1_pos_sum:'Отмена позиций — сумма ущерба, руб.',
+ b1_chek_checks:'Аннулирование чека — проверено',b1_chek_qty:'Аннулирование чека — нарушений',b1_chek_sum:'Аннулирование чека — сумма ущерба, руб.',
+ b1_ret_checks:'Фиктивные возвраты — проверено',b1_ret_qty:'Фиктивные возвраты — нарушений',b1_ret_sum:'Фиктивные возвраты — сумма ущерба, руб.',
+ b1_weight_checks:'Заниженный вес — проверено',b1_weight_qty:'Заниженный вес — нарушений',b1_weight_sum:'Заниженный вес — сумма ущерба, руб.',
+ b2_triggers:'Срабатываний FaceID, шт.',b2_worked:'Отработано, шт.',b2_db:'Пополнено базы данных, чел.',
+ b3_in_checks:'Перемещения внутри объекта — проверок',b3_in_qty:'Перемещения внутри объекта — нарушений',b3_in_sum:'Перемещения внутри объекта — сумма, руб.',
+ b3_between_checks:'Перемещения между объектами — проверок',b3_between_qty:'Перемещения между объектами — нарушений',b3_between_sum:'Перемещения между объектами — сумма, руб.',
+ b4_checks:'Инвентаризации — проверок',b4_dev_qty:'Инвентаризации — расхождений',b4_dev_sum:'Инвентаризации — сумма, руб.',
+ b5_date:'Дата выгрузки виртуальных остатков',b5_positions:'Выгружено виртуальных остатков, поз.',b5_sum:'Сумма виртуальных остатков, руб.',b5_sz_date:'СЗ на ДГМ от',b5_copy:'Копия Директору Группы',
+ b6_checks:'Поставки с РЦ — проверок',b6_q_qty:'Поставки с РЦ — качество, нарушений',b6_q_sum:'Поставки с РЦ — качество, руб.',b6_qty_qty:'Поставки с РЦ — количество, нарушений',b6_qty_sum:'Поставки с РЦ — количество, руб.',b6_sg_qty:'Поставки с РЦ — сроки годности, нарушений',b6_sg_sum:'Поставки с РЦ — сроки годности, руб.',
+ b7_checks:'Прямые поставщики — проверок',b7_q_qty:'Прямые поставщики — качество, нарушений',b7_q_sum:'Прямые поставщики — качество, руб.',b7_qty_qty:'Прямые поставщики — количество, нарушений',b7_qty_sum:'Прямые поставщики — количество, руб.',b7_sg_qty:'Прямые поставщики — сроки годности, нарушений',b7_sg_sum:'Прямые поставщики — сроки годности, руб.',
+ b8_checks:'Списания — проверок',b8_qty:'Списания — нарушений',b8_sum:'Списания — сумма, руб.',b9_count:'Количество служебных записок, шт.',
+ b10_crim_qty:'Уголовные — нарушений',b10_crim_sum:'Уголовные — ущерб, руб.',b10_adm_qty:'Административные — нарушений',b10_adm_sum:'Административные — ущерб, руб.',b10_local_qty:'Разбор на месте — случаев',b10_local_sum:'Разбор на месте — ущерб, руб.',
+ b11_post_cash:'Пост на кассах',b11_dfrom_cash:'Начало смены (кассы)',b11_from_cash:'Время начала (кассы)',b11_dto_cash:'Окончание смены (кассы)',b11_to_cash:'Время окончания (кассы)',
+ b11_post_kso:'Пост КСО',b11_dfrom_kso:'Начало смены (КСО)',b11_from_kso:'Время начала (КСО)',b11_dto_kso:'Окончание смены (КСО)',b11_to_kso:'Время окончания (КСО)',
+ b11_post_entr:'Пост на входе',b11_dfrom_entr:'Начало смены (вход)',b11_from_entr:'Время начала (вход)',b11_dto_entr:'Окончание смены (вход)',b11_to_entr:'Время окончания (вход)',
+ b11_uch:'Проверка УЧО',b11_uch_fio:'ФИО сотрудника ЧОО без УЧО',b11_instr:'Инструктаж',b11_instr_topic:'Тема инструктажа'
+};
+const SECTIONS=[
+ ['1. Проверка кассовых операций (удаление позиций из чека, удаление чека, возвраты, низкий вес товара)',['b1_pos_checks','b1_pos_qty','b1_pos_sum','b1_chek_checks','b1_chek_qty','b1_chek_sum','b1_ret_checks','b1_ret_qty','b1_ret_sum','b1_weight_checks','b1_weight_qty','b1_weight_sum']],
+ ['2. Работа с FaceID, реагирование, пополнение базы данных',['b2_triggers','b2_worked','b2_db']],
+ ['3. Контроль за перемещениями ТМЦ (внутри объекта, между объектами)',['b3_in_checks','b3_in_qty','b3_in_sum','b3_between_checks','b3_between_qty','b3_between_sum']],
+ ['4. Контрольные проверки проведённых инвентаризаций операционной службой',['b4_checks','b4_dev_qty','b4_dev_sum']],
+ ['5. Выгрузка виртуальных остатков, предоставление информации операционной службе для пересчёта',['b5_date','b5_positions','b5_sum','b5_sz_date','b5_copy']],
+ ['6. Проверка качества поставки ТМЦ с РЦ',['b6_checks','b6_q_qty','b6_q_sum','b6_qty_qty','b6_qty_sum','b6_sg_qty','b6_sg_sum']],
+ ['7. Проверка качества поставки ТМЦ от прямых поставщиков',['b7_checks','b7_q_qty','b7_q_sum','b7_qty_qty','b7_qty_sum','b7_sg_qty','b7_sg_sum']],
+ ['8. Проверка качества списания ТМЦ',['b8_checks','b8_qty','b8_sum']],
+ ['9. Количество служебных записок по выявленным нарушениям на ДГМ',['b9_count']],
+ ['10. Хищения (уголовные, административные)',['b10_crim_qty','b10_crim_sum','b10_adm_qty','b10_adm_sum','b10_local_qty','b10_local_sum']],
+ ['11. Работа ООО ЧОП «Артакс+»',['b11_post_cash','b11_dfrom_cash','b11_from_cash','b11_dto_cash','b11_to_cash','b11_post_kso','b11_dfrom_kso','b11_from_kso','b11_dto_kso','b11_to_kso','b11_post_entr','b11_dfrom_entr','b11_from_entr','b11_dto_entr','b11_to_entr','b11_uch','b11_uch_fio','b11_instr','b11_instr_topic']]
+];
+const COMMENT_KEYS=Array.from({length:11},(_,i)=>'b'+(i+1)+'_comment');
+function recordSections(){
+ const d=selected.data||{},dyn=selected.dyn||{},out=[];
+ SECTIONS.forEach(([title,keys])=>{
+  const lines=[];
+  keys.forEach(k=>{const value=d[k];if(value!==undefined&&value!==null&&String(value).trim()!=='')lines.push((FIELD_LABELS[k]||k)+': '+String(value));});
+  const dk=title.startsWith('4.')?'b4_inv':title.startsWith('6.')?'b6_sup':title.startsWith('7.')?'b7_sup':title.startsWith('8.')?'b8_sp':null;
+  if(dk&&Array.isArray(dyn[dk]))dyn[dk].forEach((r,n)=>{
+   const parts=Object.entries(r||{}).filter(([,v])=>v!==''&&v!=null).map(([k,v])=>({num:'Номер',date:'Дата',sum:'Сумма, руб.',cnt:'Проверено позиций',dev:'Расхождения, руб.'}[k]||k)+': '+v);
+   if(parts.length)lines.push('Дополнительная запись '+(n+1)+': '+parts.join('; '));
+  });
+  if(lines.length)out.push({title,lines});
+ });
+ COMMENT_KEYS.forEach((k,i)=>{if(d[k]){let sec=out.find(x=>x.title.startsWith((i+1)+'.'));if(!sec){sec={title:(i+1)+'. Комментарий',lines:[]};out.push(sec);}sec.note=sec.note||[];sec.note.push(String(d[k]));}});
+ return out;
+}
+function wordReportHtml(){
+ const sections=recordSections();
+ let out='<div class="doc-wrap">'+docMasthead('ЕЖЕДНЕВНЫЙ ОТЧЕТ');
+ out+='<h1 style="margin:0 0 4pt 0;font-family:Calibri,Arial,sans-serif;font-size:17pt;line-height:1.15;font-weight:bold;color:#000000;text-align:left;page-break-after:avoid;">Отчёт по итогам контрольных мероприятий</h1>';
+ out+='<p style="margin:0 0 15pt 0;font-family:Calibri,Arial,sans-serif;font-size:10pt;color:#000000;text-align:left;">Ежедневный отчет за '+esc(selected.date||'')+'</p>';
+ out+=docMetaTable([['Объект (ТО)',esc(selected.object||'—')],['Составитель',esc(selected.employee||'—')],['Дата',esc(selected.date||'—')],['Автор записи',esc(selected.author||'—')]]);
+ sections.forEach(sec=>{out+=docSection(sec.title,sec.lines,sec.note||[]);});
+ out+='<div class="doc-sign"><p><strong>Отчёт составил:</strong> '+esc(selected.employee||'_______________________')+'</p><p><strong>Подпись:</strong> ____________________</p></div></div>';
+ return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Отчёт по итогам контрольных мероприятий</title><style>'+docCss()+'</style></head><body>'+out+'</body></html>';
+}
+function docCss() {
+    return '' +
+      '@page{size:A4;margin:1.5cm 1.6cm 1.5cm 1.5cm} ' +
+      'html,body{margin:0;padding:0;background:#fff} ' +
+      'body{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff} ' +
+      '.doc-wrap{font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.38;color:#000;width:100%;mso-line-height-rule:at-least} ' +
+      '.doc-wrap p{orphans:3;widows:3;color:#000} ' +
+      '.doc-brand{margin:0 0 17pt 0;padding:0 0 6pt 0;border-bottom:.55pt solid #777;font-size:8.5pt;line-height:1.2;font-weight:bold;letter-spacing:.3pt;color:#000;text-transform:uppercase} ' +
+      '.doc-meta{margin:0 0 17pt 0;padding:0} ' +
+      '.doc-meta p{margin:4pt 0;font-size:9.7pt;line-height:1.3;color:#000} ' +
+      '.doc-meta strong{font-weight:bold;color:#000} ' +
+      '.doc-section{margin:0 0 11pt 0;padding:0;page-break-inside:auto} ' +
+      '.sec-title{margin:18pt 0 8pt 0;padding:0 0 5pt 0;font-size:11pt;line-height:1.22;font-weight:bold;color:#000;background:#fff;border:0;border-bottom:.65pt solid #888;text-indent:0;text-align:left;page-break-after:avoid;mso-pagination:keep-with-next} ' +
+      '.doc-line{margin:0 0 6pt 11pt;padding:0;text-indent:0;font-size:10pt;line-height:1.38;color:#000;page-break-inside:avoid} ' +
+      '.doc-line-label{font-weight:bold;color:#000} ' +
+      '.doc-line-sub{margin:0 0 5pt 22pt;padding:0;font-size:9.7pt;line-height:1.34;color:#000;page-break-inside:avoid} ' +
+      '.doc-note{margin:8pt 0 10pt 11pt;padding:0 0 0 7pt;border-left:.6pt solid #888;font-size:9.5pt;line-height:1.38;color:#000;text-indent:0;text-align:left} ' +
+      '.doc-note strong{font-weight:bold;color:#000} ' +
+      '.doc-totals{margin:19pt 0 0 0;padding:9pt 0 0 0;border-top:.9pt solid #555;page-break-inside:avoid} ' +
+      '.doc-totals-title{margin:0 0 8pt 0;font-size:11pt;line-height:1.2;font-weight:bold;color:#000} ' +
+      '.doc-total-line{margin:4pt 0 4pt 11pt;font-size:10pt;line-height:1.35;color:#000} ' +
+      '.doc-total-line strong{font-weight:bold;color:#000} ' +
+      '.doc-sign{margin:23pt 0 0 0;padding:9pt 0 0 0;border-top:.6pt solid #777;font-size:9.7pt;line-height:1.45;color:#000;page-break-inside:avoid} ' +
+      '.doc-sign p{margin:5pt 0;color:#000} ' +
+      '.doc-ver{margin:15pt 0 0 0;padding-top:4pt;border-top:.4pt solid #999;font-size:7.5pt;color:#000;text-align:right;font-family:Arial,Helvetica,sans-serif}';
+  }
+function docMetaTable(rows) {
+    var h = '<div class="doc-meta">';
+    for (var i = 0; i < rows.length; i++) {
+      h += '<p style="margin:4pt 0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:9.7pt;line-height:1.3;color:#000000;"><strong style="font-weight:bold;color:#000000;">' + rows[i][0] + ':</strong> ' + rows[i][1] + '</p>';
+    }
+    return h + '</div>';
+  }
+  function docMasthead(tag) {
+    return '<p class="doc-brand" style="margin:0 0 15pt 0;padding:0 0 5pt 0;border-bottom:.6pt solid #777777;font-family:Arial,Helvetica,sans-serif;font-size:8.5pt;line-height:1.2;font-weight:bold;letter-spacing:.35pt;color:#000000;text-transform:uppercase;">Группа БФ Волгоград 1&nbsp;&nbsp; / &nbsp;&nbsp;' + (tag || 'СЛУЖЕБНЫЙ ДОКУМЕНТ') + '</p>';
+  }
+  function docLineHtml(line) {
+    var raw = String(line || '');
+    var chunks = raw.split(/\s+(?=Выявлено(?: нарушений| расхождений)?\s*:|В том числе\s*:)/);
+    var h = '';
+    for (var c = 0; c < chunks.length; c++) {
+      var part = chunks[c].trim();
+      if (!part) continue;
+      var colon = part.indexOf(':');
+      if (colon > 0 && colon < 90 && part.slice(colon + 1, colon + 2) === ' ') {
+        var label = part.slice(0, colon + 1);
+        var value = part.slice(colon + 1).trim();
+        h += '<p class="doc-line" style="margin:0 0 6pt 11pt;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.38;color:#000000;page-break-inside:avoid;"><strong style="font-weight:bold;color:#000000;">' + esc(label) + '</strong>' + (value ? ' ' + esc(value) : '') + '</p>';
+      } else {
+        h += '<p class="doc-line-sub" style="margin:0 0 5pt 22pt;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:9.7pt;line-height:1.34;color:#000000;page-break-inside:avoid;">' + esc(part) + '</p>';
+      }
+    }
+    return h;
+  }
+  function docSection(title, lines, notes) {
+    var h = '<div class="doc-section" style="margin:0 0 11pt 0;padding:0;">';
+    h += '<p class="sec-title" style="margin:18pt 0 8pt 0;padding:0 0 5pt 0;border-bottom:.65pt solid #888888;font-family:Arial,Helvetica,sans-serif;font-size:11pt;line-height:1.22;font-weight:bold;color:#000000;text-align:left;text-indent:0;page-break-after:avoid;">' + esc(title) + '</p>';
+    if (lines && lines.length) {
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i]) h += docLineHtml(lines[i]);
+      }
+    }
+    if (notes && notes.length) for (var j = 0; j < notes.length; j++) {
+      h += '<p class="doc-note" style="margin:8pt 0 10pt 11pt;padding:0 0 0 7pt;border-left:.6pt solid #888888;font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;line-height:1.38;color:#000000;"><strong style="font-weight:bold;color:#000000;">Комментарий:</strong> ' + esc(notes[j]) + '</p>';
+    }
+    return h + '</div>';
+  }
 function exportRows(){
  if(!selected)return [];
- const data=selected.data||{},rows=[['Поле','Значение'],['Дата',selected.date],['Объект',selected.object],['Сотрудник',selected.employee],['Автор записи',selected.author]];
- Object.entries(data).forEach(([k,v])=>{if(!['b0_date','b0_to','b0_fio'].includes(k)&&v!==''&&v!=null)rows.push([k,typeof v==='object'?JSON.stringify(v):String(v)])});
- if(selected.dyn&&Object.keys(selected.dyn).length)rows.push(['Дополнительные данные',JSON.stringify(selected.dyn)]);
+ const rows=[['Поле','Значение'],['Дата',selected.date],['Объект',selected.object],['Сотрудник',selected.employee],['Автор записи',selected.author]];
+ recordSections().forEach(sec=>{rows.push([sec.title,'']);sec.lines.forEach(line=>rows.push([line,'']));(sec.note||[]).forEach(note=>rows.push(['Комментарий: '+note,'']));});
  return rows;
 }
-$('word').addEventListener('click',async()=>{
+$('word').addEventListener('click',()=>{
  if(!selected)return;
  try{
- await loadScript('https://unpkg.com/docx@8.5.0/build/index.umd.js',()=>!!window.docx);
- const {Document,Packer,Paragraph,Table,TableRow,TableCell,TextRun,WidthType,HeadingLevel}=window.docx;
- const rows=exportRows();
-  const tableRows=rows.map((r,i)=>new TableRow({children:r.map(c=>new TableCell({children:[new Paragraph({children:[new TextRun({text:String(c),bold:i===0})]})]}))}));
-  const table=new Table({width:{size:100,type:WidthType.PERCENTAGE},rows:tableRows});
- const doc=new Document({sections:[{children:[new Paragraph({text:'Ежедневный отчёт СБ',heading:HeadingLevel.TITLE}),new Paragraph({text:'Дата: '+selected.date}),new Paragraph({text:'Объект: '+selected.object}),new Paragraph({text:'Сотрудник: '+selected.employee}),new Paragraph({text:'Автор записи: '+selected.author}),new Paragraph({text:''}),table]}]});
- const blob=await Packer.toBlob(doc);download(blob,'Отчёт_'+safe(selected.date)+'_'+safe(selected.employee)+'.docx');
+  const html=wordReportHtml();
+  const blob=new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'});
+  download(blob,'Отчёт_'+safe(selected.date)+'_'+safe(selected.employee)+'.doc');
  }catch(e){$('downloadStatus').textContent='Ошибка Word: '+e.message;}
 });
 $('excel').addEventListener('click',()=>{
