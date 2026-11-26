@@ -662,6 +662,19 @@ if ($action === 'reports_data' && $method === 'GET') {
         }
         $sql .= ' AND (a.object_id IN (' . implode(',', $idMarks) . ') OR (a.object_id IS NULL AND a.object_name IN (' . implode(',', $selectedNameMarks) . ')))';
     }
+    // Пользователь видит только собственные отчёты; модератор — все отчёты
+    // по закреплённым объектам, администратор — все отчёты.
+    if ($ctx['role'] === 'user') {
+        $sql .= ' AND a.owner_user_id = :viewer_owner_id';
+        $params[':viewer_owner_id'] = (int)$ctx['id'];
+    }
+
+    $employeeId = (int)($_GET['employee_id'] ?? 0);
+    if ($employeeId > 0) {
+        $sql .= ' AND a.owner_user_id = :selected_employee_id';
+        $params[':selected_employee_id'] = $employeeId;
+    }
+
     $sql .= ' ORDER BY a.report_date DESC, a.object_name ASC, a.updated_at DESC';
 
     $stmt = $pdo->prepare($sql);
