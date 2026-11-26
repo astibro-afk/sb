@@ -28,13 +28,15 @@ h1{margin:0;font-size:23px;line-height:1.2;letter-spacing:-.45px;font-weight:750
 .subtitle{margin:5px 0 0;color:var(--muted);font-size:13px}
 .back{display:inline-flex;align-items:center;gap:8px;padding:9px 13px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font-weight:650;text-decoration:none;white-space:nowrap;transition:.16s ease}
 .back:hover{border-color:#a8c9c5;background:#fafffe}
-.toolbar{display:flex;align-items:center;gap:12px;margin-bottom:14px}
-.search-wrap{position:relative;flex:1;min-width:0}
+.toolbar{display:grid;grid-template-columns:minmax(220px,1fr) repeat(2,minmax(170px,220px));align-items:center;gap:10px;margin-bottom:14px}
+.search-wrap{position:relative;min-width:0}
+.filter{width:100%;height:42px;padding:0 34px 0 12px;border:1px solid var(--line);border-radius:11px;background:#fff;color:var(--ink);font:inherit;font-size:12.5px;outline:none;cursor:pointer}
+.filter:focus{border-color:#81b9b4;box-shadow:0 0 0 3px rgba(13,115,119,.1)}
 .search-wrap svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:#789195;pointer-events:none}
 .search{width:100%;height:42px;padding:0 14px 0 40px;border:1px solid var(--line);border-radius:11px;background:#fff;color:var(--ink);font:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
 .search:focus{border-color:#81b9b4;box-shadow:0 0 0 3px rgba(13,115,119,.1)}
 .count{flex:0 0 auto;padding:8px 11px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--muted);font-size:12px;font-weight:650;white-space:nowrap}
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:12px}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .employee{min-width:0;padding:15px 16px 13px;border:1px solid var(--line);border-radius:15px;background:var(--paper);box-shadow:0 3px 12px rgba(22,58,59,.035);transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
 .employee:hover{transform:translateY(-1px);border-color:#c4dcda;box-shadow:0 7px 20px rgba(22,58,59,.07)}
 .person{display:flex;align-items:center;gap:11px;min-width:0}
@@ -68,7 +70,7 @@ h1{margin:0;font-size:23px;line-height:1.2;letter-spacing:-.45px;font-weight:750
 .empty{grid-column:1/-1;padding:34px 18px;border:1px dashed #cbdcda;border-radius:14px;background:rgba(255,255,255,.72);text-align:center;color:var(--muted)}
 .empty strong{display:block;margin-bottom:4px;color:var(--ink);font-size:14px}
 [hidden]{display:none!important}
-@media(max-width:620px){.page{padding:17px 13px 32px}.header{align-items:flex-start;margin-bottom:16px}.heading{gap:10px}.heading-icon{width:39px;height:39px;flex-basis:39px;border-radius:12px}h1{font-size:20px}.subtitle{font-size:12px}.back{padding:8px 10px;font-size:12px}.cards{grid-template-columns:1fr;gap:10px}.employee{padding:14px}.toolbar{gap:8px}.count{padding:8px 9px;font-size:11px}}
+@media(max-width:760px){.toolbar{grid-template-columns:1fr 1fr}.search-wrap{grid-column:1/-1}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}\n@media(max-width:620px){.page{padding:17px 13px 32px}.header{align-items:flex-start;margin-bottom:16px}.heading{gap:10px}.heading-icon{width:39px;height:39px;flex-basis:39px;border-radius:12px}h1{font-size:20px}.subtitle{font-size:12px}.back{padding:8px 10px;font-size:12px}.toolbar{grid-template-columns:1fr}.search-wrap{grid-column:auto}.cards{grid-template-columns:1fr;gap:10px}.employee{padding:14px}.toolbar{gap:8px}.count{padding:8px 9px;font-size:11px}}
 @media(max-width:390px){.header{flex-wrap:wrap}.back{margin-left:49px;margin-top:-7px}.metrics{grid-template-columns:.7fr 1.15fr 1.15fr}.metric{padding:8px 7px}.metric strong{font-size:12px}}
 @media(prefers-reduced-motion:reduce){.employee,.back,.search{transition:none}}
 </style>
@@ -89,6 +91,8 @@ h1{margin:0;font-size:23px;line-height:1.2;letter-spacing:-.45px;font-weight:750
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
     <input class="search" id="search" type="search" placeholder="Найти сотрудника или объект…" autocomplete="off">
   </label>
+  <select class="filter" id="roleFilter" aria-label="Фильтр по роли"><option value="">Все роли</option></select>
+  <select class="filter" id="objectFilter" aria-label="Фильтр по объекту"><option value="">Все объекты</option></select>
   <div class="count" id="count" aria-live="polite">Загрузка…</div>
 </div>
 <section class="cards" id="cards" aria-live="polite"><div class="empty">Загружаем данные сотрудников…</div></section>
@@ -96,7 +100,7 @@ h1{margin:0;font-size:23px;line-height:1.2;letter-spacing:-.45px;font-weight:750
 <script>
 (function(){
 'use strict';
-const cards=document.getElementById('cards'),search=document.getElementById('search'),count=document.getElementById('count');
+const cards=document.getElementById('cards'),search=document.getElementById('search'),count=document.getElementById('count'),roleFilter=document.getElementById('roleFilter'),objectFilter=document.getElementById('objectFilter');
 const labels={admin:'Администратор',moderator:'Модератор',user:'Специалист СБ'};
 function node(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n;}
 function date(v,withTime){if(!v)return '—';const d=new Date(String(v).replace(' ','T'));if(isNaN(d))return String(v);return d.toLocaleString('ru-RU',withTime?{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}:{day:'2-digit',month:'2-digit',year:'2-digit'});}
@@ -104,8 +108,8 @@ function initials(name){const parts=String(name||'СБ').trim().split(/\s+/).fil
 let all=[];
 function render(){
  const q=search.value.trim().toLocaleLowerCase('ru');
- const rows=all.filter(u=>(String(u.full_name||'')+' '+String(u.username||'')+' '+(u.objects||[]).join(' ')).toLocaleLowerCase('ru').includes(q));
- cards.replaceChildren();count.textContent=q?rows.length+' из '+all.length:all.length+' сотрудников';
+ const selectedRole=roleFilter.value,selectedObject=objectFilter.value;\n const rows=all.filter(u=>(!selectedRole||u.role===selectedRole)&&(!selectedObject||(u.objects||[]).includes(selectedObject))&&(String(u.full_name||'')+' '+String(u.username||'')+' '+(u.objects||[]).join(' ')).toLocaleLowerCase('ru').includes(q));
+ cards.replaceChildren();count.textContent=(q||selectedRole||selectedObject)?rows.length+' из '+all.length:all.length+' сотрудников';
  if(!rows.length){const e=node('div','empty');e.append(node('strong','',q?'Ничего не найдено':'Список пока пуст'),node('span','',q?'Попробуйте изменить поисковый запрос.':'Нет сотрудников для отображения.'));cards.append(e);return;}
  rows.forEach(u=>{
   const card=node('article','employee');card.dataset.userId=String(u.id);
@@ -138,8 +142,8 @@ function render(){
 }
 function refreshPresence(){fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(r=>r.json()).then(d=>{if(!d.ok)return;(d.employees||[]).forEach(u=>{const card=cards.querySelector('[data-user-id="'+CSS.escape(String(u.id))+'"]');if(!card)return;const online=!!u.is_online&&!!u.is_active;const dot=card.querySelector('.state'),tag=card.querySelector('[data-presence="1"]');if(dot){dot.classList.toggle('inactive',!online);dot.title=!u.is_active?'Аккаунт отключён':(online?'Пользователь в сети':'Пользователь не в сети');dot.setAttribute('aria-label',dot.title);}if(tag){tag.classList.toggle('off',!online);tag.textContent=!u.is_active?'Отключён':(online?'В сети':'Не в сети');}});}).catch(function(){});}
 setInterval(refreshPresence,30000);
-search.addEventListener('input',render);
-fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось загрузить сотрудников.');all=d.employees||[];if(d.user&&d.user.role==='user'){document.getElementById('heading').textContent='Моя карточка';document.getElementById('subtitle').textContent='Ваши отчёты и история активности';document.getElementById('toolbar').hidden=true;}render();}).catch(e=>{count.textContent='Ошибка';cards.replaceChildren(node('div','empty',e.message));});
+search.addEventListener('input',render);roleFilter.addEventListener('change',render);objectFilter.addEventListener('change',render);
+fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось загрузить сотрудников.');all=d.employees||[];\n const roleOrder=['admin','moderator','user'];const roles=[...new Set(all.map(u=>u.role).filter(Boolean))].sort((a,b)=>roleOrder.indexOf(a)-roleOrder.indexOf(b));roles.forEach(role=>roleFilter.append(new Option(labels[role]||role,role)));\n const objects=[...new Set(all.flatMap(u=>u.objects||[]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));objects.forEach(name=>objectFilter.append(new Option(name,name)));\n if(d.user&&d.user.role==='user'){document.getElementById('heading').textContent='Моя карточка';document.getElementById('subtitle').textContent='Ваши отчёты и история активности';document.getElementById('toolbar').hidden=true;}render();}).catch(e=>{count.textContent='Ошибка';cards.replaceChildren(node('div','empty',e.message));});
 })();
 </script>
 <script>
