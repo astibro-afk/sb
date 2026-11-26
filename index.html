@@ -1991,7 +1991,6 @@ body { background: #F3F8F7; }
     <div class="summary-actions" style="justify-content:flex-start; flex-wrap:wrap; margin-bottom:10px">
       <button class="btn btn-primary" id="buildSummary">Собрать сводный отчёт</button>
       <button class="btn btn-ghost" id="btnSumExcel">Сводная в Excel</button>
-      <button class="btn btn-outline" id="syncFolder">Обновить из папки</button>
     </div>
     <div class="archive-stats" id="archiveStats"></div>
     <div class="archive-list" id="archiveList"></div>
@@ -2233,106 +2232,7 @@ function safeFname(x) { return String(x || '').replace(/[\\\\/:*?"<>|]/g, '_').r
     return gone;
   }
 
-  async function syncAll(silent) {
-    if (!window.showDirectoryPicker) {
-      if (!silent) alert('Выбор папки не поддерживается этим браузером. Откройте файл в актуальном Chrome или Edge.');
-      return -1;
-    }
-    var root = null;
-    try { root = await chooseOrReuseFolder(); } catch (e) { root = null; }
-    if (!root) {
-      if (!silent) alert('Не удалось получить доступ к папке. Проверьте разрешения браузера.');
-      return -1;
-    }
 
-    var a = getArchive(), added = 0, seen = {};
-
-    // 1. Загрузка новых записей из подпапки «Архив_СБ»
-    var dir = null;
-    try { dir = await root.getDirectoryHandle('Архив_СБ'); } catch (e) { dir = null; }
-    if (dir) {
-      for (var i = 0; i < a.length; i++) {
-        var dt = (a[i].data && a[i].data.b0_date) || '';
-        var ob = (a[i].data && a[i].data.b0_to) || '';
-        var kk = dt + '|' + ob;
-        if (!seen[kk] || a[i].t > seen[kk]) seen[kk] = a[i].t;
-      }
-      try {
-        for await (var entry of dir.values()) {
-          if (entry.kind !== 'file' || !/\.json$/i.test(entry.name)) continue;
-          try {
-            var f = await entry.getFile();
-            var rec = JSON.parse(await f.text());
-            if (!rec || !rec.data || !rec.data.b0_date) continue;
-            var kk2 = rec.data.b0_date + '|' + (rec.data.b0_to || '');
-            if (seen[kk2] && rec.t <= seen[kk2]) continue;
-            a.push(rec); seen[kk2] = rec.t; added++;
-          } catch (e) { console.warn('Пропущен файл архива:', entry.name, e); }
-        }
-      } catch (e) { console.warn('Не удалось прочитать содержимое Архив_СБ', e); }
-    } else if (!silent) {
-      alert('В выбранной папке нет подпапки «Архив_СБ» — новые записи загрузить неоткуда. Продолжаю проверку имеющихся записей архива.');
-    }
-    if (added) {
-      a.sort(function(x, y) { return (y.t || 0) - (x.t || 0); });
-      // Архив больше не обрезается по количеству записей.
-    }
-
-    // Тихий режим (перед сбором сводной): только загрузка новых записей,
-    // проверки и удаления выполняются только по нажатию кнопки.
-    if (silent) {
-      if (added) { setArchive(a); await serverStore.flush(); }
-      return added;
-    }
-
-    // 2. Проверка каждой записи: есть ли Word-файл и JSON-запись на диске.
-    var checked = a.length;
-    var removed = 0, missingWord = 0, missingJson = 0, okCount = 0;
-    var keep = [];
-    for (var j = 0; j < a.length; j++) {
-      var it = a[j];
-      var st = null;
-      try { st = await checkRecordFiles(root, it); }
-      catch (e) { console.warn('Не удалось проверить файлы записи', e); keep.push(it); continue; }
-      if (!st.word) { it.fstatus = 'missing-word'; missingWord++; }
-      else { it.fstatus = 'ok'; okCount++; }
-      // Отсутствие локального файла не удаляет отчет из серверного архива.
-      keep.push(it);
-    }
-    setArchive(keep);
-    await serverStore.flush();
-
-    // 3. Поиск Word-файлов вне архива (созданы вручную или запись удалена)
-    var expected = {};
-    for (var m2 = 0; m2 < keep.length; m2++) expected[wordFnameFor(keep[m2].data || {})] = true;
-    var orphan = 0;
-    try {
-      for await (var ent of root.values()) {
-        if (ent.kind !== 'directory' || ent.name === 'Архив_СБ' || ent.name === 'Сводные') continue;
-        try {
-          for await (var sub of ent.values()) {
-            if (sub.kind !== 'directory') continue;
-            try {
-              for await (var fl of sub.values()) {
-                if (fl.kind === 'file' && /\.doc$/i.test(fl.name) && !expected[fl.name]) orphan++;
-              }
-            } catch (e) {}
-          }
-        } catch (e) {}
-      }
-    } catch (e) { console.warn('Не удалось просканировать папку', e); }
-
-    renderArchive();
-    $('#archiveOverlay').classList.add('show');
-    var parts = ['Проверено записей: ' + checked];
-    if (added) parts.push('загружено новых: ' + added);
-    if (okCount) parts.push('файлы на месте: ' + okCount);
-    if (missingWord) parts.push('Word-файл не найден: ' + missingWord);
-    if (orphan) parts.push('Word-файлов вне архива: ' + orphan);
-    alert('Проверка локальных файлов завершена. ' + parts.join('; ') + '. Серверный архив сохранен.');
-    return added;
-  }
-  // ================= КОНЕЦ БЛОКА ПРОВЕРКИ ФАЙЛОВ (v1.84) =================
 
 
   function $(s) { return document.querySelector(s); }
@@ -4117,7 +4017,6 @@ function monthRecords(month, object) {
     var period = selectedSummaryPeriod();
     if (!period) { alert('Выберите месяц или неделю для сводной.'); return; }
     var object = $('#sumObject').value;
-    try { await syncAll(true); } catch (e) { console.warn('Синхронизация перед сбором сводной не удалась', e); }
     var recs = periodRecords(period, object);
     if (!recs.length) {
       alert('За ' + period.label + (object ? ' (объект: ' + object + ')' : '') + ' записей в архиве нет.\nСначала скачайте дневные отчеты или сохраните их в архив.');
@@ -4388,7 +4287,6 @@ function monthRecords(month, object) {
       renderArchiveStats();
     });
     $('#sumObject').addEventListener('change', renderArchiveStats);
-    $('#syncFolder').addEventListener('click', function() { syncAll(false); });
     $('#btnTest').addEventListener('click', testFill);
 
     $$('.list-edit-btn').forEach(function(b) {
@@ -4678,7 +4576,6 @@ function monthRecords(month, object) {
     var period = selectedSummaryPeriod();
     if (!period) { alert('Выберите месяц или неделю для сводной.'); return; }
     var object = $('#sumObject').value;
-    try { await syncAll(true); } catch (e0) { console.warn('Синхронизация перед сводной Excel не удалась', e0); }
     var recs = periodRecords(period, object);
     if (!recs.length) {
       alert('За ' + period.label + (object ? ' (объект: ' + object + ')' : '') + ' записей в архиве нет.');
