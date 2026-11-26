@@ -2023,6 +2023,7 @@ body { background: #F3F8F7; }
 </button>
 
 
+<script src="report-document.js"></script>
 <script>
   /* Оптимизированная сборка 1.2.2: исправления архива/аналитики/восстановления; ускорение ввода, прокрутки и XLSX. */
 (function() {
@@ -2527,102 +2528,12 @@ function safeFname(x) { return String(x || '').replace(/[\\\\/:*?"<>|]/g, '_').r
   }
 
   function buildDoc() {
-    var secs = [];
-    function sec(t, arr) {
-      var lines = [];
-      for (var i = 0; i < arr.length; i++) {
-        var it = arr[i];
-        if (!it) continue;
-        if (it.join) { for (var k2 = 0; k2 < it.length; k2++) if (it[k2]) lines.push(it[k2]); }
-        else lines.push(it);
-      }
-      secs.push({ t: t, lines: lines });
-    }
-
-    sec('1. Проверка кассовых операций (удаление позиций из чека, удаление чека, возвраты, низкий вес товара)', [
-      checkPair('Отмена позиций в чеке', 'b1_pos_checks', 'b1_pos_qty', 'b1_pos_sum'),
-      checkPair('Анулирование чека в отсутствии администратора', 'b1_chek_checks', 'b1_chek_qty', 'b1_chek_sum'),
-      checkPair('Фиктивные возвраты', 'b1_ret_checks', 'b1_ret_qty', 'b1_ret_sum'),
-      checkPair('Продажа товара с заниженным весом', 'b1_weight_checks', 'b1_weight_qty', 'b1_weight_sum')
-    ]);
-
-    sec('2. Работа с FaceID, реагирование, пополнение базы данных', [
-      single('Срабатываний', 'b2_triggers', 'шт.'),
-      single('Отработано (реагирование)', 'b2_worked', 'шт.'),
-      single('Пополнено базы данных', 'b2_db', 'чел.')
-    ]);
-
-    sec('3. Контроль за перемещениями ТМЦ (внутри объекта, между объектами)', [
-      checkPair('Перемещения внутри объекта', 'b3_in_checks', 'b3_in_qty', 'b3_in_sum'),
-      checkPair('Перемещения между объектами', 'b3_between_checks', 'b3_between_qty', 'b3_between_sum')
-    ]);
-
-    sec('4. Контрольные проверки проведённых инвентаризаций операционной службой', [
-      checkPair('Контрольные проверки инвентаризаций', 'b4_checks', 'b4_dev_qty', 'b4_dev_sum', 'расхождений'),
-      dynline('Инвентаризация', 'b4_inv')
-    ]);
-
-    sec('5. Выгрузка виртуальных остатков, предоставление информации операционной службе для пересчёта (СЗ на ДГМ, копия Директору Группы)', [
-      dateline('Дата выгрузки', fdate(v('b5_date'))),
-      pair('Выгружено виртуальных остатков', 'b5_positions', 'b5_sum', 'поз.', true),
-      dateline('Служебная записка на ДГМ от', fdate(v('b5_sz_date'))),
-      dateline('Копия Директору Группы', v('b5_copy'))
-    ]);
-
-    sec('6. Проверка качества поставки ТМЦ с РЦ (сырьё для производства, сыры, колбасы, мясо и т.д. — качество, количество, СГ)', [
-      checkMulti('b6_checks', [
-        ['по качеству', 'b6_q_qty', 'b6_q_sum'],
-        ['по количеству', 'b6_qty_qty', 'b6_qty_sum'],
-        ['по срокам годности', 'b6_sg_qty', 'b6_sg_sum']
-      ]),
-      dynline('Проверка поставки', 'b6_sup')
-    ]);
-
-    sec('7. Проверка качества поставки ТМЦ от прямых поставщиков', [
-      checkMulti('b7_checks', [
-        ['по качеству', 'b7_q_qty', 'b7_q_sum'],
-        ['по количеству', 'b7_qty_qty', 'b7_qty_sum'],
-        ['по срокам годности', 'b7_sg_qty', 'b7_sg_sum']
-      ]),
-      dynline('Проверка поставки', 'b7_sup')
-    ]);
-
-    sec('8. Проверка качества списания ТМЦ', [
-      checkMulti('b8_checks', [['нарушений', 'b8_qty', 'b8_sum']]),
-      dynline('Проверка списаний', 'b8_sp', true)
-    ]);
-
-    sec('9. Количество служебных записок по выявленным нарушениям на ДГМ', [
-      single('Количество служебных записок', 'b9_count', 'шт.')
-    ]);
-
-    sec('10. Хищения (уголовные, административные)', [
-      pair('Уголовные преступления', 'b10_crim_qty', 'b10_crim_sum', 'шт.'),
-      pair('Административные правонарушения', 'b10_adm_qty', 'b10_adm_sum', 'шт.'),
-      pair('Разбор на месте', 'b10_local_qty', 'b10_local_sum', 'шт.')
-    ]);
-
-    sec('11. Работа ООО ЧОП «Артакс+»', chopText());
-
-    var cb = [['1', 'b1_comment'], ['2', 'b2_comment'], ['3', 'b3_comment'], ['4', 'b4_comment'], ['5', 'b5_comment'], ['6', 'b6_comment'], ['7', 'b7_comment'], ['8', 'b8_comment'], ['9', 'b9_comment'], ['10', 'b10_comment'], ['11', 'b11_comment']];
-    for (var ci = 0; ci < cb.length; ci++) {
-      var ct = v(cb[ci][1]);
-      if (ct) {
-        var nl = String(ct).split(/\r?\n/);
-        for (var ni = 0; ni < nl.length; ni++) { if (nl[ni].trim()) (secs[ci].note = secs[ci].note || []).push(nl[ni].trim()); }
-      }
-    }
-
-    return {
-      to: v('b0_to'),
-      fio: v('b0_fio'),
-      date: v('b0_date'),
-      secs: secs,
-      qualityIssues: validateReport()
-    };
+    var data = {};
+    $$('[data-field]').forEach(function(el) { data[el.id] = el.value; });
+    return window.SBDocument.build(data, dynData);
   }
 
-  function docCss() {
+    function docCss() {
     return '' +
       '@page{size:A4;margin:1.5cm 1.6cm 1.5cm 1.5cm} ' +
       'html,body{margin:0;padding:0;background:#fff} ' +
@@ -2827,46 +2738,11 @@ function safeFname(x) { return String(x || '').replace(/[\\\\/:*?"<>|]/g, '_').r
     return flat;
   }
 
-  function docHtml(d) {
-    ensureDocCss();
-    var out = '<div class="doc-wrap">';
-    out += docMasthead('ЕЖЕДНЕВНЫЙ ОТЧЕТ');
-    out += '<h1 style="margin:0 0 4pt 0;font-family:Calibri,Arial,sans-serif;font-size:17pt;line-height:1.15;font-weight:bold;color:#000000;text-align:left;page-break-after:avoid;">Отчёт по итогам контрольных мероприятий</h1>';
-    out += '<p style="margin:0 0 15pt 0;font-family:Calibri,Arial,sans-serif;font-size:10pt;color:#000000;text-align:left;">' + (d.date ? 'Ежедневный отчет за ' + esc(fdate(d.date)) : 'Ежедневный отчет') + '</p>';
-    var meta = [];
-    if (d.to) meta.push(['Объект (ТО)', esc(d.to)]);
-    if (d.fio) meta.push(['Составитель', esc(d.fio)]);
-    if (d.date) meta.push(['Дата', esc(fdate(d.date))]);
-    if (meta.length) out += docMetaTable(meta);
-    for (var i = 0; i < d.secs.length; i++) {
-      var sec = d.secs[i];
-      if (!sec.lines.length && !(sec.note && sec.note.length)) continue;
-      out += docSection(sec.t, sec.lines, sec.note);
-    }
-    // Не повторяем по второму кругу показатели разделов: выводим только общий итог.
-    var dayTotals = sumDetailTotals(sumDetailData(null));
-    if (dayTotals) {
-      out += '<div class="doc-totals" style="margin:19pt 0 0 0;padding:9pt 0 0 0;border-top:.9pt solid #555555;page-break-inside:avoid;">';
-      out += '<p class="doc-totals-title" style="margin:0 0 8pt 0;font-family:Arial,Helvetica,sans-serif;font-size:11pt;line-height:1.2;font-weight:bold;color:#000000;">ИТОГО ЗА ДЕНЬ</p>';
-      out += '<p class="doc-total-line" style="margin:4pt 0 4pt 11pt;font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.35;color:#000000;"><strong>Проверено:</strong> ' + num(dayTotals.p) + '</p>';
-      out += '<p class="doc-total-line" style="margin:4pt 0 4pt 11pt;font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.35;color:#000000;"><strong>Выявлено нарушений:</strong> ' + num(dayTotals.v) + '</p>';
-      out += '<p class="doc-total-line" style="margin:4pt 0 4pt 11pt;font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.35;color:#000000;"><strong>Сумма нарушений и расхождений:</strong> ' + num(dayTotals.s) + ' руб.</p>';
-      out += '</div>';
-    }
-    out += '<div class="doc-sign"><p><strong>Отчёт составил:</strong> ' + (d.fio ? esc(d.fio) : '_______________________') + '</p><p><strong>Подпись:</strong> ____________________</p></div>';
-    return out + '</div>';
-  }
+  function docHtml(d) { return window.SBDocument.docHtml(d); }
 
-  function wordHtml(d) {
-    var body = docHtml(d);
-    var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">' +
-      '<head><meta charset="utf-8"><title>Отчет по итогам контрольных мероприятий</title>' +
-      '<style>' + docCss() + '<\/style></head><body>' + body +
-      '</body></ht' + 'ml>';
-    return html;
-  }
+    function wordHtml(d) { return window.SBDocument.wordHtml(d); }
 
-  // ---------- Прогресс ----------
+    // ---------- Прогресс ----------
   var progressCache = null;
   function getProgressCache() {
     if (progressCache) return progressCache;
