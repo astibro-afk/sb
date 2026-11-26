@@ -1493,6 +1493,16 @@ body { background: #F3F8F7; }
 
 </style>
 
+
+<style id="validation-and-draft-ui">
+.live-validation{margin-top:12px;padding:9px 12px;border-radius:9px;font-size:12px;line-height:1.45;background:#f3f7f7;color:#526d70;border:1px solid #e1ecea}
+.live-validation.has-issues{background:#fff8ed;border-color:#f1dfbd;color:#805b20}
+.live-validation.is-ok{background:#eef8f3;border-color:#d6ebdf;color:#246b4d}
+.live-validation summary{cursor:pointer;font-weight:700;outline:none}
+.live-validation ul{margin:8px 0 6px 18px;padding:0}.live-validation li{margin:3px 0}
+.validation-invalid{border-color:#d95b45!important;box-shadow:0 0 0 3px rgba(217,91,69,.10)!important;background:#fffafa!important}
+@media(max-width:680px){.live-validation{font-size:11px;padding:8px 10px}}
+</style>
 </head>
 <body>
 <div class="bg-blob"></div>
@@ -1544,6 +1554,7 @@ body { background: #F3F8F7; }
       <span class="progress-value" id="progressValue">0%</span>
     </div>
     <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="live-validation" id="liveValidation" aria-live="polite"></div>
   </div>
 </div>
 
@@ -2401,6 +2412,28 @@ function safeFname(x) { return String(x || '').replace(/[\\\\/:*?"<>|]/g, '_').r
     if (v('b11_uch') === 'none' && !v('b11_uch_fio')) add('Раздел 11: выбрано «УЧО отсутствует», но не указано ФИО сотрудника ЧОО.');
     if (v('b11_instr') === 'other' && !v('b11_instr_topic')) add('Раздел 11: выбрана «Другая тема инструктажа», но тема не заполнена.');
     return issues;
+  }
+
+  var validationTouched = false;
+  function updateValidationPanel() {
+    var box = $('#liveValidation');
+    if (!box || !validationTouched) return;
+    var issues = validateReport();
+    var required = ['b0_to','b0_fio','b0_date'];
+    required.forEach(function(id) { var el = document.getElementById(id); if (el) el.classList.toggle('validation-invalid', !String(el.value || '').trim()); });
+    $('input[type="number"][data-field]').forEach(function(el) {
+      var raw = String(el.value || '').trim(), n = Number(raw.replace(',', '.'));
+      var label = ((el.closest('.form-group') || el.parentElement).querySelector('label') || {}).textContent || '';
+      var invalid = raw !== '' && (!isFinite(n) || n < 0 || (/(количество|проверок|срабатываний|позиций|записок|пополнено|шт\\.|чел\\.|поз\\.|ед\\.)/i.test(label) && n % 1 !== 0));
+      el.classList.toggle('validation-invalid', invalid);
+    });
+    if (issues.length) {
+      box.className = 'live-validation has-issues';
+      box.innerHTML = '<details><summary>Проверка данных: замечаний — ' + issues.length + '</summary><ul>' + issues.map(function(issue) { return '<li>' + esc(issue) + '</li>'; }).join('') + '</ul><span>Проверьте значения перед сохранением или скачиванием отчёта.</span></details>';
+    } else {
+      box.className = 'live-validation is-ok';
+      box.textContent = 'Проверка данных пройдена — замечаний нет.';
+    }
   }
 
   // ---------- Блок 11: работа ООО ЧОП «Артакс+» ----------
@@ -3873,6 +3906,20 @@ function monthRecords(month, object) {
   // ---------- Инициализация ----------
   async function init() {
     await serverStore.init();
+    var savedDraft = {};
+    var savedDynDraft = {};
+    try { savedDraft = JSON.parse(serverStore.getItem(KEY) || '{}') || {}; } catch (e) {}
+    try { savedDynDraft = JSON.parse(serverStore.getItem(KEY + '__dyn') || '{}') || {}; } catch (e) {}
+    var hasDraft = Object.keys(savedDraft).some(function(k) { return String(savedDraft[k] == null ? '' : savedDraft[k]).trim() !== ''; }) || Object.keys(savedDynDraft).some(function(k) { return Array.isArray(savedDynDraft[k]) && savedDynDraft[k].length > 0; });
+    if (hasDraft) {
+      var resumeDraft = confirm('Найден незавершённый черновик отчёта, сохранённый ранее в этом браузере.\n\nПродолжить заполнение черновика?\n\nНажмите «Отмена», чтобы удалить черновик и начать новый отчёт.');
+      if (!resumeDraft) {
+        await serverStore.removeItem(KEY);
+        await serverStore.removeItem(KEY + '__dyn');
+      } else {
+        validationTouched = true;
+      }
+    }
     loadAll();
     loadDyn();
     initLists();
@@ -3892,11 +3939,15 @@ function monthRecords(month, object) {
     $$('[data-field]').forEach(function(el) {
       el.addEventListener('input', function() {
         updateProgress();
+        validationTouched = true;
+        updateValidationPanel();
         clearTimeout(window._saveT);
         window._saveT = setTimeout(saveAll, 700);
       });
       el.addEventListener('change', function() {
         updateProgress();
+        validationTouched = true;
+        updateValidationPanel();
         clearTimeout(window._saveT);
         window._saveT = setTimeout(saveAll, 250);
       });
@@ -3965,6 +4016,7 @@ function monthRecords(month, object) {
     });
 
     updateProgress();
+    if (validationTouched) updateValidationPanel();
   }
 
 
