@@ -156,3 +156,12 @@
 .app-header,.app-header *,.sb-topbar,.sb-topbar *,.sb-nav,.sb-nav *{
   font-family:Inter,Arial,sans-serif!important;
 }
+
+
+/* Скрывать счётчик уведомлений, когда он помечен как hidden (в том числе при нуле) */
+.sb-site-notice span[hidden],
+.sb-header-btn #notificationBadge[hidden],
+.topbar .header-right .tag[hidden],
+.app-header #notificationBadge[hidden]{
+  display:none!important;
+}
