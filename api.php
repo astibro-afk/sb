@@ -486,12 +486,12 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 // Активация учётной записи по одноразовой ссылке (без авторизованной сессии).
 if ($action === 'activate_info' && $method === 'GET') {
     $token = (string)($_GET['token'] ?? '');
-    if (!preg_match('/^[a-f0-9]{64}$/', $token)) reply(400, ['ok' => false, 'error' => 'Некорректная ссылка активации.']);
+    if (!preg_match('/^[a-f0-9]{64}$/', $token)) reply(400, ['ok' => false, 'error' => 'Некорректная одноразовая ссылка.']);
     $pdo = db($cfg);
     $st = $pdo->prepare('SELECT u.username, u.full_name, t.expires_at FROM sb_user_activation_tokens t JOIN sb_users u ON u.id=t.user_id WHERE t.token_hash=:h AND t.expires_at > NOW() LIMIT 1');
     $st->execute([':h' => hash('sha256', $token)]);
     $row = $st->fetch();
-    if (!$row) reply(404, ['ok' => false, 'error' => 'Ссылка недействительна или срок её действия истёк. Обратитесь к модератору за новой ссылкой.']);
+    if (!$row) reply(404, ['ok' => false, 'error' => 'Одноразовая ссылка недействительна или срок её действия истёк. Обратитесь к администратору за новой ссылкой.']);
     reply(200, ['ok' => true, 'username' => $row['username'], 'full_name' => $row['full_name']]);
 }
 if ($action === 'activate_complete' && $method === 'POST') {
@@ -506,7 +506,7 @@ if ($action === 'activate_complete' && $method === 'POST') {
         $st = $pdo->prepare('SELECT user_id FROM sb_user_activation_tokens WHERE token_hash=:h AND expires_at > NOW() LIMIT 1 FOR UPDATE');
         $st->execute([':h' => hash('sha256', $token)]);
         $userId = $st->fetchColumn();
-        if (!$userId) { $pdo->rollBack(); reply(404, ['ok' => false, 'error' => 'Ссылка недействительна или срок её действия истёк.']); }
+        if (!$userId) { $pdo->rollBack(); reply(404, ['ok' => false, 'error' => 'Одноразовая ссылка недействительна или срок её действия истёк.']); }
         $st = $pdo->prepare('UPDATE sb_users SET password_hash=:p, is_active=1 WHERE id=:id');
         $st->execute([':p' => password_hash($password, PASSWORD_DEFAULT), ':id' => (int)$userId]);
         if ($st->rowCount() !== 1) { $pdo->rollBack(); reply(409, ['ok' => false, 'error' => 'Учётная запись уже активирована или отключена.']); }
@@ -595,10 +595,11 @@ if ($action === 'admin_password_reset' && $method === 'POST') {
     check_csrf($body);
     $targetId = (int)($body['user_id'] ?? 0);
     if ($targetId < 1) reply(400, ['ok' => false, 'error' => 'Не выбран пользователь.']);
-    $find = $pdo->prepare('SELECT id, username, full_name FROM sb_users WHERE id = :id LIMIT 1');
+    $find = $pdo->prepare('SELECT id, username, full_name, is_active FROM sb_users WHERE id = :id LIMIT 1');
     $find->execute([':id' => $targetId]);
     $target = $find->fetch();
     if (!$target) reply(404, ['ok' => false, 'error' => 'Пользователь не найден.']);
+    if (!(int)$target['is_active']) reply(409, ['ok' => false, 'error' => 'Сначала включите учётную запись, затем создайте ссылку для смены пароля.']);
     $token = bin2hex(random_bytes(32));
     $pdo->prepare('DELETE FROM sb_user_activation_tokens WHERE user_id = :id')->execute([':id' => $targetId]);
     $save = $pdo->prepare('INSERT INTO sb_user_activation_tokens (user_id, token_hash, expires_at) VALUES (:id, :hash, DATE_ADD(NOW(), INTERVAL 48 HOUR))');
