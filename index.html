@@ -26,8 +26,23 @@
 <body>
 <header class="topbar"><div class="top-inner">
 <a class="brand" href="index.html"><div class="logo">СБ</div><div><h1>Служба безопасности</h1><p>Группа БФ Волгоград 1</p></div></a>
-<div class="header-right"><div class="user-chip" id="userChip" hidden><span class="user-name" id="userName"></span><span class="user-meta" id="userMeta"></span></div><a class="btn" href="add-user.php">Добавить пользователя</a><a class="btn" id="adminManageLink" href="users.php" hidden>Управление</a><a class="btn" href="notifications.php">Уведомления <span class="tag" id="notificationBadge" hidden>0</span></a><button class="btn" id="logout" type="button">Выход</button></div>
+<div class="header-right"><div class="user-chip" id="userChip" hidden><span class="user-name" id="userName"></span><span class="user-meta" id="userMeta"></span></div><a class="btn" id="sbHeaderAddUser" href="add-user.php" hidden>Добавить пользователя</a><a class="btn" id="adminManageLink" href="users.php" hidden>Управление</a><a class="btn" href="notifications.php">Уведомления <span class="tag" id="notificationBadge" hidden>0</span></a><button class="btn" id="logout" type="button">Выход</button></div>
 </div><nav class="nav" aria-label="Основная навигация"><div class="nav-inner"><a class="active" href="index.html">Главная</a><a href="reports.php">Отчёты</a><a href="tasks.php">Задачи</a><a href="employees.php">Сотрудники</a><a href="notifications.php">Уведомления</a></div></nav></header>
+<script>
+(function(){
+  'use strict';
+  var add=document.getElementById('sbHeaderAddUser')||document.getElementById('btnHeaderAddUser');
+  var manage=document.getElementById('adminManageLink')||document.getElementById('sbHeaderManage')||document.getElementById('btnHeaderManage');
+  fetch('/api.php?action=status',{credentials:'same-origin',cache:'no-store'})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var role=d&&d.authenticated&&d.user?d.user.role:'';
+      if(add)add.hidden=!(role==='admin'||role==='moderator');
+      if(manage)manage.hidden=role!=='admin';
+    })
+    .catch(function(){if(add)add.hidden=true;if(manage)manage.hidden=true;});
+})();
+</script>
 <main class="page">
 <section class="welcome"><div><div class="eyebrow" id="roleLabel">Персональная панель</div><h2 id="greeting">Добро пожаловать</h2><p id="welcomeText">Загружаем вашу сводку…</p></div><div class="actions"><a class="btn primary" href="reports/daily-report.php">＋ Ежедневный отчёт</a><a class="btn" href="reports.php">Открыть отчёты</a></div></section>
 <section class="kpis" id="kpis"><div class="kpi"><div class="kpi-label">Загрузка</div><div class="kpi-value">—</div><div class="kpi-note">Получаем данные</div></div><div class="kpi"><div class="kpi-label">Загрузка</div><div class="kpi-value">—</div><div class="kpi-note">Получаем данные</div></div><div class="kpi"><div class="kpi-label">Загрузка</div><div class="kpi-value">—</div><div class="kpi-note">Получаем данные</div></div><div class="kpi"><div class="kpi-label">Загрузка</div><div class="kpi-value">—</div><div class="kpi-note">Получаем данные</div></div></section>
