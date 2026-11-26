@@ -463,13 +463,12 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
 
 </style>
 <link rel="stylesheet" href="site-theme.css">
+<link rel="stylesheet" href="site-header.css">
 </head>
 <body>
+<header class="sb-site-header"><div class="sb-site-top"><a class="sb-site-brand" href="/index.html"><span class="sb-site-logo">СБ</span><span class="sb-site-brand-text"><strong>Служба безопасности</strong><small>Группа БФ Волгоград 1</small></span></a><div class="sb-site-actions"><div class="sb-site-user" id="sbHeaderUser" hidden><strong id="sbHeaderName"></strong><small id="sbHeaderMeta"></small></div><a class="sb-site-notice" href="/notifications.php">Уведомления <span id="sbHeaderBadge" hidden>0</span></a><a class="sb-site-manage" id="sbHeaderManage" href="/users.php" hidden>Управление</a><button class="sb-site-logout" id="sbHeaderLogout" type="button">Выход</button></div></div><nav class="sb-site-nav" aria-label="Основная навигация"><div class="sb-site-nav-inner"><a href="/index.html">Главная</a><a href="/reports.php">Отчёты</a><a href="/tasks.php">Задачи</a><a href="/employees.php">Сотрудники</a><a href="/notifications.php">Уведомления</a></div></nav></header>
 <div class="page">
-<header class="topbar">
-  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M9 13h6M9 17h6"></path></svg></div><div><h1>Управление</h1><div class="subtitle">Пользователи, роли и торговые объекты</div></div></div>
-  <div class="top-actions"><a class="btn secondary" href="index.html">← <span>К отчетам</span></a></div>
-</header>
+<div class="sb-page-title"><div><h1>Управление</h1><p>Пользователи, роли и торговые объекты</p></div></div>
 
 <div class="summary">
   <div class="summary-card"><div class="summary-icon">♙</div><div><div class="summary-value"><?= count($users) ?></div><div class="summary-label">Всего пользователей</div></div></div>
@@ -616,5 +615,6 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
 </script>
 <script>
 (function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,30000);document.addEventListener('visibilitychange',ping);})();
-</script></body>
+</script><script src="site-header.js"></script>
+</body>
 </html>

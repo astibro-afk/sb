@@ -1504,6 +1504,7 @@ body { background: #F3F8F7; }
 @media(max-width:680px){.live-validation{font-size:11px;padding:8px 10px}}
 </style>
 <link rel="stylesheet" href="../site-theme.css">
+<link rel="stylesheet" href="../site-header.css">
 </head>
 <body>
 <div class="bg-blob"></div>
@@ -1518,8 +1519,8 @@ body { background: #F3F8F7; }
         <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>
       </div>
       <div class="brand-text">
-        <h1>Ежедневный отчет СБ</h1>
-        <span>Группа БФ Волгоград 1</span>
+        <h1>Служба безопасности</h1>
+        <span>Группа БФ Волгоград 1 · Ежедневный отчёт</span>
       </div>
     </div>
     <div class="header-actions">
@@ -1544,6 +1545,7 @@ body { background: #F3F8F7; }
     </div>
   </div>
 </header>
+<header class="sb-site-header"><div class="sb-site-top"><a class="sb-site-brand" href="../index.html"><span class="sb-site-logo">СБ</span><span class="sb-site-brand-text"><strong>Служба безопасности</strong><small>Группа БФ Волгоград 1</small></span></a><div class="sb-site-actions"><div class="sb-site-user" id="sbHeaderUser" hidden><strong id="sbHeaderName"></strong><small id="sbHeaderMeta"></small></div><a class="sb-site-notice" href="../notifications.php">Уведомления <span id="sbHeaderBadge" hidden>0</span></a><a class="sb-site-manage" id="sbHeaderManage" href="../users.php" hidden>Управление</a><button class="sb-site-logout" id="sbHeaderLogout" type="button">Выход</button></div></div><nav class="sb-site-nav" aria-label="Основная навигация"><div class="sb-site-nav-inner"><a href="../index.html">Главная</a><a class="active" href="../reports.php">Отчёты</a><a href="../tasks.php">Задачи</a><a href="../employees.php">Сотрудники</a><a href="../notifications.php">Уведомления</a></div></nav></header>
 
 <div class="progress-wrap">
   <div class="progress-card">

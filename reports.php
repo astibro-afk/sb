@@ -31,9 +31,11 @@ button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inte
 @media(max-width:600px){.preview-modal{padding:0}.preview-dialog{height:100vh;border-radius:0}.preview-dialog-head{padding:12px}.preview-dialog-head h2{font-size:15px}}
 </style>
 <link rel="stylesheet" href="site-theme.css">
+<link rel="stylesheet" href="site-header.css">
 </head>
 <body>
-<header><div class="head"><div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M9 13h6M9 17h6"></path></svg></div><div><h1>Отчёты сотрудников</h1><small>Архив ежедневных отчётов</small></div></div><a class="linkbtn outline" href="index.html">К ежедневному отчёту</a></div></header>
+<header class="sb-site-header"><div class="sb-site-top"><a class="sb-site-brand" href="/index.html"><span class="sb-site-logo">СБ</span><span class="sb-site-brand-text"><strong>Служба безопасности</strong><small>Группа БФ Волгоград 1</small></span></a><div class="sb-site-actions"><div class="sb-site-user" id="sbHeaderUser" hidden><strong id="sbHeaderName"></strong><small id="sbHeaderMeta"></small></div><a class="sb-site-notice" href="/notifications.php">Уведомления <span id="sbHeaderBadge" hidden>0</span></a><a class="sb-site-manage" id="sbHeaderManage" href="/users.php" hidden>Управление</a><button class="sb-site-logout" id="sbHeaderLogout" type="button">Выход</button></div></div><nav class="sb-site-nav" aria-label="Основная навигация"><div class="sb-site-nav-inner"><a href="/index.html">Главная</a><a class="active" href="/reports.php">Отчёты</a><a href="/tasks.php">Задачи</a><a href="/employees.php">Сотрудники</a><a href="/notifications.php">Уведомления</a></div></nav></header>
+<div class="sb-page-title"><div><h1>Отчёты сотрудников</h1><p>Архив ежедневных отчётов</p></div></div>
 <main>
 <section class="panel">
 <h2>Поиск отчётов</h2><p class="sub">Выберите период и при необходимости ограничьте список объектом или сотрудником.</p>
@@ -133,7 +135,8 @@ function openRecord(key){
   });
   const documentData=window.SBDocument.build(source,selected.dyn||{});
   const pageCss='.page{width:210mm;min-height:297mm;background:#fff;margin:24px auto;padding:20mm 25mm 25mm 30mm;box-shadow:0 8px 32px rgba(0,0,0,.12);font-family:"Times New Roman",Times,serif;font-size:12pt;line-height:1.5;color:#000}.page h1{font-size:12pt;font-weight:bold;text-align:center;margin:0 0 16pt;line-height:1.35}.page p{margin:0 0 5pt;text-indent:1.25cm;text-align:justify}.page p.no-indent{text-indent:0}.page strong{font-weight:bold}.page .ph{color:#000;font-weight:bold}.page .sec-title{margin-top:10pt}@media(max-width:850px){.page{width:100%;min-height:0;margin:0;padding:28px 22px;box-shadow:none}}';
-  const html='<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;padding:0;background:#eef2f2}'+pageCss+window.SBDocument.css()+'</style></head><body><div class="page">'+window.SBDocument.docHtml(documentData)+'</div></body></html>';
+  const html='<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;padding:0;background:#eef2f2}'+pageCss+window.SBDocument.css()+'</style></head><body><div class="page">'+window.SBDocument.docHtml(documentData)+'</div><script src="site-header.js"></script>
+</body></html>';
   $('previewFrame').srcdoc=html;
   $('previewMeta').textContent=[selected.date,selected.object,selected.employee].filter(Boolean).join(' · ');
   $('previewModal').classList.add('open');$('previewModal').setAttribute('aria-hidden','false');

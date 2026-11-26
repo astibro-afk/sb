@@ -75,18 +75,12 @@ h1{margin:0;font-size:23px;line-height:1.2;letter-spacing:-.45px;font-weight:750
 @media(max-width:390px){.header{flex-wrap:wrap}.back{margin-left:49px;margin-top:-7px}.metrics{grid-template-columns:.7fr 1.15fr 1.15fr}.metric{padding:8px 7px}.metric strong{font-size:12px}}
 @media(prefers-reduced-motion:reduce){.employee,.back,.search{transition:none}}
 </style>
+<link rel="stylesheet" href="site-header.css">
 </head>
 <body>
+<header class="sb-site-header"><div class="sb-site-top"><a class="sb-site-brand" href="/index.html"><span class="sb-site-logo">СБ</span><span class="sb-site-brand-text"><strong>Служба безопасности</strong><small>Группа БФ Волгоград 1</small></span></a><div class="sb-site-actions"><div class="sb-site-user" id="sbHeaderUser" hidden><strong id="sbHeaderName"></strong><small id="sbHeaderMeta"></small></div><a class="sb-site-notice" href="/notifications.php">Уведомления <span id="sbHeaderBadge" hidden>0</span></a><a class="sb-site-manage" id="sbHeaderManage" href="/users.php" hidden>Управление</a><button class="sb-site-logout" id="sbHeaderLogout" type="button">Выход</button></div></div><nav class="sb-site-nav" aria-label="Основная навигация"><div class="sb-site-nav-inner"><a href="/index.html">Главная</a><a href="/reports.php">Отчёты</a><a href="/tasks.php">Задачи</a><a class="active" href="/employees.php">Сотрудники</a><a href="/notifications.php">Уведомления</a></div></nav></header>
 <main class="page">
-<header class="header">
-  <div class="heading">
-    <div class="heading-icon" aria-hidden="true">
-      <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-    </div>
-    <div><h1 id="heading">Сотрудники</h1><p class="subtitle" id="subtitle">Команда, отчёты и история активности</p></div>
-  </div>
-  <a class="back" href="index.html"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/><path d="M9 12h12"/></svg>К отчётам</a>
-</header>
+<div class="sb-page-title"><div><h1 id="heading">Сотрудники</h1><p class="subtitle" id="subtitle">Команда, отчёты и история активности</p></div></div>
 <div class="toolbar" id="toolbar">
   <label class="search-wrap">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
@@ -155,5 +149,6 @@ fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store
 <script>
 (function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,30000);document.addEventListener('visibilitychange',ping);})();
 </script>
+<script src="site-header.js"></script>
 </body>
 </html>
