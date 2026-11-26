@@ -555,7 +555,11 @@ $ctx = user_ctx($pdo, $user);
 if ($action === 'reports_data' && $method === 'GET') {
     $from = (string)($_GET['from'] ?? date('Y-m-01'));
     $to = (string)($_GET['to'] ?? date('Y-m-d'));
-    $objectId = (int)($_GET['object_id'] ?? 0);
+    $objectIds = array_values(array_unique(array_filter(array_map('intval', explode(',', (string)($_GET['object_ids'] ?? ''))), function($id) { return $id > 0; })));
+    if (!$objectIds) {
+        $legacyObjectId = (int)($_GET['object_id'] ?? 0);
+        if ($legacyObjectId > 0) $objectIds = [$legacyObjectId];
+    }
     $validDate = function($value) {
         $d = DateTime::createFromFormat('!Y-m-d', $value);
         return $d && $d->format('Y-m-d') === $value;
@@ -578,8 +582,12 @@ if ($action === 'reports_data' && $method === 'GET') {
         $assignedRows = $pdo->query('SELECT id, name, is_active FROM sb_objects WHERE is_active = 1 ORDER BY name')->fetchAll();
     }
 
-    if ($ctx['role'] !== 'admin' && $objectId > 0 && !in_array($objectId, $allowedIds, true)) {
-        reply(403, ['ok' => false, 'error' => 'Нет доступа к отчётам по выбранному объекту.']);
+    $availableById = [];
+    foreach ($assignedRows as $obj) $availableById[(int)$obj['id']] = $obj;
+    foreach ($objectIds as $id) {
+        if (!isset($availableById[$id])) {
+            reply(403, ['ok' => false, 'error' => 'Нет доступа к одному из выбранных объектов.']);
+        }
     }
 
     $sql = 'SELECT report_date, object_name, owner_user_id, owner_name, object_id, payload, updated_at
@@ -603,13 +611,18 @@ if ($action === 'reports_data' && $method === 'GET') {
         $sql .= ' AND (object_id IN (' . implode(',', $idMarks) . ') OR (object_id IS NULL AND object_name IN (' . implode(',', $nameMarks) . ')))';
     }
 
-    if ($objectId > 0) {
-        $selected = null;
-        foreach ($assignedRows as $obj) if ((int)$obj['id'] === $objectId) { $selected = $obj; break; }
-        if (!$selected) reply(403, ['ok' => false, 'error' => 'Выбранный объект недоступен.']);
-        $sql .= ' AND (object_id = :selected_id OR (object_id IS NULL AND object_name = :selected_name))';
-        $params[':selected_id'] = $objectId;
-        $params[':selected_name'] = (string)$selected['name'];
+    if ($objectIds) {
+        $selectedNames = [];
+        $idMarks = [];
+        foreach ($objectIds as $i => $id) {
+            $idKey = ':selected_id_' . $i;
+            $nameKey = ':selected_name_' . $i;
+            $idMarks[] = $idKey;
+            $nameMarks[] = $nameKey;
+            $params[$idKey] = $id;
+            $params[$nameKey] = (string)$availableById[$id]['name'];
+        }
+        $sql .= ' AND (object_id IN (' . implode(',', $idMarks) . ') OR (object_id IS NULL AND object_name IN (' . implode(',', $nameMarks) . ')))';
     }
     $sql .= ' ORDER BY report_date DESC, object_name ASC, updated_at DESC';
 
