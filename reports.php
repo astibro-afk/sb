@@ -109,7 +109,8 @@ $('word').addEventListener('click',async()=>{
  try{
  const {Document,Packer,Paragraph,Table,TableRow,TableCell,TextRun,WidthType,HeadingLevel}=window.docx;
  const rows=exportRows();
- const table=new Table({width:{size:100,type:WidthType.PERCENTAGE},rows:rows.map((r,i)=>new TableRow({children:r.map(c=>new TableCell({children:[new Paragraph({children:[new TextRun({text:String(c),bold:i===0})]})]})}))});
+  const tableRows=rows.map((r,i)=>new TableRow({children:r.map(c=>new TableCell({children:[new Paragraph({children:[new TextRun({text:String(c),bold:i===0})]})]}))}));
+  const table=new Table({width:{size:100,type:WidthType.PERCENTAGE},rows:tableRows});
  const doc=new Document({sections:[{children:[new Paragraph({text:'Ежедневный отчёт СБ',heading:HeadingLevel.TITLE}),new Paragraph({text:'Дата: '+selected.date}),new Paragraph({text:'Объект: '+selected.object}),new Paragraph({text:'Сотрудник: '+selected.employee}),new Paragraph({text:'Автор записи: '+selected.author}),new Paragraph({text:''}),table]}]});
  const blob=await Packer.toBlob(doc);download(blob,'Отчёт_'+safe(selected.date)+'_'+safe(selected.employee)+'.docx');
  }catch(e){setStatus('Ошибка формирования Word: '+e.message,true);}
