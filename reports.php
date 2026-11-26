@@ -29,6 +29,12 @@ main{max-width:1440px;margin:26px auto;padding:0 28px 40px}.intro{display:flex;j
 .panel{overflow:hidden;margin-bottom:18px}.panel-head{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px}.panel-head h3{font-size:16px;margin:0}.panel-head small{color:var(--muted)}
 .table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:720px}th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle}th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:#f8fbfc;white-space:nowrap}td{font-size:13px}tbody tr:last-child td{border-bottom:0}.progress{height:7px;width:100px;border-radius:10px;background:#e8eef0;overflow:hidden;display:inline-block;vertical-align:middle;margin-right:7px}.progress i{height:100%;display:block;background:var(--teal);border-radius:10px}.empty{padding:34px 15px;text-align:center;color:var(--muted)}
 .status{color:var(--teal);font-weight:700}.role{font-size:12px;color:var(--muted);padding:5px 9px;border-radius:20px;background:#f1f5f6}
+.stats{grid-template-columns:repeat(4,minmax(0,1fr))}.stat small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+.ranking-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:14px 18px}.ranking-grid h4{margin:0 0 8px;font-size:13px;color:var(--muted)}
+.comment-cell{display:flex;align-items:flex-start;gap:8px;min-width:220px}.comment-cell>span:first-child{max-width:240px;white-space:normal;overflow-wrap:anywhere}.muted{color:var(--muted)}.comment-btn{padding:5px 8px;font-size:11px;white-space:nowrap}
+.comment-editor{min-width:260px;margin-top:8px}.comment-editor textarea{width:100%;min-height:74px;border:1px solid #cbd9df;border-radius:8px;padding:8px;font:inherit;resize:vertical}.comment-editor>div{display:flex;gap:7px;margin-top:6px}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.ranking-grid{grid-template-columns:1fr}}
+@media(max-width:600px){.stats{grid-template-columns:1fr 1fr}.ranking-grid{padding:12px;gap:10px}}
 @media(max-width:900px){.filters{grid-template-columns:repeat(2,minmax(0,1fr))}.top-inner{align-items:flex-start}.stats{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:600px){.top-inner{padding:14px 16px;display:block}.actions{margin-top:13px}.intro{display:block}main{padding:0 14px 28px;margin:20px auto}.filters{grid-template-columns:1fr 1fr;padding:13px}.stats{grid-template-columns:1fr}.stat{padding:12px 15px}.stat strong{font-size:22px}.panel-head{align-items:flex-start;flex-direction:column}.brand h1{font-size:18px}}
 </style>
@@ -42,7 +48,7 @@ main{max-width:1440px;margin:26px auto;padding:0 28px 40px}.intro{display:flex;j
 <main>
   <div class="intro"><div><h2>Отчёты сотрудников</h2><p id="roleInfo">Загрузка доступных данных…</p></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="role" id="periodLabel">Сводная по сохранённым отчётам</span><button class="btn primary" id="exportWorkbook" type="button">↓ Скачать полный Excel-отчёт</button></div></div>
   <section class="filters">
-    <div class="field"><label for="periodType">Период отчёта</label><select id="periodType"><option value="month">За месяц</option><option value="quarter">За квартал</option><option value="year">За год</option><option value="custom">Произвольный период</option></select></div>
+    <div class="field"><label for="periodType">Период отчёта</label><select id="periodType"><option value="year" selected>За год</option><option value="month">За месяц</option><option value="quarter">За квартал</option><option value="custom">Произвольный период</option></select></div>
     <div class="field"><label for="periodYear">Год</label><select id="periodYear"></select></div>
     <div class="field" id="unitField"><label for="periodUnit">Месяц</label><select id="periodUnit"></select></div>
     <div class="field"><label for="objectFilter">Торговый объект</label><select id="objectFilter" multiple size="3" aria-label="Выбор нескольких торговых объектов"></select><small style="display:block;color:var(--muted);margin-top:5px">Можно выбрать несколько объектов (Ctrl/Shift). Если ничего не выбрано — будут показаны все доступные.</small></div>
@@ -55,6 +61,19 @@ main{max-width:1440px;margin:26px auto;padding:0 28px 40px}.intro{display:flex;j
     <div class="stat"><span>Сохранено отчётов</span><strong id="statReports">—</strong></div>
     <div class="stat"><span>Сотрудников</span><strong id="statEmployees">—</strong></div>
     <div class="stat"><span>Торговых объектов</span><strong id="statObjects">—</strong></div>
+    <div class="stat"><span>Сумма по правонарушениям</span><strong id="statDamage">—</strong><small>руб., по заполненным денежным полям</small></div>
+  </section>
+  <section class="panel"><div class="panel-head"><div><h3>Рейтинги объектов</h3><small>Показатели нормированы на количество самостоятельных отчётов; это не оценка качества работы объекта.</small></div></div>
+    <div class="ranking-grid">
+      <div><h4>Лучшее покрытие контролем</h4><div class="table-wrap"><table><thead><tr><th>Объект</th><th>Отчётов</th><th>Заполнение</th></tr></thead><tbody id="bestObjectsBody"></tbody></table></div></div>
+      <div><h4>Повышенные выявления</h4><div class="table-wrap"><table><thead><tr><th>Объект</th><th>Случаев / отчёт</th><th>Сумма / отчёт</th></tr></thead><tbody id="riskObjectsBody"></tbody></table></div></div>
+    </div>
+  </section>
+  <section class="panel"><div class="panel-head"><div><h3>Динамика по месяцам</h3><small>Зарегистрированные правонарушения и суммы. Для годового периода доступно сопоставление с предыдущим годом.</small></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Месяц</th><th>Отчётов</th><th>Уголовные</th><th>Административные</th><th>Разбор на месте</th><th>Сумма, руб.</th></tr></thead><tbody id="trendBody"></tbody></table></div>
+  </section>
+  <section class="panel"><div class="panel-head"><div><h3>Рейтинг сотрудников по отчётной активности</h3><small>Количество отчётов и среднее заполнение. Не ранжируем сотрудников по числу выявленных нарушений.</small></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Отчётов</th><th>Объектов</th><th>Среднее заполнение</th></tr></thead><tbody id="employeeRatingBody"></tbody></table></div>
   </section>
   <section class="panel">
     <div class="panel-head"><div><h3>Сводка по сотрудникам</h3><small>Количество отчётов и среднее заполнение за выбранный период</small></div><button class="btn" id="exportSummary" type="button">Скачать лист Excel</button></div>
@@ -70,7 +89,7 @@ main{max-width:1440px;margin:26px auto;padding:0 28px 40px}.intro{display:flex;j
   </section>
   <section class="panel">
     <div class="panel-head"><div><h3>Содержание отчётов</h3><small>Все значения, внесённые в форму, включая комментарии и дополнительные строки</small></div><button class="btn" id="exportDetails" type="button">Скачать лист Excel</button></div>
-    <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Торговый объект</th><th>Сотрудник</th><th>Кем сохранён</th><th>Заполнение</th><th>Последнее обновление</th></tr></thead><tbody id="detailsBody"><tr><td colspan="6" class="empty">Загрузка…</td></tr></tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Торговый объект</th><th>Сотрудник</th><th>Кем сохранён</th><th>Заполнение</th><th>Комментарий руководителя</th><th>Последнее обновление</th></tr></thead><tbody id="detailsBody"><tr><td colspan="6" class="empty">Загрузка…</td></tr></tbody></table></div>
   </section>
 </main>
 <script>
@@ -190,7 +209,7 @@ var records=[],filtered=[],user=null,objects=[],fieldLabels={};
  async function exportDetails(){if(!filtered.length){alert('Нет данных для выгрузки.');return;}await downloadXlsx('Полные_отчёты_'+periodFilePart()+'.xlsx',[detailsSpec(),dynamicSpec()]);}
  async function loadFieldLabels(){try{var response=await fetch('index.html',{credentials:'same-origin',cache:'no-store'});var html=await response.text();var doc=new DOMParser().parseFromString(html,'text/html');doc.querySelectorAll('[data-field][id]').forEach(function(el){var group=el.closest('.form-group'),label=group&&group.querySelector('label');if(label)fieldLabels[el.id]=label.textContent.trim();});}catch(e){}}
  $('applyBtn').addEventListener('click',load);$('employeeFilter').addEventListener('input',render);$('objectFilter').addEventListener('change',load);$('exportSummary').addEventListener('click',exportSummary);$('exportMetrics').addEventListener('click',exportMetrics);$('exportDetails').addEventListener('click',exportDetails);$('exportWorkbook').addEventListener('click',exportWorkbook);
- initPeriod();loadFieldLabels().then(load);
+ initPeriod();$('periodType').value='year';fillUnits();syncDates();loadFieldLabels().then(load);
 $('logoutBtn').addEventListener('click',async function(){try{await fetch('api.php?action=logout',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:window.__SB_CSRF||''})});}catch(e){}location.href='index.html';});
 })();
 </script>
