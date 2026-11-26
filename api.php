@@ -270,23 +270,6 @@ function current_user(PDO $pdo): ?array {
     return $row ?: null;
 }
 
-function user_ctx(PDO $pdo, array $u): array {
-    $objectName = '';
-    if (!empty($u['object_id'])) {
-        $stmt = $pdo->prepare('SELECT name FROM sb_objects WHERE id = :id');
-        $stmt->execute([':id' => (int)$u['object_id']]);
-        $objectName = (string)($stmt->fetchColumn() ?: '');
-    }
-    return [
-        'id' => (int)$u['id'],
-        'username' => (string)$u['username'],
-        'full_name' => (string)$u['full_name'],
-        'role' => (string)$u['role'],
-        'object_id' => $u['object_id'] !== null ? (int)$u['object_id'] : null,
-        'object_name' => $objectName,
-    ];
-}
-
 function require_role(array $ctx, string $role): void {
     if ($ctx['role'] !== $role) {
         reply(403, ['ok' => false, 'error' => 'Недостаточно прав для этого действия.']);
