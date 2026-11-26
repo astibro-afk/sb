@@ -37,6 +37,29 @@ main{max-width:1440px;margin:26px auto;padding:0 28px 40px}.intro{display:flex;j
 @media(max-width:600px){.stats{grid-template-columns:1fr 1fr}.ranking-grid{padding:12px;gap:10px}}
 @media(max-width:900px){.filters{grid-template-columns:repeat(2,minmax(0,1fr))}.top-inner{align-items:flex-start}.stats{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:600px){.top-inner{padding:14px 16px;display:block}.actions{margin-top:13px}.intro{display:block}main{padding:0 14px 28px;margin:20px auto}.filters{grid-template-columns:1fr 1fr;padding:13px}.stats{grid-template-columns:1fr}.stat{padding:12px 15px}.stat strong{font-size:22px}.panel-head{align-items:flex-start;flex-direction:column}.brand h1{font-size:18px}}
+
+/* Компактная управленческая панель */
+main{max-width:1320px;margin:22px auto;padding:0 24px 38px}
+.intro{align-items:center;margin-bottom:14px}.intro h2{font-size:22px}.intro p{font-size:13px}
+.filters{padding:13px 15px;grid-template-columns:145px 100px 120px minmax(190px,1fr) minmax(150px,1fr) auto;gap:9px;margin-bottom:14px;box-shadow:none;border-radius:11px}
+.field label{font-size:11px;margin-bottom:4px}.field input,.field select{height:36px;font-size:13px}.field select[multiple]{height:36px;min-height:36px;overflow:hidden;padding:5px 8px}
+.field select[multiple] option{display:none}.field select[multiple]:focus{height:110px;position:relative;z-index:3;background:#fff}
+.filters .field:nth-last-of-type(2),.filters .field:nth-last-of-type(1){display:none}
+.compact-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.stat{padding:13px 17px;box-shadow:none;border-radius:11px}.stat strong{font-size:25px}.stat small{font-size:11px}
+.tabs{display:flex;gap:5px;border-bottom:1px solid var(--line);margin:4px 0 16px;padding:0 2px}
+.tab{border:0;background:transparent;color:var(--muted);padding:10px 15px;font:600 13px Segoe UI,Arial;cursor:pointer;border-bottom:2px solid transparent}
+.tab.active{color:var(--teal);border-bottom-color:var(--teal)}
+.tab-pane{display:none}.tab-pane.active{display:block}
+.panel{box-shadow:none;border-radius:11px;margin-bottom:14px}.panel-head{padding:13px 16px}.panel-head h3{font-size:15px}.panel-head small{font-size:11px}
+.table-wrap table{min-width:650px}th,td{padding:10px 13px}.simple-table{min-width:600px}
+.sort-select{height:34px;border:1px solid var(--line);border-radius:8px;padding:0 10px;color:var(--ink);background:#fff;font:600 12px Segoe UI,Arial}
+.chart-area{padding:12px 18px 8px;min-height:220px}.chart-area svg{width:100%;height:auto;display:block;overflow:visible}
+.legend{display:flex;gap:14px;color:var(--muted);font-size:11px}.legend span{display:flex;align-items:center;gap:6px}.legend i{width:15px;height:3px;background:#087f83;border-radius:2px}.legend span+span i{background:#aab9c2}
+.comment-cell{min-width:200px}.comment-cell>span:first-child{max-width:260px}
+@media(max-width:900px){.filters{grid-template-columns:repeat(3,minmax(0,1fr))}.compact-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:600px){main{padding:0 12px 25px;margin:15px auto}.filters{grid-template-columns:1fr 1fr;padding:11px}.compact-stats{grid-template-columns:1fr 1fr}.stat:last-child{grid-column:1/-1}.stat{padding:11px 13px}.tabs{overflow:auto}.tab{padding:9px 11px;white-space:nowrap}.panel-head{flex-direction:row;align-items:center}.legend{display:none}.chart-area{padding:8px}.intro{display:flex;flex-direction:column;align-items:flex-start}.intro>div:last-child{width:100%}}
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
@@ -57,39 +80,42 @@ main{max-width:1440px;margin:26px auto;padding:0 28px 40px}.intro{display:flex;j
     <div class="field"><label for="dateTo">Дата по</label><input type="date" id="dateTo" value="<?php echo htmlspecialchars($today, ENT_QUOTES, 'UTF-8'); ?>"></div>
     <button class="btn primary" id="applyBtn" type="button">Показать</button>
   </section>
-  <section class="stats">
-    <div class="stat"><span>Сохранено отчётов</span><strong id="statReports">—</strong></div>
-    <div class="stat"><span>Сотрудников</span><strong id="statEmployees">—</strong></div>
-    <div class="stat"><span>Торговых объектов</span><strong id="statObjects">—</strong></div>
-    <div class="stat"><span>Сумма по правонарушениям</span><strong id="statDamage">—</strong><small>руб., по заполненным денежным полям</small></div>
+  <section class="stats compact-stats">
+    <div class="stat"><span>Отчётов за период</span><strong id="statReports">—</strong></div>
+    <div class="stat"><span>Объектов в отчётах</span><strong id="statObjects">—</strong></div>
+    <div class="stat"><span>Выявлено правонарушений</span><strong id="statDamage">—</strong><small>уголовные, административные и разбор на месте</small></div>
   </section>
-  <section class="panel"><div class="panel-head"><div><h3>Рейтинги объектов</h3><small>Показатели нормированы на количество самостоятельных отчётов; это не оценка качества работы объекта.</small></div></div>
-    <div class="ranking-grid">
-      <div><h4>Наиболее полные отчёты</h4><div class="table-wrap"><table><thead><tr><th>Объект</th><th>Отчётов</th><th>Заполнение</th></tr></thead><tbody id="bestObjectsBody"></tbody></table></div></div>
-      <div><h4>Повышенные выявления</h4><div class="table-wrap"><table><thead><tr><th>Объект</th><th>Случаев / отчёт</th><th>Сумма / отчёт</th></tr></thead><tbody id="riskObjectsBody"></tbody></table></div></div>
-    </div>
+  <nav class="tabs" aria-label="Разделы отчёта">
+    <button class="tab active" data-tab="overview" type="button">Обзор</button>
+    <button class="tab" data-tab="employees" type="button">Сотрудники</button>
+    <button class="tab" data-tab="indicators" type="button">Показатели</button>
+    <button class="tab" data-tab="details" type="button">Отчёты</button>
+  </nav>
+  <section class="tab-pane active" id="tab-overview">
+    <section class="panel trend-panel">
+      <div class="panel-head"><div><h3>Динамика выявлений</h3><small>По месяцам выбранного года в сравнении с предыдущим</small></div><div class="legend"><span><i></i>Выбранный год</span><span><i></i>Предыдущий год</span></div></div>
+      <div id="trendChart" class="chart-area"><div class="empty">Загрузка динамики…</div></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><div><h3>Сводка по торговым объектам</h3><small>Сравнение активности и выявлений. Показатели не являются оценкой качества работы объекта.</small></div>
+        <select id="objectSort" class="sort-select" aria-label="Сортировка объектов"><option value="coverage">Лучшее заполнение</option><option value="cases">Больше выявлений</option></select>
+      </div>
+      <div class="table-wrap"><table class="simple-table"><thead><tr><th>Торговый объект</th><th>Отчётов</th><th>Заполнение</th><th>Выявлений</th><th>Динамика</th></tr></thead><tbody id="objectSummaryBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div>
+    </section>
   </section>
-  <section class="panel"><div class="panel-head"><div><h3>Динамика по месяцам</h3><small>Зарегистрированные правонарушения и суммы. Для годового периода доступно сопоставление с предыдущим годом.</small></div></div>
-    <div class="table-wrap"><table><thead><tr><th>Месяц</th><th>Отчётов</th><th>Уголовные</th><th>Административные</th><th>Разбор на месте</th><th>Сумма, руб.</th><th>Случаев годом ранее</th><th>Изменение</th></tr></thead><tbody id="trendBody"></tbody></table></div>
+  <section class="tab-pane" id="tab-employees">
+    <section class="panel"><div class="panel-head"><div><h3>Сводка по сотрудникам</h3><small>Количество самостоятельных отчётов, объекты и среднее заполнение</small></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Отчётов</th><th>Объектов</th><th>Последний отчёт</th><th>Заполнение</th></tr></thead><tbody id="summaryBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div></section>
   </section>
-  <section class="panel"><div class="panel-head"><div><h3>Рейтинг сотрудников по отчётной активности</h3><small>Количество отчётов и среднее заполнение. Не ранжируем сотрудников по числу выявленных нарушений.</small></div></div>
-    <div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Отчётов</th><th>Объектов</th><th>Среднее заполнение</th></tr></thead><tbody id="employeeRatingBody"></tbody></table></div>
+  <section class="tab-pane" id="tab-indicators">
+    <section class="panel"><div class="panel-head"><div><h3>Сводные показатели</h3><small>Итоги по всем выбранным объектам за период</small></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Направление</th><th>Показатель</th><th>Итого</th><th>Ед. изм.</th><th>Отчётов с данными</th></tr></thead><tbody id="metricsBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div></section>
+    <section class="panel"><div class="panel-head"><div><h3>Показатели по объектам</h3><small>Детализация однотипных показателей</small></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Объект</th><th>Направление</th><th>Показатель</th><th>Значение</th><th>Ед. изм.</th></tr></thead><tbody id="objectMetricsBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div></section>
   </section>
-  <section class="panel">
-    <div class="panel-head"><div><h3>Сводка по сотрудникам</h3><small>Количество отчётов и среднее заполнение за выбранный период</small></div><button class="btn" id="exportSummary" type="button">Скачать лист Excel</button></div>
-    <div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Отчётов</th><th>Объектов</th><th>Последний отчёт</th><th>Среднее заполнение</th></tr></thead><tbody id="summaryBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div>
-  </section>
-  <section class="panel">
-    <div class="panel-head"><div><h3>Сводные показатели по всем выбранным объектам</h3><small>Итоги за период: количество случаев отдельно от сумм выявленных нарушений</small></div><button class="btn" id="exportMetrics" type="button">Скачать сводку Excel</button></div>
-    <div class="table-wrap"><table><thead><tr><th>Направление работы</th><th>Показатель</th><th>Итого</th><th>Ед. изм.</th><th>Отчётов с данными</th></tr></thead><tbody id="metricsBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div>
-  </section>
-  <section class="panel">
-    <div class="panel-head"><div><h3>Показатели в разрезе объектов</h3><small>Каждый объект показан отдельными строками — можно сравнивать результаты между объектами</small></div></div>
-    <div class="table-wrap"><table><thead><tr><th>Торговый объект</th><th>Направление работы</th><th>Показатель</th><th>Значение</th><th>Ед. изм.</th></tr></thead><tbody id="objectMetricsBody"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody></table></div>
-  </section>
-  <section class="panel">
-    <div class="panel-head"><div><h3>Содержание отчётов</h3><small>Все значения, внесённые в форму, включая комментарии и дополнительные строки</small></div><button class="btn" id="exportDetails" type="button">Скачать лист Excel</button></div>
-    <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Торговый объект</th><th>Сотрудник</th><th>Кем сохранён</th><th>Заполнение</th><th>Комментарий руководителя</th><th>Последнее обновление</th></tr></thead><tbody id="detailsBody"><tr><td colspan="6" class="empty">Загрузка…</td></tr></tbody></table></div>
+  <section class="tab-pane" id="tab-details">
+    <section class="panel"><div class="panel-head"><div><h3>Содержание отчётов</h3><small>Каждая строка — отдельный отчёт сотрудника. Комментарии руководителя доступны внутри отчёта.</small></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Дата</th><th>Объект</th><th>Сотрудник</th><th>Кем сохранён</th><th>Заполнение</th><th>Комментарий руководителя</th><th>Обновлён</th></tr></thead><tbody id="detailsBody"><tr><td colspan="7" class="empty">Загрузка…</td></tr></tbody></table></div></section>
   </section>
 </main>
 <script>
@@ -159,34 +185,41 @@ var records=[],filtered=[],previousFiltered=[],user=null,objects=[],fieldLabels=
  function objectMetricRows(list){var groups=Object.create(null);list.forEach(function(r){var name=r.object||'Объект не указан';if(!groups[name])groups[name]=[];groups[name].push(r);});var out=[];Object.keys(groups).sort(function(a,b){return a.localeCompare(b,'ru');}).forEach(function(name){metricRows(groups[name]).forEach(function(m){out.push({object:name,section:m.section,label:m.label,unit:m.unit,total:m.total,count:m.count});});});return out;}
  function fmtMetric(n){return Number(n).toLocaleString('ru-RU',{maximumFractionDigits:2});}
 
- function render(){var q=$('employeeFilter').value.trim().toLocaleLowerCase('ru'),from=$('dateFrom').value,to=$('dateTo').value;
+ function render(){
+ var q=$('employeeFilter').value.trim().toLocaleLowerCase('ru'),from=$('dateFrom').value,to=$('dateTo').value;
  filtered=records.filter(function(r){return r.date>=from&&r.date<=to&&(!q||(r.employee||'').toLocaleLowerCase('ru').includes(q));});
- var year=Number(from.slice(0,4));previousFiltered=records.filter(function(r){return r.date>=String(year-1)+'-01-01'&&r.date<=String(year-1)+'-12-31'&&(!q||(r.employee||'').toLocaleLowerCase('ru').includes(q));});
- $('statReports').textContent=filtered.length;$('statEmployees').textContent=new Set(filtered.map(function(r){return r.employee||'Сотрудник не указан';})).size;$('statObjects').textContent=new Set(filtered.map(function(r){return r.object||'';}).filter(Boolean)).size;
- var damageKeys=['b1_pos_sum','b1_chek_sum','b1_ret_sum','b1_weight_sum','b3_in_sum','b3_between_sum','b4_dev_sum','b6_q_sum','b6_qty_sum','b6_sg_sum','b7_q_sum','b7_qty_sum','b7_sg_sum','b8_sum','b10_crim_sum','b10_adm_sum','b10_local_sum'];var damage=filtered.reduce(function(a,r){return a+damageKeys.reduce(function(v,k){return v+(numericValue((r.data||{})[k])||0);},0);},0);$('statDamage').textContent=fmtMetric(damage);
- var sums=makeSummary(filtered);$('summaryBody').innerHTML=sums.length?sums.map(function(x){return '<tr><td><strong>'+esc(x.name)+'</strong></td><td>'+x.count+'</td><td>'+x.objects+'</td><td>'+fmtDate(x.last)+'</td><td><span class="progress"><i style="width:'+x.average+'%"></i></span>'+x.average+'%</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">За выбранный период отчёты не найдены</td></tr>';
- var metrics=metricRows(filtered);$('metricsBody').innerHTML=metrics.length?metrics.map(function(x){return '<tr><td>'+esc(x.section)+'</td><td>'+esc(x.label)+'</td><td><strong>'+fmtMetric(x.total)+'</strong></td><td>'+esc(x.unit)+'</td><td>'+x.count+'</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">За выбранный период нет данных по показателям</td></tr>';
- var byObject=objectMetricRows(filtered);$('objectMetricsBody').innerHTML=byObject.length?byObject.map(function(x){return '<tr><td><strong>'+esc(x.object)+'</strong></td><td>'+esc(x.section)+'</td><td>'+esc(x.label)+'</td><td><strong>'+fmtMetric(x.total)+'</strong></td><td>'+esc(x.unit)+'</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">Нет данных по выбранным объектам</td></tr>';
+ var year=Number(from.slice(0,4));
+ previousFiltered=records.filter(function(r){return r.date>=String(year-1)+'-01-01'&&r.date<=String(year-1)+'-12-31'&&(!q||(r.employee||'').toLocaleLowerCase('ru').includes(q));});
+ var cases=function(list){return list.reduce(function(n,r){return n+['b10_crim_qty','b10_adm_qty','b10_local_qty'].reduce(function(v,k){return v+(numericValue((r.data||{})[k])||0);},0);},0);};
+ $('statReports').textContent=filtered.length;
+ $('statObjects').textContent=new Set(filtered.map(function(r){return r.object||'';}).filter(Boolean)).size;
+ $('statDamage').textContent=fmtMetric(cases(filtered));
+ var sums=makeSummary(filtered);
+ $('summaryBody').innerHTML=sums.length?sums.map(function(x){return '<tr><td><strong>'+esc(x.name)+'</strong></td><td>'+x.count+'</td><td>'+x.objects+'</td><td>'+fmtDate(x.last)+'</td><td><span class="progress"><i style="width:'+x.average+'%"></i></span>'+x.average+'%</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">За выбранный период отчёты не найдены</td></tr>';
+ var metrics=metricRows(filtered);$('metricsBody').innerHTML=metrics.length?metrics.map(function(x){return '<tr><td>'+esc(x.section)+'</td><td>'+esc(x.label)+'</td><td><strong>'+fmtMetric(x.total)+'</strong></td><td>'+esc(x.unit)+'</td><td>'+x.count+'</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">Нет данных по показателям</td></tr>';
+ var byObject=objectMetricRows(filtered);$('objectMetricsBody').innerHTML=byObject.length?byObject.map(function(x){return '<tr><td><strong>'+esc(x.object)+'</strong></td><td>'+esc(x.section)+'</td><td>'+esc(x.label)+'</td><td><strong>'+fmtMetric(x.total)+'</strong></td><td>'+esc(x.unit)+'</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">Нет данных по объектам</td></tr>';
  $('detailsBody').innerHTML=filtered.length?filtered.map(function(r){var p=pct(r),comment=r.manager_comment||'';return '<tr><td>'+fmtDate(r.date)+'</td><td>'+esc(r.object||'—')+'</td><td><strong>'+esc(r.employee||'Не указан')+'</strong></td><td>'+esc(r.author||'—')+'</td><td><span class="progress"><i style="width:'+p+'%"></i></span>'+p+'%</td><td><div class="comment-cell">'+(comment?'<span title="'+esc(comment)+'">'+esc(comment)+'</span>':'<span class="muted">Нет комментария</span>')+(user&&user.role==='admin'?'<button class="btn comment-btn" data-comment="'+esc(r.record_key)+'" type="button">'+(comment?'Изменить':'Добавить')+'</button>':'')+'</div></td><td>'+fmtTime(r.updated_at)+'</td></tr>';}).join(''):'<tr><td colspan="7" class="empty">За выбранный период отчёты не найдены</td></tr>';
- renderRankings();renderTrends();
- $('periodLabel').textContent=$('periodType').selectedOptions[0].text+' · '+$('dateFrom').value+' — '+$('dateTo').value;}
- function renderRankings(){
- var map=Object.create(null);filtered.forEach(function(r){var k=r.object||'Объект не указан';if(!map[k])map[k]={name:k,reports:0,fill:0,cases:0,damage:0};var x=map[k];x.reports++;x.fill+=pct(r);
- ['b10_crim_qty','b10_adm_qty','b10_local_qty'].forEach(function(k){x.cases+=numericValue((r.data||{})[k])||0;});
- ['b10_crim_sum','b10_adm_sum','b10_local_sum'].forEach(function(k){x.damage+=numericValue((r.data||{})[k])||0;});});
- var arr=Object.keys(map).map(function(k){var x=map[k];x.average=x.reports?Math.round(x.fill/x.reports):0;x.caseRate=x.reports?x.cases/x.reports:0;x.damageRate=x.reports?x.damage/x.reports:0;return x;});
- $('bestObjectsBody').innerHTML=arr.length?arr.slice().sort(function(a,b){return b.average-a.average||b.reports-a.reports;}).map(function(x){return '<tr><td><strong>'+esc(x.name)+'</strong></td><td>'+x.reports+'</td><td>'+x.average+'%</td></tr>';}).join(''):'<tr><td colspan="3" class="empty">Нет данных</td></tr>';
- $('riskObjectsBody').innerHTML=arr.length?arr.slice().sort(function(a,b){return b.caseRate-a.caseRate||b.damageRate-a.damageRate;}).map(function(x){return '<tr><td><strong>'+esc(x.name)+'</strong></td><td>'+fmtMetric(x.caseRate)+'</td><td>'+fmtMetric(x.damageRate)+'</td></tr>';}).join(''):'<tr><td colspan="3" class="empty">Нет данных</td></tr>';
- var emp=makeSummary(filtered).sort(function(a,b){return b.count-a.count||b.average-a.average;});
- $('employeeRatingBody').innerHTML=emp.length?emp.map(function(x){return '<tr><td><strong>'+esc(x.name)+'</strong></td><td>'+x.count+'</td><td>'+x.objects+'</td><td>'+x.average+'%</td></tr>';}).join(''):'<tr><td colspan="4" class="empty">Нет данных</td></tr>';
-}
-function renderTrends(){
- var y=Number($('dateFrom').value.slice(0,4)),names=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'],rows=[];
- function sum(list,key){return list.reduce(function(a,r){return a+(numericValue((r.data||{})[key])||0);},0);}
- for(var m=1;m<=12;m++){var mm=pad(m),prefix=y+'-'+mm,list=filtered.filter(function(r){return String(r.date||'').slice(0,7)===prefix;});
- var prev=previousFiltered.filter(function(r){return String(r.date||'').slice(5,7)===mm;}),cases=sum(list,'b10_crim_qty')+sum(list,'b10_adm_qty')+sum(list,'b10_local_qty'),prevCases=sum(prev,'b10_crim_qty')+sum(prev,'b10_adm_qty')+sum(prev,'b10_local_qty'),delta=prev.length?(prevCases===0?(cases===0?'0%':'—'):((cases-prevCases)/prevCases*100).toFixed(1)+'%'):'—';rows.push('<tr><td><strong>'+names[m-1]+'</strong></td><td>'+list.length+'</td><td>'+fmtMetric(sum(list,'b10_crim_qty'))+'</td><td>'+fmtMetric(sum(list,'b10_adm_qty'))+'</td><td>'+fmtMetric(sum(list,'b10_local_qty'))+'</td><td>'+fmtMetric(sum(list,'b10_crim_sum')+sum(list,'b10_adm_sum')+sum(list,'b10_local_sum'))+'</td><td>'+fmtMetric(prevCases)+'</td><td>'+delta+'</td></tr>');}
- $('trendBody').innerHTML=rows.join('');
-}
+ renderObjectSummary();renderTrends();
+ $('periodLabel').textContent=$('periodType').selectedOptions[0].text+' · '+$('dateFrom').value+' — '+$('dateTo').value;
+ }
+ function renderObjectSummary(){
+ var map=Object.create(null);
+ filtered.forEach(function(r){var k=r.object||'Объект не указан';if(!map[k])map[k]={name:k,reports:0,fill:0,cases:0};var x=map[k];x.reports++;x.fill+=pct(r);['b10_crim_qty','b10_adm_qty','b10_local_qty'].forEach(function(k){x.cases+=numericValue((r.data||{})[k])||0;});});
+ var arr=Object.keys(map).map(function(k){var x=map[k];x.average=x.reports?Math.round(x.fill/x.reports):0;return x;});
+ var sort=$('objectSort').value;arr.sort(function(a,b){return sort==='cases'?(b.cases-a.cases||b.reports-a.reports):(b.average-a.average||b.reports-a.reports);});
+ $('objectSummaryBody').innerHTML=arr.length?arr.map(function(x){var old=previousFiltered.filter(function(r){return r.object===x.name;}).reduce(function(n,r){return n+['b10_crim_qty','b10_adm_qty','b10_local_qty'].reduce(function(v,k){return v+(numericValue((r.data||{})[k])||0);},0);},0);var change=old===0?(x.cases===0?'—':'Новый рост'):((x.cases-old)>0?'+':'')+((x.cases-old)/old*100).toFixed(0)+'%';return '<tr><td><strong>'+esc(x.name)+'</strong></td><td>'+x.reports+'</td><td><span class="progress"><i style="width:'+x.average+'%"></i></span>'+x.average+'%</td><td>'+fmtMetric(x.cases)+'</td><td>'+change+'</td></tr>';}).join(''):'<tr><td colspan="5" class="empty">За выбранный период отчёты не найдены</td></tr>';
+ }
+ function renderTrends(){
+ var y=Number($('dateFrom').value.slice(0,4)),labels=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'],now=[],old=[];
+ function sum(list,m){return list.filter(function(r){return String(r.date||'').slice(5,7)===pad(m);}).reduce(function(n,r){return n+['b10_crim_qty','b10_adm_qty','b10_local_qty'].reduce(function(v,k){return v+(numericValue((r.data||{})[k])||0);},0);},0);}
+ for(var m=1;m<=12;m++){now.push(sum(filtered,m));old.push(sum(previousFiltered,m));}
+ var max=Math.max(1).concat?1:1;max=Math.max.apply(null,now.concat(old).concat([1]));
+ var W=900,H=205,L=36,R=16,T=12,B=30,plotH=H-T-B,plotW=W-L-R;
+ function points(arr){return arr.map(function(v,i){return (L+i*plotW/11)+','+(T+plotH-(v/max)*plotH);}).join(' ');}
+ var grid='';for(var g=0;g<=4;g++){var yy=T+plotH*g/4;grid+='<line x1="'+L+'" y1="'+yy+'" x2="'+(W-R)+'" y2="'+yy+'" stroke="#e8eef0"/><text x="'+(L-9)+'" y="'+(yy+4)+'" text-anchor="end" font-size="10" fill="#82919a">'+Math.round(max*(4-g)/4)+'</text>';}
+ var ticks=labels.map(function(n,i){return '<text x="'+(L+i*plotW/11)+'" y="'+(H-7)+'" text-anchor="middle" font-size="10" fill="#82919a">'+n+'</text>';}).join('');
+ $('trendChart').innerHTML=filtered.length?'<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Динамика выявлений по месяцам"><g>'+grid+'</g><polyline points="'+points(old)+'" fill="none" stroke="#aab9c2" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="'+points(now)+'" fill="none" stroke="#087f83" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'+now.map(function(v,i){return '<circle cx="'+(L+i*plotW/11)+'" cy="'+(T+plotH-(v/max)*plotH)+'" r="3.5" fill="#087f83"/>';}).join('')+ticks+'</svg>':'<div class="empty">Нет данных для построения динамики</div>';
+ }
 function saveComment(key,initial){
  var old=document.querySelector('.comment-editor');if(old)old.remove();
  var tr=Array.from($('detailsBody').querySelectorAll('tr')).find(function(row){var b=row.querySelector('[data-comment]');return b&&b.getAttribute('data-comment')===key;});if(!tr)return;
@@ -239,6 +272,8 @@ async function exportWorkbook(){if(!filtered.length){alert('За выбранн�
  async function exportMetrics(){if(!filtered.length){alert('Нет данных для выгрузки.');return;}await downloadXlsx('Показатели_формы_'+periodFilePart()+'.xlsx',[metricsSpec(),objectMetricsSpec()]);}
  async function exportDetails(){if(!filtered.length){alert('Нет данных для выгрузки.');return;}await downloadXlsx('Полные_отчёты_'+periodFilePart()+'.xlsx',[detailsSpec(),dynamicSpec()]);}
  async function loadFieldLabels(){try{var response=await fetch('index.html',{credentials:'same-origin',cache:'no-store'});var html=await response.text();var doc=new DOMParser().parseFromString(html,'text/html');doc.querySelectorAll('[data-field][id]').forEach(function(el){var group=el.closest('.form-group'),label=group&&group.querySelector('label');if(label)fieldLabels[el.id]=label.textContent.trim();});}catch(e){}}
+ document.querySelectorAll('[data-tab]').forEach(function(btn){btn.addEventListener('click',function(){document.querySelectorAll('.tab').forEach(function(x){x.classList.toggle('active',x===btn);});document.querySelectorAll('.tab-pane').forEach(function(x){x.classList.toggle('active',x.id==='tab-'+btn.dataset.tab);});});});
+ $('objectSort').addEventListener('change',renderObjectSummary);
  $('applyBtn').addEventListener('click',load);$('employeeFilter').addEventListener('input',render);$('objectFilter').addEventListener('change',load);$('exportSummary').addEventListener('click',exportSummary);$('exportMetrics').addEventListener('click',exportMetrics);$('exportDetails').addEventListener('click',exportDetails);$('exportWorkbook').addEventListener('click',exportWorkbook);
  initPeriod();$('periodType').value='year';fillUnits();syncDates();loadFieldLabels().then(load);
 $('logoutBtn').addEventListener('click',async function(){try{await fetch('api.php?action=logout',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:window.__SB_CSRF||''})});}catch(e){}location.href='index.html';});
