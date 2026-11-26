@@ -680,7 +680,8 @@ if ($action === 'moderator_user_create' && $method === 'POST') {
         if (!is_array($rawIds)) reply(400, ['ok' => false, 'error' => 'Некорректный список объектов.']);
         $objectIds = array_values(array_unique(array_filter(array_map('intval', $rawIds), function($v) { return $v > 0; })));
     }
-    if ($ctx['role'] === 'moderator' && !$objectIds) reply(403, ['ok' => false, 'error' => 'Ваш профиль не привязан к торговым объектам. Обратитесь к администратору.']);
+    if ($ctx['role'] === 'moderator' && !$assignedIds) reply(403, ['ok' => false, 'error' => 'Ваш профиль не привязан к торговым объектам. Обратитесь к администратору.']);
+    if ($ctx['role'] === 'moderator' && !$objectIds) reply(400, ['ok' => false, 'error' => 'Выберите хотя бы один объект для нового сотрудника.']);
     if ($objectIds) {
         $check = $pdo->prepare('SELECT COUNT(*) FROM sb_objects WHERE id IN (' . implode(',', array_fill(0, count($objectIds), '?')) . ') AND is_active=1');
         $check->execute($objectIds);
