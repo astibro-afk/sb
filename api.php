@@ -569,7 +569,7 @@ if ($action === 'report_comment' && $method === 'POST') {
     }
     $recordKey = trim((string)($body['record_key'] ?? ''));
     $comment = trim((string)($body['comment'] ?? ''));
-    if (!preg_match('/^[a-f0-9]{64,66}$/i', $recordKey) || mb_strlen($comment) > 5000) {
+    if (!preg_match('/^[rd]:[a-f0-9]{64}$/i', $recordKey) || mb_strlen($comment) > 5000) {
         reply(400, ['ok' => false, 'error' => 'Проверьте отчёт и длину комментария (до 5000 символов).']);
     }
     $exists = $pdo->prepare('SELECT record_key FROM sb_archive_records WHERE record_key = :k LIMIT 1');
