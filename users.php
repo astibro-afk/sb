@@ -382,6 +382,18 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
   .object-card input[name="name"]{height:34px;min-height:34px}
 }
 
+
+/* Отключённые объекты выделяются красным свечением */
+.object-card-disabled{
+  background:#fff7f5;
+  border-color:#e6a092;
+  box-shadow:0 0 0 1px #d95b4530,0 0 16px #d95b4528;
+}
+.object-card-disabled:hover{
+  border-color:#d97967;
+  box-shadow:0 0 0 1px #d95b4550,0 0 20px #d95b4540;
+}
+
 </style>
 </head>
 <body>
@@ -412,7 +424,7 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
   </form>
   <?php if ($objects): ?><div class="object-grid">
     <?php foreach ($objects as $o): ?>
-    <form method="post" class="object-card">
+    <form method="post" class="object-card<?= empty($o['is_active']) ? ' object-card-disabled' : '' ?>">
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="object_save"><input type="hidden" name="id" value="<?= (int)$o['id'] ?>">
       <input name="name" aria-label="Название объекта" value="<?= h($o['name']) ?>" required>
       <select name="is_active" aria-label="Статус объекта"><option value="1" <?= $o['is_active'] ? 'selected' : '' ?>>Активен</option><option value="0" <?= !$o['is_active'] ? 'selected' : '' ?>>Отключён</option></select>
