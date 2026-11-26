@@ -1,52 +1,145 @@
-                $st = $pdo->prepare('UPDATE sb_objects SET name = :n, is_active = :a WHERE id = :id');
-                $st->execute([':n' => $name, ':a' => $active, ':id' => $id]);
+<?php
+declare(strict_types=1);
+
+header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+
+ini_set('session.use_strict_mode', '1');
+ini_set('session.gc_maxlifetime', '28800');
+$isHttps = !empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off';
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'secure' => $isHttps,
+    'httponly' => true,
+    'samesite' => 'Strict',
+]);
+session_name('sbapp_session');
+session_start();
+
+function h($value): string {
+    return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+function csrf_token(): string {
+    if (empty($_SESSION['sb_csrf'])) $_SESSION['sb_csrf'] = bin2hex(random_bytes(32));
+    return (string)$_SESSION['sb_csrf'];
+}
+
+$err = '';
+$cfg = require __DIR__ . '/config.php';
+try {
+    $dsn = 'mysql:host=' . $cfg['db_host'] . ';dbname=' . $cfg['db_name'] . ';charset=utf8mb4';
+    $pdo = new PDO($dsn, (string)$cfg['db_user'], (string)$cfg['db_pass'], [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ]);
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_users (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(64) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        full_name VARCHAR(255) NOT NULL DEFAULT '',
+        role VARCHAR(16) NOT NULL DEFAULT 'user',
+        object_id INT UNSIGNED NULL DEFAULT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_objects (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+} catch (Throwable $e) {
+    error_log('SB users page database error: ' . $e->getMessage());
+    http_response_code(500);
+    exit('Не удалось подключиться к базе данных. Проверьте настройки сайта.');
+}
+
+if (empty($_SESSION['sb_user_id'])) {
+    header('Location: index.html');
+    exit;
+}
+$st = $pdo->prepare('SELECT * FROM sb_users WHERE id = :id AND is_active = 1 LIMIT 1');
+$st->execute([':id' => (int)$_SESSION['sb_user_id']]);
+$me = $st->fetch();
+if (!$me) {
+    header('Location: index.html');
+    exit;
+}
+if ($me['role'] !== 'admin') {
+    http_response_code(403);
+    exit('Доступ к управлению пользователями разрешён только администратору.');
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!hash_equals(csrf_token(), (string)($_POST['csrf'] ?? ''))) {
+        $err = 'Сессия формы устарела. Обновите страницу и повторите действие.';
+    } else {
+        $act = (string)($_POST['act'] ?? '');
+        $id = (int)($_POST['id'] ?? 0);
+
+        if ($act === 'object_save') {
+            $name = trim((string)($_POST['name'] ?? ''));
+            $active = !empty($_POST['is_active']) ? 1 : 0;
+            if ($name === '' || mb_strlen($name) > 255) {
+                $err = 'Укажите название объекта (до 255 символов).';
             } else {
-                $st = $pdo->prepare('INSERT INTO sb_objects (name, is_active) VALUES (:n, :a)');
-                $st->execute([':n' => $name, ':a' => $active]);
-            }
-        }
-    } elseif ($act === 'user_save') {
-        $username = trim((string)($_POST['username'] ?? ''));
-        $fullName = trim((string)($_POST['full_name'] ?? ''));
-        $role = (string)($_POST['role'] ?? 'user');
-        $objectId = ($_POST['object_id'] ?? '') === '' ? null : (int)$_POST['object_id'];
-        $isActive = !empty($_POST['is_active']) ? 1 : 0;
-        $password = (string)($_POST['password'] ?? '');
-        if (!preg_match('/^[A-Za-z0-9._-]{3,64}$/', $username)) {
-            $err = 'Логин: 3–64 символа (латиница, цифры, . _ -).';
-        } elseif ($fullName === '') {
-            $err = 'Укажите ФИО.';
-        } elseif (!in_array($role, ['admin', 'moderator', 'user'], true)) {
-            $err = 'Недопустимая роль.';
-        } elseif ($id === (int)$me['id'] && (!$isActive || $role !== 'admin')) {
-            $err = 'Нельзя отключить себя или снять с себя роль администратора.';
-        } elseif ($password !== '' && strlen($password) < 6) {
-            $err = 'Пароль — не менее 6 символов.';
-        } else {
-            $dup = $pdo->prepare('SELECT COUNT(*) FROM sb_users WHERE username = :u AND id <> :i');
-            $dup->execute([':u' => $username, ':i' => $id]);
-            if ((int)$dup->fetchColumn() > 0) {
-                $err = 'Такой логин уже занят.';
-            } elseif ($id > 0) {
-                $st = $pdo->prepare('UPDATE sb_users SET username=:u, full_name=:f, role=:r, object_id=:o, is_active=:a WHERE id=:id');
-                $st->execute([':u' => $username, ':f' => $fullName, ':r' => $role, ':o' => $objectId, ':a' => $isActive, ':id' => $id]);
-                if ($password !== '') {
-                    $st = $pdo->prepare('UPDATE sb_users SET password_hash = :h WHERE id = :id');
-                    $st->execute([':h' => password_hash($password, PASSWORD_DEFAULT), ':id' => $id]);
+                $dup = $pdo->prepare('SELECT COUNT(*) FROM sb_objects WHERE name = :n AND id <> :id');
+                $dup->execute([':n' => $name, ':id' => $id]);
+                if ((int)$dup->fetchColumn() > 0) {
+                    $err = 'Объект с таким названием уже существует.';
+                } elseif ($id > 0) {
+                    $st = $pdo->prepare('UPDATE sb_objects SET name = :n, is_active = :a WHERE id = :id');
+                    $st->execute([':n' => $name, ':a' => $active, ':id' => $id]);
+                } else {
+                    $st = $pdo->prepare('INSERT INTO sb_objects (name, is_active) VALUES (:n, :a)');
+                    $st->execute([':n' => $name, ':a' => $active]);
                 }
-            } elseif (strlen($password) < 6) {
-                $err = 'Пароль нового пользователя — не менее 6 символов.';
-            } else {
-                $st = $pdo->prepare('INSERT INTO sb_users (username, password_hash, full_name, role, object_id, is_active) VALUES (:u, :h, :f, :r, :o, 1)');
-                $st->execute([':u' => $username, ':h' => password_hash($password, PASSWORD_DEFAULT), ':f' => $fullName, ':r' => $role, ':o' => $objectId]);
             }
-        }
-    } elseif ($act === 'user_toggle') {
-        if ($id === (int)$me['id']) {
-            $err = 'Нельзя отключить собственную учётную запись.';
-        } else {
-            $st = $pdo->prepare('UPDATE sb_users SET is_active = 1 - is_active WHERE id = :id');
-            $st->execute([':id' => $id]);
+        } elseif ($act === 'user_save') {
+            $username = trim((string)($_POST['username'] ?? ''));
+            $fullName = trim((string)($_POST['full_name'] ?? ''));
+            $role = (string)($_POST['role'] ?? 'user');
+            $objectId = ($_POST['object_id'] ?? '') === '' ? null : (int)$_POST['object_id'];
+            $isActive = !empty($_POST['is_active']) ? 1 : 0;
+            $password = (string)($_POST['password'] ?? '');
+            if (!preg_match('/^[A-Za-z0-9._-]{3,64}$/', $username)) {
+                $err = 'Логин: 3–64 символа (латиница, цифры, . _ -).';
+            } elseif ($fullName === '') {
+                $err = 'Укажите ФИО.';
+            } elseif (!in_array($role, ['admin', 'moderator', 'user'], true)) {
+                $err = 'Недопустимая роль.';
+            } elseif ($id === (int)$me['id'] && (!$isActive || $role !== 'admin')) {
+                $err = 'Нельзя отключить себя или снять с себя роль администратора.';
+            } elseif ($password !== '' && strlen($password) < 6) {
+                $err = 'Пароль — не менее 6 символов.';
+            } else {
+                $dup = $pdo->prepare('SELECT COUNT(*) FROM sb_users WHERE username = :u AND id <> :i');
+                $dup->execute([':u' => $username, ':i' => $id]);
+                if ((int)$dup->fetchColumn() > 0) {
+                    $err = 'Такой логин уже занят.';
+                } elseif ($id > 0) {
+                    $st = $pdo->prepare('UPDATE sb_users SET username=:u, full_name=:f, role=:r, object_id=:o, is_active=:a WHERE id=:id');
+                    $st->execute([':u' => $username, ':f' => $fullName, ':r' => $role, ':o' => $objectId, ':a' => $isActive, ':id' => $id]);
+                    if ($password !== '') {
+                        $st = $pdo->prepare('UPDATE sb_users SET password_hash = :h WHERE id = :id');
+                        $st->execute([':h' => password_hash($password, PASSWORD_DEFAULT), ':id' => $id]);
+                    }
+                } elseif (strlen($password) < 6) {
+                    $err = 'Пароль нового пользователя — не менее 6 символов.';
+                } else {
+                    $st = $pdo->prepare('INSERT INTO sb_users (username, password_hash, full_name, role, object_id, is_active) VALUES (:u, :h, :f, :r, :o, 1)');
+                    $st->execute([':u' => $username, ':h' => password_hash($password, PASSWORD_DEFAULT), ':f' => $fullName, ':r' => $role, ':o' => $objectId]);
+                }
+            }
+        } elseif ($act === 'user_toggle') {
+            if ($id === (int)$me['id']) {
+                $err = 'Нельзя отключить собственную учётную запись.';
+            } else {
+                $st = $pdo->prepare('UPDATE sb_users SET is_active = 1 - is_active WHERE id = :id');
+                $st->execute([':id' => $id]);
+            }
         }
     }
 }
