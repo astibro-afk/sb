@@ -1571,11 +1571,7 @@ body { background: #F3F8F7; }
           <label>Составитель (ФИО)</label>
           <div class="select-wrap">
             <select id="b0_fio" data-field class="empty">
-              <option value="">Выберите сотрудника</option>
-              <option value="Тимошок Олег Вячеславович">Тимошок Олег Вячеславович</option>
-              <option value="Кекшаев Зула Владимирович">Кекшаев Зула Владимирович</option>
-              <option value="Михайлов Батр Васильевич">Михайлов Батр Васильевич</option>
-              <option value="Шамадыков Саранг Николаевич">Шамадыков Саранг Николаевич</option>
+              <option value="">Загрузка сотрудников...</option>
             </select>
           </div>
         </div>
@@ -4971,7 +4967,7 @@ var colIdx = [];
     return new Promise(function(resolve) { window.__sbLoginDone = resolve; });
   }
 
-  function applyRole(user, objects) {
+  function applyRole(user, objects, employees) {
     window.__SB_USER = user;
     if (!user) return;
     var chip = $('#userChip');
@@ -5010,13 +5006,21 @@ var colIdx = [];
     }
 
     var selFio = $('#b0_fio');
-    if (selFio && user.role === 'user' && user.full_name) {
-      var hasFio = false;
-      for (var k = 0; k < selFio.options.length; k++) if (selFio.options[k].value === user.full_name) hasFio = true;
-      if (!hasFio) selFio.appendChild(new Option(user.full_name, user.full_name));
-      selFio.value = user.full_name;
-      selFio.disabled = true;
-      selFio.classList.remove('empty');
+    if (selFio) {
+      var selectedFio = selFio.value;
+      selFio.innerHTML = '<option value="">Выберите сотрудника</option>';
+      if (user.role === 'user' && user.full_name) {
+        selFio.appendChild(new Option(user.full_name, user.full_name));
+        selFio.value = user.full_name;
+        selFio.disabled = true;
+      } else {
+        (employees || []).forEach(function(employee) {
+          if (employee.full_name) selFio.appendChild(new Option(employee.full_name, employee.full_name));
+        });
+        selFio.disabled = false;
+        if (selectedFio) selFio.value = selectedFio;
+      }
+      selFio.classList.toggle('empty', !selFio.value);
     }
   }
 
