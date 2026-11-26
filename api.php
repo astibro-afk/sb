@@ -696,7 +696,7 @@ if ($action === 'admin_password_reset' && $method === 'POST') {
     $base = rtrim(dirname((string)($_SERVER['SCRIPT_NAME'] ?? '/')), '/\\');
     $url = ((!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off') ? 'https' : 'http') . '://' . (string)($_SERVER['HTTP_HOST'] ?? '') . ($base ? $base : '') . '/activate.php?token=' . $token;
     audit_log($pdo, $ctx, 'password_reset_link_created', 'user', $targetId, (string)$target['username']);
-    notification_add($pdo, $targetId, 'security', 'Смена пароля', 'Администратор создал одноразовую ссылку для смены пароля. Если вы не ожидали этого, обратитесь к руководителю.', 'activate.php');
+    notification_add($pdo, $targetId, 'security', 'Смена пароля', 'Администратор создал одноразовую ссылку для смены пароля. Если вы не ожидали этого, обратитесь к руководителю.', 'index.html');
     reply(200, ['ok' => true, 'activation_url' => $url, 'expires_in_hours' => 48]);
 }
 
