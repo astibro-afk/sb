@@ -1529,6 +1529,7 @@ body { background: #F3F8F7; }
         <span class="user-chip-role"></span>
       </div>
       <button class="btn btn-ghost" id="btnUsers" type="button" style="display:none">Управление пользователями</button>
+      <button class="btn btn-ghost" id="btnAddUser" type="button" style="display:none">Добавить пользователя</button>
       <button class="btn btn-ghost" id="btnLogout" type="button">Выход</button>
     </div>
   </div>
@@ -4966,6 +4967,8 @@ var colIdx = [];
     if (brandSub && user.object_name) brandSub.textContent = user.object_name;
     var btnUsers = $('#btnUsers');
     if (btnUsers) btnUsers.style.display = (user.role === 'admin') ? '' : 'none';
+    var btnAddUser = $('#btnAddUser');
+    if (btnAddUser) btnAddUser.style.display = (user.role === 'admin' || user.role === 'moderator') ? '' : 'none';
 
     var selTo = $('#b0_to');
     if (selTo) {
@@ -5057,6 +5060,8 @@ var colIdx = [];
     });
     var bu = $('#btnUsers');
     if (bu) bu.addEventListener('click', function() { window.open('users.php', '_blank'); });
+    var bau = $('#btnAddUser');
+    if (bau) bau.addEventListener('click', function() { window.open('add-user.php', '_blank'); });
   })();
 })();
 </script>
