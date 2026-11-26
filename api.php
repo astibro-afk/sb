@@ -706,7 +706,7 @@ if ($action === 'tasks_data' && $method === 'GET') {
         $task['comments']=$comments[$task['id']]??[];
         $task['is_overdue']=!empty($task['due_date']) && $task['due_date']<date('Y-m-d') && $task['status']!=='done';
         $task['can_manage']=$ctx['role']!=='user' && ($ctx['role']==='admin' || (int)$task['created_by']===(int)$ctx['id']);
-        $task['can_update']=($ctx['role']==='user' && (int)$task['assignee_id']===(int)$ctx['id']) || ($ctx['role']!=='user' && ($ctx['role']==='admin' || (int)$task['created_by']===(int)$ctx['id']));
+        $task['can_update']=((int)$task['assignee_id']===(int)$ctx['id']) || ($ctx['role']==='admin') || ($ctx['role']==='moderator' && (int)$task['created_by']===(int)$ctx['id']);
     }
     $objectsSql="SELECT o.id,o.name FROM sb_objects o WHERE o.is_active=1";
     $objectParams=[];
