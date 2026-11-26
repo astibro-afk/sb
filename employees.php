@@ -108,12 +108,12 @@ function render(){
  cards.replaceChildren();count.textContent=q?rows.length+' из '+all.length:all.length+' сотрудников';
  if(!rows.length){const e=node('div','empty');e.append(node('strong','',q?'Ничего не найдено':'Список пока пуст'),node('span','',q?'Попробуйте изменить поисковый запрос.':'Нет сотрудников для отображения.'));cards.append(e);return;}
  rows.forEach(u=>{
-  const card=node('article','employee');
+  const card=node('article','employee');card.dataset.userId=String(u.id);
   const person=node('div','person'),avatar=node('div','avatar',initials(u.full_name||u.username));avatar.setAttribute('aria-hidden','true');
   const main=node('div','person-main');main.append(node('div','name',u.full_name||u.username||'Без имени'),node('div','login','@'+(u.username||'—')));
   const online=!!u.is_online&&!!u.is_active;const state=node('span','state'+(online?'':' inactive'));state.title=!u.is_active?'Аккаунт отключён':(online?'Пользователь в сети':'Пользователь не в сети');state.setAttribute('aria-label',state.title);
   person.append(avatar,main,state);card.append(person);
-  const meta=node('div','meta');meta.append(node('span','role',labels[u.role]||u.role||'Сотрудник'),node('span','status '+(online?'':'off'),!u.is_active?'Отключён':(online?'В сети':'Не в сети')));card.append(meta);
+  const meta=node('div','meta'),roleTag=node('span','role',labels[u.role]||u.role||'Сотрудник'),presenceTag=node('span','status '+(online?'':'off'),!u.is_active?'Отключён':(online?'В сети':'Не в сети'));presenceTag.dataset.presence='1';meta.append(roleTag,presenceTag);card.append(meta);
   const metrics=node('div','metrics');
   [[u.reports_count??0,'Отчётов'],[date(u.last_login,true),'Последний вход'],[date(u.last_report,true),'Последний отчёт']].forEach(([v,l])=>{const m=node('div','metric');m.append(node('strong','',String(v)),node('span','',l));metrics.append(m);});
   card.append(metrics);
@@ -136,6 +136,8 @@ function render(){
   cards.append(card);
  });
 }
+function refreshPresence(){fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(r=>r.json()).then(d=>{if(!d.ok)return;(d.employees||[]).forEach(u=>{const card=cards.querySelector('[data-user-id="'+CSS.escape(String(u.id))+'"]');if(!card)return;const online=!!u.is_online&&!!u.is_active;const dot=card.querySelector('.state'),tag=card.querySelector('[data-presence="1"]');if(dot){dot.classList.toggle('inactive',!online);dot.title=!u.is_active?'Аккаунт отключён':(online?'Пользователь в сети':'Пользователь не в сети');dot.setAttribute('aria-label',dot.title);}if(tag){tag.classList.toggle('off',!online);tag.textContent=!u.is_active?'Отключён':(online?'В сети':'Не в сети');}});}).catch(function(){});}
+setInterval(refreshPresence,30000);
 search.addEventListener('input',render);
 fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось загрузить сотрудников.');all=d.employees||[];if(d.user&&d.user.role==='user'){document.getElementById('heading').textContent='Моя карточка';document.getElementById('subtitle').textContent='Ваши отчёты и история активности';document.getElementById('toolbar').hidden=true;}render();}).catch(e=>{count.textContent='Ошибка';cards.replaceChildren(node('div','empty',e.message));});
 })();
