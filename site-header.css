@@ -165,3 +165,8 @@
 .app-header #notificationBadge[hidden]{
   display:none!important;
 }
+
+/* Ролевые кнопки шапки: атрибут hidden не должен переопределяться стилями кнопок */
+.sb-site-actions [hidden],
+.header-right [hidden],
+.app-header .header-actions [hidden]{display:none!important;}
