@@ -68,7 +68,7 @@ const $=id=>document.getElementById(id);
 let allRecords=[], selected=null, currentUser=null;
 function loadScript(src,test){return new Promise((resolve,reject)=>{if(test())return resolve();const s=document.createElement('script');s.src=src;s.async=true;s.onload=()=>test()?resolve():reject(new Error('Библиотека не загрузилась.'));s.onerror=()=>reject(new Error('Не удалось загрузить библиотеку. Проверьте интернет.'));document.head.appendChild(s);});}
 const today=new Date(), iso=d=>{const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,10)};
-$('from').value='2000-01-01';$('to').value=iso(today);
+$('from').value='2026-01-01';$('to').value=iso(today);
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function val(v){if(v==null||v==='')return '—';if(typeof v==='object')return JSON.stringify(v);return String(v);}
 function setStatus(s,error){$('status').textContent=s;$('status').className='status'+(error?' error':'');}
