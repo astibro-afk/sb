@@ -1060,7 +1060,7 @@ if ($action === 'user_save' && $method === 'POST') {
 
     if ($id > 0) {
         if ($id === (int)$ctx['id'] && (!$isActive || $role !== 'admin')) reply(400, ['ok' => false, 'error' => 'Нельзя отключить себя или снять с себя роль администратора.']);
-        if ($password !== '' && strlen($password) < 6) reply(400, ['ok' => false, 'error' => 'Новый пароль — не менее 6 символов.']);
+        if ($password !== '' && strlen($password) < 8) reply(400, ['ok' => false, 'error' => 'Новый пароль — не менее 8 символов.']);
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare('UPDATE sb_users SET username=:u, full_name=:f, role=:r, object_id=:o, is_active=:a WHERE id=:id');
@@ -1082,7 +1082,7 @@ if ($action === 'user_save' && $method === 'POST') {
         audit_log($pdo, $ctx, 'user_updated', 'user', $id, $username, ['role' => $role, 'object_ids' => $objectIds, 'active' => $isActive]);
         reply(200, ['ok' => true]);
     }
-    if (strlen($password) < 6) reply(400, ['ok' => false, 'error' => 'Пароль нового пользователя — не менее 6 символов.']);
+    if (strlen($password) < 8) reply(400, ['ok' => false, 'error' => 'Пароль нового пользователя — не менее 8 символов.']);
     $pdo->beginTransaction();
     try {
         $stmt = $pdo->prepare('INSERT INTO sb_users (username,password_hash,full_name,role,object_id,is_active) VALUES (:u,:h,:f,:r,:o,:a)');
