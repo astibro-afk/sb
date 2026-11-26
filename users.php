@@ -354,6 +354,34 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
   .object-card{min-height:155px}
 }
 
+/* Уточнение размеров карточек объектов и поля названия */
+.object-grid{
+  grid-template-columns:repeat(auto-fill,minmax(200px,215px));
+  gap:12px;
+}
+.object-card{
+  aspect-ratio:1.08 / 1;
+  padding:12px;
+  gap:8px;
+}
+.object-card input[name="name"]{
+  width:100%;
+  min-width:0;
+  height:34px;
+  min-height:34px;
+  padding:6px 9px;
+  font-size:12px;
+  line-height:1.2;
+}
+@media(max-width:1180px){
+  .object-grid{grid-template-columns:repeat(auto-fill,minmax(190px,205px))}
+}
+@media(max-width:700px){
+  .object-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .object-card{aspect-ratio:auto;min-height:150px}
+  .object-card input[name="name"]{height:34px;min-height:34px}
+}
+
 </style>
 </head>
 <body>
