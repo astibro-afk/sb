@@ -5252,6 +5252,34 @@ var colIdx = [];
   .header-actions .btn { min-height: 32px; padding: 6px 9px; font-size: 11px; }
   .header-actions .user-chip { max-width: 100%; }
 }
+
+/* Все элементы шапки выровнены по центру */
+.app-header-inner {
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center;
+  gap: 12px;
+}
+.app-header .brand {
+  justify-content: center;
+  width: 100%;
+  text-align: center;
+}
+.app-header .brand-text { text-align: center; }
+.app-header .header-actions {
+  justify-content: center !important;
+  align-items: center;
+  width: 100%;
+}
+@media (max-width: 480px) {
+  .app-header .header-actions {
+    display: flex !important;
+    flex-wrap: wrap;
+    justify-content: center !important;
+  }
+  .app-header .header-actions .btn { width: auto; }
+}
 </style>
 
 <div class="viewonly-banner" id="viewOnlyBanner"></div>
