@@ -191,8 +191,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $err = 'Недопустимая роль.';
             } elseif ($id === (int)$me['id'] && (!$isActive || $role !== 'admin')) {
                 $err = 'Нельзя отключить себя или снять с себя роль администратора.';
-            } elseif ($password !== '' && strlen($password) < 6) {
-                $err = 'Пароль — не менее 6 символов.';
+            } elseif ($password !== '' && strlen($password) < 8) {
+                $err = 'Пароль — не менее 8 символов.';
             } else {
                 $dup = $pdo->prepare('SELECT COUNT(*) FROM sb_users WHERE username = :u AND id <> :i');
                 $dup->execute([':u' => $username, ':i' => $id]);
@@ -225,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             throw $e;
                         }
                     } elseif ($err === '' && strlen($password) < 6) {
-                        $err = 'Пароль нового пользователя — не менее 6 символов.';
+                        $err = 'Пароль нового пользователя — не менее 8 символов.';
                     } elseif ($err === '') {
                         $pdo->beginTransaction();
                         try {
@@ -486,7 +486,7 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="user_save">
     <div class="field"><label>Логин</label><input name="username" placeholder="Логин" required></div>
     <div class="field"><label>ФИО</label><input name="full_name" placeholder="Фамилия Имя Отчество" required></div>
-    <div class="field"><label>Пароль</label><input name="password" type="password" minlength="6" placeholder="От 6 символов" required></div>
+    <div class="field"><label>Пароль</label><input name="password" type="password" minlength="8" placeholder="От 8 символов" required></div>
     <div class="field"><label>Роль</label><select name="role"><option value="user">Пользователь</option><option value="moderator">Модератор</option><option value="admin">Администратор</option></select></div>
     <div class="field picker-field"><label>Закрепить объекты</label>
       <details class="object-picker"><summary><span class="picker-value">Выбрать объекты</span></summary><div class="picker-menu">
@@ -514,7 +514,7 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
           </div></details>
         </div>
         <div class="field"><label>Статус</label><select name="is_active"><option value="1" <?= $u['is_active'] ? 'selected' : '' ?>>Активен</option><option value="0" <?= !$u['is_active'] ? 'selected' : '' ?>>Отключён</option></select></div>
-        <div class="field password-field"><label>Новый пароль</label><input name="password" type="password" minlength="6" placeholder="Оставьте пустым, чтобы не менять"></div>
+        <div class="field password-field"><label>Новый пароль</label><input name="password" type="password" minlength="8" placeholder="Оставьте пустым, чтобы не менять"></div>
         <div class="field save-field"><label>&nbsp;</label><button class="btn secondary" type="submit">Сохранить</button></div>
       </form>
       <div class="user-actions">
@@ -531,7 +531,7 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
 
 <section class="panel">
   <div class="panel-head"><div class="panel-heading"><div class="section-icon">◷</div><div><h2 class="panel-title">История действий</h2><div class="panel-subtitle">Последние 50 изменений пользователей и торговых объектов</div></div></div><span class="counter"><?= count($auditRows) ?> событий</span></div>
-  <?php if ($auditRows): ?><div class="table-wrap"><table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:9px;border-bottom:1px solid var(--line)">Дата и время</th><th style="text-align:left;padding:9px;border-bottom:1px solid var(--line)">Кто</th><th style="text-align:left;padding:9px;border-bottom:1px solid var(--line)">Действие</th><th style="text-align:left;padding:9px;border-bottom:1px solid var(--line)">Объект действия</th></tr></thead><tbody><?php foreach ($auditRows as $log): ?><tr><td style="padding:9px;border-bottom:1px solid var(--line);white-space:nowrap"><?= h($log['created_at']) ?></td><td style="padding:9px;border-bottom:1px solid var(--line)"><?= h($log['actor_name']) ?></td><td style="padding:9px;border-bottom:1px solid var(--line)"><?= h(['user_created'=>'Создание пользователя','user_updated'=>'Изменение пользователя','user_deleted'=>'Удаление пользователя','user_disabled'=>'Отключение пользователя','user_enabled'=>'Включение пользователя','object_created'=>'Создание объекта','object_updated'=>'Изменение объекта','object_deleted'=>'Удаление объекта'][$log['action']] ?? $log['action']) ?></td><td style="padding:9px;border-bottom:1px solid var(--line)"><?= h($log['target_label']) ?></td></tr><?php endforeach; ?></tbody></table></div><?php else: ?><div class="empty">История пока пуста. Новые действия будут фиксироваться автоматически.</div><?php endif; ?>
+  <?php if ($auditRows): ?><div class="table-wrap"><table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:9px;border-bottom:1px solid var(--line)">Дата и время</th><th style="text-align:left;padding:9px;border-bottom:1px solid var(--line)">Кто</th><th style="text-align:left;padding:9px;border-bottom:1px solid var(--line)">Действие</th><th style="text-align:left;padding:9px;border-bottom:1px solid var(--line)">Объект действия</th></tr></thead><tbody><?php foreach ($auditRows as $log): ?><tr><td style="padding:9px;border-bottom:1px solid var(--line);white-space:nowrap"><?= h($log['created_at']) ?></td><td style="padding:9px;border-bottom:1px solid var(--line)"><?= h($log['actor_name']) ?></td><td style="padding:9px;border-bottom:1px solid var(--line)"><?= h(['user_created'=>'Создание пользователя','user_updated'=>'Изменение пользователя','user_deleted'=>'Удаление пользователя','user_disabled'=>'Отключение пользователя','user_enabled'=>'Включение пользователя','object_created'=>'Создание объекта','object_updated'=>'Изменение объекта','object_deleted'=>'Удаление объекта','login'=>'Вход в систему','logout'=>'Выход из системы','reports_saved'=>'Сохранение отчётов','report_deleted'=>'Удаление отчёта','report_comment_updated'=>'Изменение комментария','password_reset_link_created'=>'Создание ссылки сброса пароля','password_changed'=>'Смена пароля'][$log['action']] ?? $log['action']) ?></td><td style="padding:9px;border-bottom:1px solid var(--line)"><?= h($log['target_label']) ?></td></tr><?php endforeach; ?></tbody></table></div><?php else: ?><div class="empty">История пока пуста. Новые действия будут фиксироваться автоматически.</div><?php endif; ?>
 </section>
 </div>
 <script>
