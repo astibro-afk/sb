@@ -269,6 +269,91 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
 @media(max-width:1180px){.user-create{grid-template-columns:repeat(3,minmax(0,1fr))}.user-edit-form{grid-template-columns:90px minmax(130px,1fr) 125px minmax(170px,1.2fr) 100px auto}.user-edit-form .password-field{grid-column:2/4}.user-edit-form .save-field{grid-column:4/7}.user-edit-form .save-field .btn{width:100%}.user-card{grid-template-columns:1fr}.user-actions{justify-content:flex-end}}
 @media(max-width:700px){.page{padding:14px 11px 28px}.topbar{align-items:flex-start}.brand h1{font-size:20px}.logo{width:41px;height:41px}.summary{gap:7px}.summary-card{padding:10px;gap:8px}.summary-icon{width:30px;height:30px;font-size:14px}.summary-value{font-size:17px}.summary-label{font-size:10px}.panel{padding:13px;border-radius:13px}.panel-head{margin-bottom:12px}.add-object{grid-template-columns:1fr 115px}.add-object .submit-field{grid-column:1/-1}.add-object .submit-field .btn{width:100%}.object-grid{grid-template-columns:1fr}.object-card{grid-template-columns:minmax(0,1fr) 95px auto auto;padding:7px}.user-create{grid-template-columns:1fr 1fr}.user-create .picker-field,.user-create .create-field{grid-column:1/-1}.user-create .create-field .btn{width:100%}.user-tools{align-items:stretch;flex-direction:column}.search-wrap{max-width:none}.user-card{padding:11px}.user-edit-form{grid-template-columns:1fr 1fr}.user-edit-form .id-field{grid-column:1/-1}.user-edit-form .full-field{grid-column:1/-1}.user-edit-form .picker-field{grid-column:1/-1}.user-edit-form .password-field{grid-column:1/-1}.user-edit-form .save-field{grid-column:1/-1}.user-edit-form .save-field .btn{width:100%}.user-actions{justify-content:stretch}.user-actions form{flex:1}.user-actions .btn{width:100%}.top-actions .btn{min-height:34px;padding:7px 9px}}
 @media(max-width:390px){.summary-card{flex-direction:column;align-items:flex-start}.object-card{grid-template-columns:1fr 85px}.object-card .save-object{grid-column:1}.object-card .delete-object{grid-column:2}.user-create{grid-template-columns:1fr}.user-create .field{grid-column:1/-1}}
+
+/* Новая компактная компоновка: объекты — квадратные карточки, пользователи — строки */
+.object-grid{
+  grid-template-columns:repeat(auto-fill,minmax(168px,190px));
+  justify-content:start;
+  align-items:stretch;
+  gap:12px;
+}
+.object-card{
+  aspect-ratio:1 / 1;
+  min-width:0;
+  grid-template-columns:1fr 1fr;
+  grid-template-rows:minmax(0,1fr) auto auto;
+  align-content:stretch;
+  gap:9px;
+  padding:13px;
+  border-radius:13px;
+}
+.object-card input[name="name"]{
+  grid-column:1 / -1;
+  width:100%;
+  height:auto;
+  min-height:44px;
+  align-self:stretch;
+  font-size:13px;
+  font-weight:700;
+  line-height:1.35;
+  white-space:normal;
+}
+.object-card select{grid-column:1 / -1;width:100%}
+.object-card .save-object,.object-card .delete-object{
+  width:100%;
+  min-width:0;
+  padding-left:5px;
+  padding-right:5px;
+}
+.user-list{gap:7px}
+.user-card{
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:12px;
+  padding:10px 11px;
+  border-radius:10px;
+}
+.user-edit-form{
+  grid-template-columns:62px minmax(105px,.85fr) minmax(155px,1.25fr) 118px minmax(260px,2fr) 96px minmax(145px,1.15fr) 116px;
+  gap:8px;
+  align-items:end;
+}
+.user-edit-form .field{min-width:0}
+.user-edit-form .field label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-edit-form input,.user-edit-form select,.user-edit-form .object-picker summary{height:35px}
+.user-edit-form .save-field .btn{width:100%;min-height:35px;padding:7px 8px;white-space:nowrap}
+.user-edit-form .password-field,.user-edit-form .save-field{grid-column:auto}
+.user-actions{gap:5px;flex-wrap:nowrap}
+.user-actions .btn{padding-left:8px;padding-right:8px}
+.user-actions .status{padding:5px 7px}
+@media(max-width:1450px) and (min-width:1181px){
+  .user-card{grid-template-columns:minmax(0,1fr) auto;gap:8px}
+  .user-edit-form{grid-template-columns:54px minmax(95px,.8fr) minmax(135px,1.15fr) 108px minmax(220px,1.8fr) 88px minmax(125px,1fr) 105px;gap:6px}
+  .user-edit-form .save-field .btn{font-size:10px}
+  .user-actions{gap:4px}
+  .user-actions .btn{font-size:10px;padding:6px}
+  .user-actions .status{font-size:9px}
+}
+@media(max-width:1180px){
+  .object-grid{grid-template-columns:repeat(auto-fill,minmax(160px,180px))}
+  .object-card{aspect-ratio:1 / 1}
+  .user-card{grid-template-columns:1fr}
+  .user-edit-form{grid-template-columns:80px minmax(120px,1fr) minmax(150px,1.2fr) 120px minmax(230px,1.8fr) 100px}
+  .user-edit-form .password-field{grid-column:2 / 4}
+  .user-edit-form .save-field{grid-column:4 / 7}
+  .user-actions{justify-content:flex-end}
+}
+@media(max-width:700px){
+  .object-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .object-card{aspect-ratio:auto;min-height:165px;padding:9px;gap:7px}
+  .object-card input[name="name"]{min-height:48px}
+  .user-edit-form{grid-template-columns:1fr 1fr}
+  .user-edit-form .id-field,.user-edit-form .full-field,.user-edit-form .picker-field,.user-edit-form .password-field,.user-edit-form .save-field{grid-column:1 / -1}
+}
+@media(max-width:390px){
+  .object-grid{grid-template-columns:1fr 1fr}
+  .object-card{min-height:155px}
+}
+
 </style>
 </head>
 <body>
