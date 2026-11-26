@@ -3915,7 +3915,10 @@ function monthRecords(month, object) {
     $('#btnPreview').addEventListener('click', showPreview);
     $('#btnPreview2').addEventListener('click', showPreview);
     $('#btnReset').addEventListener('click', function() {
-      if (confirm('Сбросить все данные отчета?')) resetAll();
+      if (confirm('Сбросить все данные отчета?')) {
+        resetAll();
+        serverStore.flush().then(function() { window.location.reload(); });
+      }
     });
     $('#btnDownload').addEventListener('click', openSummary);
     $('#btnDownload2').addEventListener('click', openSummary);
