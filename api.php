@@ -419,7 +419,12 @@ if ($action === 'status' && $method === 'GET') {
 }
 
 if ($action === 'login' && $method === 'POST') {
-    $body = input_json();
+    // Для входа принимаем обычную HTML-форму: некоторые бесплатные хостинги
+    // блокируют или подменяют AJAX-запросы с application/json.
+    $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
+    $body = strpos($contentType, 'application/x-www-form-urlencoded') !== false
+        ? $_POST
+        : input_json();
     check_csrf($body);
     $username = trim((string)($body['username'] ?? ''));
     $password = (string)($body['password'] ?? '');
