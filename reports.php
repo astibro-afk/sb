@@ -95,7 +95,7 @@ async function load(){
   var data=await res.json();
   if(res.status===401){location.href='index.html';return;}
   if(!res.ok||!data.ok)throw new Error(data.error||'Не удалось загрузить отчёты.');
-  user=data.user;objects=data.objects||[];records=data.records||[];
+  window.__SB_CSRF=data.csrf||'';user=data.user;objects=data.objects||[];records=data.records||[];
   $('roleInfo').textContent=roleName(user.role)+' · '+(user.object_names||[]).join(', ');
   var sel=$('objectFilter'),current=sel.value;
   sel.innerHTML='<option value="0">Все доступные объекты</option>'+objects.map(function(o){return '<option value="'+Number(o.id)+'">'+esc(o.name)+'</option>';}).join('');
