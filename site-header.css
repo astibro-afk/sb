@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 /* Единый размер и стиль шапки на всех страницах СБ */
 :root{--sb-header-ink:#1a3438;--sb-header-muted:#6b8589;--sb-header-line:#deebe8;--sb-header-brand:#0d7377}
 .sb-site-header,.topbar,.app-header{position:sticky!important;top:0!important;z-index:100!important;width:100%!important;margin:0!important;padding:0!important;background:rgba(255,255,255,.96)!important;border-bottom:1px solid var(--sb-header-line)!important;color:var(--sb-header-ink)!important;box-shadow:none!important;backdrop-filter:blur(14px)!important;-webkit-backdrop-filter:blur(14px)!important}
@@ -146,4 +147,12 @@
  .sb-site-actions,.topbar .header-right,.app-header .header-actions,.sb-header-right{width:100%!important;justify-content:flex-start!important}
  .sb-site-user,.topbar .user-chip,.app-header .user-chip,.sb-user-chip{max-width:100%!important;margin-right:auto!important}
  .sb-site-brand,.topbar .brand,.app-header .brand,.sb-brand{flex:1 1 auto!important}
+}
+
+
+/* Единая гарнитура для всей шапки и навигации на всех страницах */
+.sb-site-header,.sb-site-header *,.sb-site-nav,.sb-site-nav *,
+.topbar,.topbar *,.nav,.nav *,
+.app-header,.app-header *,.sb-topbar,.sb-topbar *,.sb-nav,.sb-nav *{
+  font-family:Inter,Arial,sans-serif!important;
 }
