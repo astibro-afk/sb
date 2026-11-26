@@ -229,6 +229,18 @@ function db(array $cfg): PDO {
             INDEX idx_audit_actor (actor_user_id),
             INDEX idx_audit_action (action)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS sb_notifications (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            type VARCHAR(48) NOT NULL DEFAULT 'info',
+            title VARCHAR(180) NOT NULL,
+            message TEXT NOT NULL,
+            link VARCHAR(255) NOT NULL DEFAULT '',
+            is_read TINYINT(1) NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_notifications_user_read (user_id, is_read, created_at),
+            CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         ensure_user_objects($pdo);
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
@@ -259,6 +271,14 @@ function audit_log(PDO $pdo, ?array $actor, string $action, string $targetType =
         $stmt = $pdo->prepare('INSERT INTO sb_audit_log (actor_user_id, actor_name, action, target_type, target_id, target_label, details) VALUES (:uid, :name, :action, :type, :target_id, :label, :details)');
         $stmt->execute([':uid' => $actorId > 0 ? $actorId : null, ':name' => mb_substr($actorName, 0, 255), ':action' => mb_substr($action, 0, 64), ':type' => mb_substr($targetType, 0, 64), ':target_id' => $targetId, ':label' => mb_substr($targetLabel, 0, 255), ':details' => $details ? json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null]);
     } catch (Throwable $e) { error_log('SB audit log error: ' . $e->getMessage()); }
+}
+
+function notification_add(PDO $pdo, int $userId, string $type, string $title, string $message, string $link = ''): void {
+    if ($userId < 1) return;
+    try {
+        $st = $pdo->prepare('INSERT INTO sb_notifications (user_id, type, title, message, link) VALUES (:uid, :type, :title, :message, :link)');
+        $st->execute([':uid'=>$userId, ':type'=>mb_substr($type,0,48), ':title'=>mb_substr($title,0,180), ':message'=>$message, ':link'=>mb_substr($link,0,255)]);
+    } catch (Throwable $e) { error_log('SB notification error: '.$e->getMessage()); }
 }
 
 function get_user_object_rows(PDO $pdo, int $userId): array {
@@ -589,6 +609,75 @@ if (!$user) {
 }
 $ctx = user_ctx($pdo, $user);
 
+if ($action === 'notifications_data' && $method === 'GET') {
+    $st = $pdo->prepare('SELECT id, type, title, message, link, is_read, created_at FROM sb_notifications WHERE user_id=:uid ORDER BY id DESC LIMIT 100');
+    $st->execute([':uid'=>(int)$ctx['id']]);
+    $items = $st->fetchAll();
+    $unread = 0;
+    foreach ($items as &$item) { $item['is_read'] = (int)$item['is_read']; if (!$item['is_read']) $unread++; }
+    unset($item);
+    reply(200, ['ok'=>true, 'notifications'=>$items, 'unread'=>$unread, 'csrf'=>csrf_token()]);
+}
+if ($action === 'notifications_read' && $method === 'POST') {
+    $body = input_json(); check_csrf($body);
+    $id = (int)($body['id'] ?? 0);
+    if ($id > 0) {
+        $st = $pdo->prepare('UPDATE sb_notifications SET is_read=1 WHERE id=:id AND user_id=:uid');
+        $st->execute([':id'=>$id, ':uid'=>(int)$ctx['id']]);
+    } elseif (!empty($body['all'])) {
+        $st = $pdo->prepare('UPDATE sb_notifications SET is_read=1 WHERE user_id=:uid');
+        $st->execute([':uid'=>(int)$ctx['id']]);
+    } else reply(400, ['ok'=>false, 'error'=>'Не выбрано уведомление.']);
+    reply(200, ['ok'=>true]);
+}
+
+if ($action === 'employees_data' && $method === 'GET') {
+    $targetId = (int)($_GET['user_id'] ?? 0);
+    $sql = "SELECT u.id,u.username,u.full_name,u.role,u.is_active,u.created_at,
+        (SELECT MAX(a.created_at) FROM sb_audit_log a WHERE a.actor_user_id=u.id AND a.action='login') AS last_login,
+        (SELECT COUNT(*) FROM sb_archive_records ar WHERE ar.owner_user_id=u.id) AS reports_count,
+        (SELECT MAX(ar.report_date) FROM sb_archive_records ar WHERE ar.owner_user_id=u.id) AS last_report
+        FROM sb_users u WHERE 1=1";
+    $params = [];
+    if ($ctx['role'] === 'user') {
+        $sql .= ' AND u.id=:self_id'; $params[':self_id']=(int)$ctx['id'];
+    } elseif ($ctx['role'] === 'moderator') {
+        $sql .= " AND u.id=:self_id OR (u.id<>:self_id2 AND EXISTS (
+            SELECT 1 FROM sb_user_objects tuo
+            JOIN sb_user_objects muo ON muo.object_id=tuo.object_id
+            JOIN sb_objects ob ON ob.id=tuo.object_id AND ob.is_active=1
+            WHERE tuo.user_id=u.id AND muo.user_id=:moderator_id
+        ))";
+        $params[':self_id']=(int)$ctx['id']; $params[':self_id2']=(int)$ctx['id']; $params[':moderator_id']=(int)$ctx['id'];
+    }
+    if ($targetId > 0) { $sql .= ' AND u.id=:target_id'; $params[':target_id']=$targetId; }
+    $sql .= ' ORDER BY u.full_name,u.id';
+    $st=$pdo->prepare($sql); $st->execute($params); $users=$st->fetchAll();
+    $objectSt=$pdo->prepare('SELECT o.name FROM sb_user_objects uo JOIN sb_objects o ON o.id=uo.object_id WHERE uo.user_id=:uid ORDER BY o.name');
+    foreach ($users as &$employee) {
+        $objectSt->execute([':uid'=>(int)$employee['id']]);
+        $employee['objects']=array_column($objectSt->fetchAll(),'name');
+        $employee['reports_count']=(int)$employee['reports_count'];
+        $employee['is_active']=(int)$employee['is_active'];
+    }
+    unset($employee);
+    if ($targetId > 0 && !$users) reply(404,['ok'=>false,'error'=>'Сотрудник не найден или у вас нет доступа.']);
+    reply(200,['ok'=>true,'employees'=>$users,'user'=>$ctx,'csrf'=>csrf_token()]);
+}
+if ($action === 'employee_history' && $method === 'GET') {
+    $targetId=(int)($_GET['user_id'] ?? 0);
+    if ($targetId < 1) reply(400,['ok'=>false,'error'=>'Не выбран сотрудник.']);
+    if ($ctx['role']==='user' && $targetId!==(int)$ctx['id']) reply(403,['ok'=>false,'error'=>'Недостаточно прав.']);
+    if ($ctx['role']==='moderator') {
+        $check=$pdo->prepare("SELECT COUNT(*) FROM sb_user_objects a JOIN sb_user_objects b ON b.object_id=a.object_id JOIN sb_objects o ON o.id=a.object_id AND o.is_active=1 WHERE a.user_id=:target AND b.user_id=:viewer");
+        $check->execute([':target'=>$targetId,':viewer'=>(int)$ctx['id']]);
+        if ((int)$check->fetchColumn()===0 && $targetId!==(int)$ctx['id']) reply(403,['ok'=>false,'error'=>'Нет доступа к истории этого сотрудника.']);
+    }
+    $st=$pdo->prepare("SELECT actor_name,action,target_label,created_at FROM sb_audit_log WHERE actor_user_id=:uid OR (target_type='user' AND target_id=:uid2) ORDER BY id DESC LIMIT 30");
+    $st->execute([':uid'=>$targetId,':uid2'=>$targetId]);
+    reply(200,['ok'=>true,'history'=>$st->fetchAll()]);
+}
+
 if ($action === 'admin_password_reset' && $method === 'POST') {
     require_role($ctx, 'admin');
     $body = input_json();
@@ -607,6 +696,7 @@ if ($action === 'admin_password_reset' && $method === 'POST') {
     $base = rtrim(dirname((string)($_SERVER['SCRIPT_NAME'] ?? '/')), '/\\');
     $url = ((!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off') ? 'https' : 'http') . '://' . (string)($_SERVER['HTTP_HOST'] ?? '') . ($base ? $base : '') . '/activate.php?token=' . $token;
     audit_log($pdo, $ctx, 'password_reset_link_created', 'user', $targetId, (string)$target['username']);
+    notification_add($pdo, $targetId, 'security', 'Смена пароля', 'Администратор создал одноразовую ссылку для смены пароля. Если вы не ожидали этого, обратитесь к руководителю.', 'activate.php');
     reply(200, ['ok' => true, 'activation_url' => $url, 'expires_in_hours' => 48]);
 }
 
@@ -621,9 +711,10 @@ if ($action === 'report_comment' && $method === 'POST') {
     if (!preg_match('/^[rd]:[a-f0-9]{64}$/i', $recordKey) || mb_strlen($comment) > 5000) {
         reply(400, ['ok' => false, 'error' => 'Проверьте отчёт и длину комментария (до 5000 символов).']);
     }
-    $exists = $pdo->prepare('SELECT record_key FROM sb_archive_records WHERE record_key = :k LIMIT 1');
+    $exists = $pdo->prepare('SELECT record_key, owner_user_id, object_name FROM sb_archive_records WHERE record_key = :k LIMIT 1');
     $exists->execute([':k' => $recordKey]);
-    if (!$exists->fetchColumn()) reply(404, ['ok' => false, 'error' => 'Отчёт не найден.']);
+    $reportOwner = $exists->fetch();
+    if (!$reportOwner) reply(404, ['ok' => false, 'error' => 'Отчёт не найден.']);
     if ($comment === '') {
         $del = $pdo->prepare('DELETE FROM sb_report_comments WHERE record_key = :k');
         $del->execute([':k' => $recordKey]);
@@ -635,6 +726,9 @@ if ($action === 'report_comment' && $method === 'POST') {
         $save->execute([':k' => $recordKey, ':c' => $comment, ':uid' => (int)$ctx['id'], ':name' => (string)$ctx['full_name']]);
     }
     audit_log($pdo, $ctx, 'report_comment_updated', 'report', null, $recordKey);
+    if ($comment !== '' && (int)($reportOwner['owner_user_id'] ?? 0) > 0 && (int)$reportOwner['owner_user_id'] !== (int)$ctx['id']) {
+        notification_add($pdo, (int)$reportOwner['owner_user_id'], 'report_comment', 'Комментарий к отчёту', 'Руководитель добавил или обновил комментарий к вашему отчёту по объекту «'.(string)$reportOwner['object_name'].'».', 'reports.php');
+    }
     reply(200, ['ok' => true, 'comment' => $comment, 'author' => (string)$ctx['full_name']]);
 }
 
@@ -1060,6 +1154,7 @@ if ($action === 'user_save' && $method === 'POST') {
     if ((int)$dup->fetchColumn() > 0) reply(400, ['ok' => false, 'error' => 'Такой логин уже занят.']);
 
     if ($id > 0) {
+        $oldObjectIds = user_object_ids($pdo, $id);
         if ($id === (int)$ctx['id'] && (!$isActive || $role !== 'admin')) reply(400, ['ok' => false, 'error' => 'Нельзя отключить себя или снять с себя роль администратора.']);
         if ($password !== '' && strlen($password) < 8) reply(400, ['ok' => false, 'error' => 'Новый пароль — не менее 8 символов.']);
         $pdo->beginTransaction();
@@ -1081,6 +1176,7 @@ if ($action === 'user_save' && $method === 'POST') {
             throw $e;
         }
         audit_log($pdo, $ctx, 'user_updated', 'user', $id, $username, ['role' => $role, 'object_ids' => $objectIds, 'active' => $isActive]);
+        if ($oldObjectIds !== $objectIds) notification_add($pdo, $id, 'access', 'Изменены назначенные объекты', 'Руководитель обновил список торговых объектов, доступных в вашей учётной записи.', 'index.html');
         reply(200, ['ok' => true]);
     }
     if (strlen($password) < 8) reply(400, ['ok' => false, 'error' => 'Пароль нового пользователя — не менее 8 символов.']);
@@ -1099,6 +1195,7 @@ if ($action === 'user_save' && $method === 'POST') {
         throw $e;
     }
     audit_log($pdo, $ctx, 'user_created', 'user', $newId, $username, ['role' => $role, 'object_ids' => $objectIds, 'active' => $isActive]);
+    notification_add($pdo, $newId, 'account', 'Учётная запись создана', 'Для вас создана учётная запись на сайте СБ. Если пароль ещё не установлен, используйте ссылку активации от администратора.', 'index.html');
     reply(200, ['ok' => true, 'id' => $newId]);
 }
 
