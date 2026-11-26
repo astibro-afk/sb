@@ -1523,10 +1523,7 @@ body { background: #F3F8F7; }
       </div>
     </div>
     <div class="header-actions">
-      <button class="btn btn-ghost" id="btnPreview">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        Предпросмотр
-      </button>
+      
       <a class="btn btn-ghost" href="reports.php" style="display:inline-flex;align-items:center;text-decoration:none">
         Отчёты сотрудников
       </a>
@@ -1535,10 +1532,7 @@ body { background: #F3F8F7; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
         Сброс данных
       </button>
-      <button class="btn btn-primary" id="btnDownload">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-        Скачать Word
-      </button>
+      
       <div class="user-chip" id="userChip">
         <span class="user-chip-name"></span>
         <span class="user-chip-role"></span>
@@ -3967,7 +3961,7 @@ function monthRecords(month, object) {
       b.addEventListener('click', function() { addDyn(b.getAttribute('data-add')); });
     });
 
-    $('#btnPreview').addEventListener('click', showPreview);
+    if ($('#btnPreview')) $('#btnPreview').addEventListener('click', showPreview);
     $('#btnPreview2').addEventListener('click', showPreview);
     $('#btnReset').addEventListener('click', function() {
       if (confirm('Сбросить все данные отчета?')) {
@@ -3975,7 +3969,7 @@ function monthRecords(month, object) {
         serverStore.flush().then(function() { window.location.reload(); });
       }
     });
-    $('#btnDownload').addEventListener('click', openSummary);
+    if ($('#btnDownload')) $('#btnDownload').addEventListener('click', openSummary);
     $('#btnDownload2').addEventListener('click', openSummary);
     $('#btnChangeFolder2').addEventListener('click', changeSaveFolder);
     $('#summaryCancel').addEventListener('click', closeSummary);
