@@ -608,17 +608,17 @@ if ($action === 'reports_data' && $method === 'GET') {
             $nameMarks[] = $key;
             $params[$key] = $name;
         }
-        $sql .= ' AND (object_id IN (' . implode(',', $idMarks) . ') OR (object_id IS NULL AND object_name IN (' . implode(',', $nameMarks) . ')))';
+        $sql .= ' AND (object_id IN (' . implode(',', $idMarks) . ') OR (object_id IS NULL AND object_name IN (' . implode(',', $selectedNameMarks) . ')))';
     }
 
     if ($objectIds) {
-        $selectedNames = [];
+        $selectedNameMarks = [];
         $idMarks = [];
         foreach ($objectIds as $i => $id) {
             $idKey = ':selected_id_' . $i;
             $nameKey = ':selected_name_' . $i;
             $idMarks[] = $idKey;
-            $nameMarks[] = $nameKey;
+            $selectedNameMarks[] = $nameKey;
             $params[$idKey] = $id;
             $params[$nameKey] = (string)$availableById[$id]['name'];
         }
