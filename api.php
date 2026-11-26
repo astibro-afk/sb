@@ -383,19 +383,7 @@ function save_archive(PDO $pdo, array $records, array $ctx): void {
             ]);
         }
 
-        // Верхняя граница архива (400 записей) чистится только администратором,
-        // чтобы ограниченный в правах пользователь не «вытеснял» чужие записи.
-        if ($isAdmin) {
-            $pdo->exec(
-                'DELETE FROM sb_archive_records
-                 WHERE record_key NOT IN (
-                     SELECT record_key FROM (
-                         SELECT record_key FROM sb_archive_records
-                         ORDER BY report_date DESC, updated_at DESC LIMIT 400
-                     ) AS keep_records
-                 )'
-            );
-        }
+        // Архив хранится без автоматического ограничения по количеству записей.
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
@@ -507,6 +495,90 @@ if (!$user) {
         'error' => 'Требуется вход. Обновите страницу и авторизуйтесь.']);
 }
 $ctx = user_ctx($pdo, $user);
+
+if ($action === 'reports_data' && $method === 'GET') {
+    $from = (string)($_GET['from'] ?? date('Y-m-01'));
+    $to = (string)($_GET['to'] ?? date('Y-m-d'));
+    $objectId = (int)($_GET['object_id'] ?? 0);
+    $validDate = function($value) {
+        $d = DateTime::createFromFormat('!Y-m-d', $value);
+        return $d && $d->format('Y-m-d') === $value;
+    };
+    if (!$validDate($from) || !$validDate($to) || $from > $to) {
+        reply(400, ['ok' => false, 'error' => 'Укажите корректный период: дата начала не позже даты окончания.']);
+    }
+
+    $assignedRows = [];
+    $allowedIds = [];
+    $allowedNames = [];
+    if ($ctx['role'] !== 'admin') {
+        foreach (get_user_object_rows($pdo, (int)$ctx['id']) as $obj) {
+            if ((int)$obj['is_active'] !== 1) continue;
+            $assignedRows[] = $obj;
+            $allowedIds[] = (int)$obj['id'];
+            $allowedNames[] = (string)$obj['name'];
+        }
+    } else {
+        $assignedRows = $pdo->query('SELECT id, name, is_active FROM sb_objects WHERE is_active = 1 ORDER BY name')->fetchAll();
+    }
+
+    if ($ctx['role'] !== 'admin' && $objectId > 0 && !in_array($objectId, $allowedIds, true)) {
+        reply(403, ['ok' => false, 'error' => 'Нет доступа к отчётам по выбранному объекту.']);
+    }
+
+    $sql = 'SELECT report_date, object_name, owner_user_id, owner_name, object_id, payload, updated_at
+            FROM sb_archive_records WHERE report_date >= :date_from AND report_date <= :date_to';
+    $params = [':date_from' => $from, ':date_to' => $to];
+
+    if ($ctx['role'] !== 'admin') {
+        if (!$allowedIds) reply(200, ['ok' => true, 'objects' => [], 'records' => [], 'user' => $ctx]);
+        $idMarks = [];
+        foreach ($allowedIds as $i => $id) {
+            $key = ':allowed_id_' . $i;
+            $idMarks[] = $key;
+            $params[$key] = $id;
+        }
+        $nameMarks = [];
+        foreach ($allowedNames as $i => $name) {
+            $key = ':allowed_name_' . $i;
+            $nameMarks[] = $key;
+            $params[$key] = $name;
+        }
+        $sql .= ' AND (object_id IN (' . implode(',', $idMarks) . ') OR (object_id IS NULL AND object_name IN (' . implode(',', $nameMarks) . ')))';
+    }
+
+    if ($objectId > 0) {
+        $selected = null;
+        foreach ($assignedRows as $obj) if ((int)$obj['id'] === $objectId) { $selected = $obj; break; }
+        if (!$selected) reply(403, ['ok' => false, 'error' => 'Выбранный объект недоступен.']);
+        $sql .= ' AND (object_id = :selected_id OR (object_id IS NULL AND object_name = :selected_name))';
+        $params[':selected_id'] = $objectId;
+        $params[':selected_name'] = (string)$selected['name'];
+    }
+    $sql .= ' ORDER BY report_date DESC, object_name ASC, updated_at DESC';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $records = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $item = json_decode((string)$row['payload'], true);
+        if (!is_array($item)) continue;
+        $data = isset($item['data']) && is_array($item['data']) ? $item['data'] : [];
+        $records[] = [
+            'date' => (string)($data['b0_date'] ?? $row['report_date']),
+            'object' => (string)($data['b0_to'] ?? $row['object_name']),
+            'employee' => (string)($data['b0_fio'] ?? $item['fio'] ?? ''),
+            'author' => (string)($item['owner_name'] ?? $row['owner_name'] ?? ''),
+            'owner_user_id' => isset($item['owner_user_id']) ? (int)$item['owner_user_id'] : ($row['owner_user_id'] !== null ? (int)$row['owner_user_id'] : null),
+            'done' => (int)($item['done'] ?? 0),
+            'total' => (int)($item['total'] ?? 0),
+            'saved_at' => (int)($item['t'] ?? 0),
+            'updated_at' => (string)$row['updated_at'],
+        ];
+    }
+
+    reply(200, ['ok' => true, 'objects' => $assignedRows, 'records' => $records, 'user' => $ctx, 'from' => $from, 'to' => $to]);
+}
 
 if ($action === 'load' && $method === 'GET') {
     $logicalKeys = [KEY_REPORT, KEY_DYN, KEY_LISTS];
