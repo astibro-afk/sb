@@ -635,5 +635,134 @@ function wordHtml(d) {
     '</body></ht' + 'ml>';
   return html;
 }
-root.SBDocument={build:build,docHtml:docHtml,wordHtml:wordHtml,css:docCss};
+function crc32(data) {
+  var T = window.__sbCrc32T;
+  if (!T) {
+    T = [];
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      T[n] = c >>> 0;
+    }
+    window.__sbCrc32T = T;
+  }
+  var crc = 0 ^ (-1);
+  for (var i = 0; i < data.length; i++) crc = (crc >>> 8) ^ T[(crc ^ data[i]) & 0xFF];
+  return (crc ^ (-1)) >>> 0;
+}
+function utf8Bytes(s) {
+  if (window.TextEncoder) return new TextEncoder().encode(s);
+  var out = [];
+  unescape(encodeURIComponent(s)).split('').forEach(function(ch) { out.push(ch.charCodeAt(0)); });
+  return new Uint8Array(out);
+}
+function xlEsc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+// sheets: [{name, rows}] — значение ячейки: число => numeric, иначе текст
+function buildXlsx(sheets) {
+  function colName(nn) {
+    var s2 = ''; nn++;
+    while (nn) { var md = (nn - 1) % 26; s2 = String.fromCharCode(65 + md) + s2; nn = Math.floor((nn - md - 1) / 26); }
+    return s2;
+  }
+      function sheetXml(rows, opts) {
+    opts = opts || {};
+    var out = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">';
+    if (opts.freeze || opts.freezeX) { var ySp = opts.freeze || 0, xSp = opts.freezeX || 0; out += '<sheetViews><sheetView workbookViewId="0"><pane' + (xSp ? ' xSplit="' + xSp + '"' : '') + (ySp ? ' ySplit="' + ySp + '"' : '') + ' topLeftCell="' + colName(xSp) + (ySp + 1) + '" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'; }
+    out += '<sheetFormatPr defaultRowHeight="23"/>'; 
+    if (opts.cols && opts.cols.length) {
+      out += '<cols>';
+      for (var ci = 0; ci < opts.cols.length; ci++) out += '<col min="' + (ci + 1) + '" max="' + (ci + 1) + '" width="' + opts.cols[ci] + '" customWidth="1"/>';
+      out += '</cols>';
+    }
+    out += '<sheetData>';
+    for (var r = 0; r < rows.length; r++) {
+      out += '<row r="' + (r + 1) + '"' + (r === 0 ? ' ht="36" customHeight="1"' : ((r === 1 || r === 2 || r === 3) ? ' ht="32" customHeight="1"' : ' ht="23" customHeight="1"')) + '>';
+      var ra = rows[r] || [];
+      for (var c = 0; c < ra.length; c++) {
+        var cell = ra[c];
+        if (cell === null || cell === undefined || cell === '') continue;
+        var isObj = (cell && typeof cell === 'object' && !Array.isArray(cell));
+        var val = isObj ? cell.v : cell;
+        var st = isObj ? cell.s : undefined;
+        if (val === null || val === undefined || val === '') continue;
+        var ref = colName(c) + (r + 1);
+        if (typeof val === 'number' && isFinite(val)) out += '<c r="' + ref + '"' + (st ? ' s="' + st + '"' : '') + '><v>' + val + '</v></c>';
+        else out += '<c r="' + ref + '"' + (st ? ' s="' + st + '"' : '') + ' t="inlineStr"><is><t xml:space="preserve">' + xlEsc(String(val)) + '</t></is></c>';
+      }
+      out += '</row>';
+    }
+    out += '</sheetData>';
+    if (opts.merge && opts.merge.length) out += '<mergeCells count="' + opts.merge.length + '">' + opts.merge.map(function(m) { return '<mergeCell ref="' + m + '"/>'; }).join('') + '</mergeCells>';
+    out += '<printOptions horizontalCentered="0"/><pageMargins left="0.28" right="0.28" top="0.55" bottom="0.55" header="0.2" footer="0.2"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/><headerFooter><oddFooter><![CDATA[&LГруппа БФ Волгоград 1&RСтраница &P из &N]]></oddFooter></headerFooter>';
+    out += '</worksheet>';
+    return out;
+  }
+  var parts = [
+    ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+      sheets.map(function(_, si) { return '<Override PartName="/xl/worksheets/sheet' + (si + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'; }).join('') + '</Types>'],
+    ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+    ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' +
+      sheets.map(function(s, si) { return '<sheet name="' + xlEsc(s.name) + '" sheetId="' + (si + 1) + '" r:id="rId' + (si + 1) + '"/>'; }).join('') + '</sheets></workbook>'],
+    ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      sheets.map(function(_, si) { return '<Relationship Id="rId' + (si + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (si + 1) + '.xml"/>'; }).join('') +
+      '<Relationship Id="rIdS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+    ['xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">\n<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0"/><numFmt numFmtId="165" formatCode="#,##0.00"/></numFmts>\n<fonts count="5">\n<font><sz val="10"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/></font>\n<font><b/><sz val="10"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/></font>\n<font><b/><sz val="16"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/></font>\n<font><b/><sz val="9"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/></font>\n<font><i/><sz val="9"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/></font>\n</fonts>\n<fills count="7">\n<fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>\n<fill><patternFill patternType="solid"><fgColor rgb="FFE9EBED"/></patternFill></fill>\n<fill><patternFill patternType="solid"><fgColor rgb="FFF0F1F2"/></patternFill></fill>\n<fill><patternFill patternType="solid"><fgColor rgb="FFE5E7E9"/></patternFill></fill>\n<fill><patternFill patternType="solid"><fgColor rgb="FFF8F9FA"/></patternFill></fill>\n<fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/></patternFill></fill>\n</fills>\n<borders count="4">\n<border><left/><right/><top/><bottom/><diagonal/></border>\n<border><left style="thin"><color rgb="FFD9DDE0"/></left><right style="thin"><color rgb="FFD9DDE0"/></right><top style="thin"><color rgb="FFD9DDE0"/></top><bottom style="thin"><color rgb="FFD9DDE0"/></bottom><diagonal/></border>\n<border><left style="thin"><color rgb="FFC9CDD1"/></left><right style="thin"><color rgb="FFC9CDD1"/></right><top style="thin"><color rgb="FFC9CDD1"/></top><bottom style="thin"><color rgb="FFC9CDD1"/></bottom><diagonal/></border>\n<border><left/><right/><top/><bottom style="medium"><color rgb="FF9EA4AA"/></bottom><diagonal/></border>\n</borders>\n<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>\n<cellXfs count="13">\n<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>\n<xf numFmtId="0" fontId="2" fillId="0" borderId="3" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1" indent="1"/></xf>\n<xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>\n<xf numFmtId="0" fontId="1" fillId="2" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>\n<xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1" indent="1"/></xf>\n<xf numFmtId="164" fontId="0" fillId="5" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>\n<xf numFmtId="165" fontId="0" fillId="5" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>\n<xf numFmtId="0" fontId="3" fillId="3" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>\n<xf numFmtId="164" fontId="3" fillId="4" borderId="2" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>\n<xf numFmtId="165" fontId="3" fillId="4" borderId="2" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>\n<xf numFmtId="0" fontId="3" fillId="3" borderId="3" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1" indent="1"/></xf>\n<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>\n<xf numFmtId="0" fontId="3" fillId="4" borderId="2" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>\n</cellXfs></styleSheet>'],
+  ];
+  sheets.forEach(function(s, si) { parts.push(['xl/worksheets/sheet' + (si + 1) + '.xml', sheetXml(s.rows, s.opts)]); });
+
+  var chunks = [], central = [], offset = 0;
+  function pack(values) {
+    var out = new Uint8Array(values.length), view = new DataView(out.buffer);
+    for (var i = 0; i < values.length; i++) view.setUint8(i, values[i] & 255);
+    chunks.push(out); offset += out.length;
+  }
+  function u16(v) { return [v & 255, (v >>> 8) & 255]; }
+  function u32(v) { return [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255]; }
+  function ascii(str) { var out = new Uint8Array(str.length); for (var i = 0; i < str.length; i++) out[i] = str.charCodeAt(i) & 255; return out; }
+  function pushBytes(arr) { var out = arr instanceof Uint8Array ? arr : new Uint8Array(arr); chunks.push(out); offset += out.length; }
+  parts.forEach(function(p) {
+    var name = p[0], nameBytes = ascii(name), data = utf8Bytes(p[1]);
+    var crc = crc32(data), off = offset;
+    pack([].concat(u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0), u32(crc), u32(data.length), u32(data.length), u16(nameBytes.length), u16(0)));
+    pushBytes(nameBytes); pushBytes(data);
+    central.push({ nameBytes: nameBytes, crc: crc, size: data.length, off: off });
+  });
+  var cdOffset = offset;
+  central.forEach(function(c) {
+    pack([].concat(u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0), u32(c.crc), u32(c.size), u32(c.size), u16(c.nameBytes.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(c.off)));
+    pushBytes(c.nameBytes);
+  });
+  var cdSize = offset - cdOffset;
+  pack([].concat(u32(0x06054b50), u16(0), u16(0), u16(central.length), u16(central.length), u32(cdSize), u32(cdOffset), u16(0)));
+  return new Blob(chunks, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+function excelBlob(d){
+ var rows=[],merges=[],rowNo=1;
+ function addRow(cells){rows.push(cells);rowNo++;return rowNo-1;}
+ function mergeRow(value,style){var r=rowNo;addRow([{v:value,s:style},null,null,null,null]);merges.push('A'+r+':E'+r);}
+ mergeRow('ЕЖЕДНЕВНЫЙ ОТЧЕТ — '+(d.date?fdate(d.date):''),1);
+ addRow([{v:'Объект (ТО)',s:3},{v:d.to||'',s:4},null,{v:'Составитель',s:3},{v:d.fio||'',s:4}]);
+ addRow([{v:'Дата',s:3},{v:d.date?fdate(d.date):'',s:4},null,{v:'Документ',s:3},{v:'Отчёт по итогам контрольных мероприятий',s:4}]);
+ addRow([]);
+ for(var i=0;i<d.secs.length;i++){
+  var sec=d.secs[i];if(!sec.lines.length&&!(sec.note&&sec.note.length))continue;
+  mergeRow(sec.t,10);
+  for(var j=0;j<sec.lines.length;j++){var r=rowNo;addRow([{v:'  '+String(sec.lines[j]),s:4},null,null,null,null]);merges.push('A'+r+':E'+r);}
+  if(sec.note&&sec.note.length)for(var n=0;n<sec.note.length;n++){var nr=rowNo;addRow([{v:'Комментарий: '+String(sec.note[n]),s:2},null,null,null,null]);merges.push('A'+nr+':E'+nr);}
+ }
+ mergeRow('ИТОГО ЗА ДЕНЬ',10);
+ var totals=d.totals||{p:0,v:0,s:0};
+ addRow([{v:'Проверено',s:7},{v:totals.p,s:8},null,null,null]);
+ addRow([{v:'Выявлено нарушений',s:7},{v:totals.v,s:8},null,null,null]);
+ addRow([{v:'Сумма нарушений и расхождений, руб.',s:7},{v:totals.s,s:9},null,null,null]);
+ addRow([]);
+ addRow([{v:'Отчёт составил: '+(d.fio||''),s:2},null,null,null,null]);
+ addRow([{v:'Подпись: ______________________________',s:2},null,null,null,null]);
+ return buildXlsx([{name:'Ежедневный отчёт',rows:rows,opts:{cols:[64,18,4,18,42],merge:merges,freeze:3}}]);
+}
+
+root.SBDocument={build:build,docHtml:docHtml,wordHtml:wordHtml,excelBlob:excelBlob,css:docCss};
 })(window);
