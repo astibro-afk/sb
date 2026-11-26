@@ -5047,6 +5047,7 @@ var colIdx = [];
   }
 
   (function bindAuthUI() {
+    function bind() {
     var form = $('#loginForm');
     if (form) {
       form.addEventListener('submit', function(e) {
@@ -5081,6 +5082,12 @@ var colIdx = [];
     if (bu) bu.addEventListener('click', function() { window.open('users.php', '_blank'); });
     var bau = $('#btnAddUser');
     if (bau) bau.addEventListener('click', function() { window.open('add-user.php', '_blank'); });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', bind);
+    } else {
+      bind();
+    }
   })();
 })();
 </script>
