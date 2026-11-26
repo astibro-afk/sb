@@ -577,7 +577,7 @@ if ($action === 'reports_data' && $method === 'GET') {
         ];
     }
 
-    reply(200, ['ok' => true, 'objects' => $assignedRows, 'records' => $records, 'user' => $ctx, 'from' => $from, 'to' => $to]);
+    reply(200, ['ok' => true, 'objects' => $assignedRows, 'records' => $records, 'user' => $ctx, 'from' => $from, 'to' => $to, 'csrf' => csrf_token()]);
 }
 
 if ($action === 'load' && $method === 'GET') {
