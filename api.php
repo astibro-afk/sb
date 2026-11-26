@@ -549,14 +549,13 @@ if ($action === 'load' && $method === 'GET') {
     }
     $data[KEY_ARCH] = $archive;
 
-    // Пользователи и модераторы отображаются только на закреплённых объектах.
-    // Администраторы добавляются отдельно для каждого активного объекта —
-    // наличие или отсутствие записей в sb_user_objects на них не влияет.
+    // Все роли, включая администратора, отображаются сотрудниками
+    // только на тех активных объектах, которые закреплены за ними.
     $employeeSql = "SELECT DISTINCT u.id, u.full_name, uo.object_id
                     FROM sb_users u
                     JOIN sb_user_objects uo ON uo.user_id = u.id
                     JOIN sb_objects o ON o.id = uo.object_id AND o.is_active = 1
-                    WHERE u.role IN ('user', 'moderator')
+                    WHERE u.role IN ('user', 'moderator', 'admin')
                       AND (u.is_active = 1 OR EXISTS (
                           SELECT 1 FROM sb_user_activation_tokens t
                           WHERE t.user_id = u.id AND t.expires_at > NOW()
@@ -577,33 +576,6 @@ if ($action === 'load' && $method === 'GET') {
     $employeeStmt = $pdo->prepare($employeeSql);
     $employeeStmt->execute($employeeParams);
     $employees = $employeeStmt->fetchAll();
-
-    // Получаем администраторов отдельным запросом без JOIN к таблице привязок.
-    // Поэтому администратор без назначенных объектов тоже попадает в списки.
-    if ($ctx['role'] !== 'user') {
-        $adminStmt = $pdo->query("SELECT id, full_name FROM sb_users
-            WHERE LOWER(TRIM(role)) = 'admin' AND is_active = 1
-            ORDER BY full_name, id");
-        $adminRows = $adminStmt->fetchAll();
-        $visibleObjects = $ctx['role'] === 'admin'
-            ? array_values(array_filter($objects, function($obj) { return (int)$obj['is_active'] === 1; }))
-            : array_values(array_filter($objects, function($obj) { return (int)$obj['is_active'] === 1; }));
-        foreach ($adminRows as $adminRow) {
-            foreach ($visibleObjects as $objectRow) {
-                $employees[] = [
-                    'id' => (int)$adminRow['id'],
-                    'full_name' => (string)$adminRow['full_name'],
-                    'object_id' => (int)$objectRow['id'],
-                ];
-            }
-        }
-    }
-    usort($employees, function($a, $b) {
-        $nameCompare = strcasecmp((string)$a['full_name'], (string)$b['full_name']);
-        if ($nameCompare !== 0) return $nameCompare;
-        $idCompare = (int)$a['id'] <=> (int)$b['id'];
-        return $idCompare !== 0 ? $idCompare : ((int)$a['object_id'] <=> (int)$b['object_id']);
-    });
 
     reply(200, ['ok' => true, 'data' => $data, 'user' => $ctx, 'objects' => $objects, 'employees' => $employees, 'csrf' => csrf_token()]);
 }
