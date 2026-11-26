@@ -1543,6 +1543,8 @@ body { background: #F3F8F7; }
         <span class="user-chip-name"></span>
         <span class="user-chip-role"></span>
       </div>
+      <a class="btn btn-ghost" id="btnEmployees" href="employees.php" style="display:none;text-decoration:none">Сотрудники</a>
+      <a class="btn btn-ghost" id="btnNotifications" href="notifications.php" style="display:none;text-decoration:none">Уведомления</a>
       <button class="btn btn-ghost" id="btnLogout" type="button">Выход</button>
     </div>
   </div>
@@ -4514,6 +4516,10 @@ var colIdx = [];
       if (cn) cn.textContent = user.full_name || user.username;
       if (cr) cr.textContent = roleLabel(user.role) + (assignedNames.length ? ' · ' + assignedNames.join(', ') : '');
     }
+    var btnEmployees = $('#btnEmployees');
+    if (btnEmployees) btnEmployees.style.display = '';
+    var btnNotifications = $('#btnNotifications');
+    if (btnNotifications) btnNotifications.style.display = '';
     var btnUsers = $('#btnUsers');
     if (btnUsers) btnUsers.style.display = (user.role === 'admin') ? '' : 'none';
     var btnAddUser = $('#btnAddUser');
