@@ -1544,7 +1544,7 @@ body { background: #F3F8F7; }
         <span class="user-chip-role"></span>
       </div>
       <a class="btn btn-ghost" id="btnEmployees" href="employees.php" style="display:none;text-decoration:none">Сотрудники</a>
-      <a class="btn btn-ghost" id="btnNotifications" href="notifications.php" style="display:none;text-decoration:none">Уведомления</a>
+      <a class="btn btn-ghost" id="btnNotifications" href="notifications.php" style="display:none;text-decoration:none;position:relative;padding:8px 10px" aria-label="Уведомления" title="Уведомления"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg><span id="notificationBadge" style="display:none;position:absolute;top:1px;right:1px;min-width:16px;height:16px;padding:0 4px;border-radius:10px;background:#d94841;color:#fff;font-size:10px;line-height:16px;text-align:center;font-weight:700"></span></a>
       <button class="btn btn-ghost" id="btnLogout" type="button">Выход</button>
     </div>
   </div>
@@ -4522,7 +4522,15 @@ var colIdx = [];
     if (btnNotifications) {
       btnNotifications.style.display = '';
       sbFetch('notifications_data').then(function(data) {
-        if (data && data.ok) btnNotifications.textContent = 'Уведомления' + (Number(data.unread) > 0 ? ' (' + Number(data.unread) + ')' : '');
+        if (data && data.ok) {
+          var badge = $('#notificationBadge');
+          var unreadCount = Number(data.unread) || 0;
+          if (badge) {
+            badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+            badge.style.display = unreadCount > 0 ? 'block' : 'none';
+          }
+          btnNotifications.setAttribute('aria-label', 'Уведомления' + (unreadCount ? ': ' + unreadCount + ' непрочитанных' : ''));
+        }
       }).catch(function() {});
     }
     var btnUsers = $('#btnUsers');
