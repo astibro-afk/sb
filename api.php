@@ -531,7 +531,7 @@ if ($action === 'reports_data' && $method === 'GET') {
     $params = [':date_from' => $from, ':date_to' => $to];
 
     if ($ctx['role'] !== 'admin') {
-        if (!$allowedIds) reply(200, ['ok' => true, 'objects' => [], 'records' => [], 'user' => $ctx]);
+        if (!$allowedIds) reply(200, ['ok' => true, 'objects' => [], 'records' => [], 'user' => $ctx, 'csrf' => csrf_token()]);
         $idMarks = [];
         foreach ($allowedIds as $i => $id) {
             $key = ':allowed_id_' . $i;
