@@ -39,4 +39,6 @@ async function mark(id,all){const r=await fetch('api.php?action=notifications_re
 document.getElementById('readAll').addEventListener('click',()=>mark(0,true).catch(e=>alert(e.message)));
 load().catch(e=>{list.replaceChildren(el('div','empty',e.message));});
 })();
+</script><script>
+(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,30000);document.addEventListener('visibilitychange',ping);})();
 </script></body></html>
