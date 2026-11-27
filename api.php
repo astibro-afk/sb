@@ -704,7 +704,7 @@ if ($action === 'dashboard_data' && $method === 'GET') {
     $taskWhere = ['o.is_active=1'];
     $taskParams = [];
     if ($role === 'user') {
-        $taskWhere[] = 't.assignee_id=:task_uid';
+        $taskWhere[] = 'EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:task_uid)';
         $taskWhere[] = 'EXISTS(SELECT 1 FROM sb_user_objects mine WHERE mine.user_id=:task_uid_obj AND mine.object_id=t.object_id)';
         $taskParams[':task_uid'] = $uid;
         $taskParams[':task_uid_obj'] = $uid;
@@ -718,7 +718,7 @@ if ($action === 'dashboard_data' && $method === 'GET') {
                 $marks[] = $key;
                 $taskParams[$key] = $id;
             }
-            $taskWhere[] = 't.object_id IN (' . implode(',', $marks) . ')';
+            $taskWhere[] = 'EXISTS(SELECT 1 FROM sb_task_objects txo WHERE txo.task_id=t.id AND txo.object_id IN (' . implode(',', $marks) . '))';
         }
     }
     $taskSqlWhere = implode(' AND ', $taskWhere);
@@ -877,11 +877,10 @@ if ($action === 'tasks_data' && $method === 'GET') {
     $baseWhere = ['o.is_active=1'];
     $baseParams = [];
     if ($ctx['role'] === 'user') {
-        $baseWhere[] = "t.assignee_id=:scope_uid AND EXISTS(SELECT 1 FROM sb_user_objects mine WHERE mine.user_id=:scope_uid_object AND mine.object_id=t.object_id)";
+        $baseWhere[] = "EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:scope_uid)";
         $baseParams[':scope_uid'] = (int)$ctx['id'];
-        $baseParams[':scope_uid_object'] = (int)$ctx['id'];
     } elseif ($ctx['role'] === 'moderator') {
-        $baseWhere[] = "EXISTS(SELECT 1 FROM sb_user_objects uo WHERE uo.user_id=:scope_mid AND uo.object_id=t.object_id)";
+        $baseWhere[] = "EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:scope_mid)";
         $baseParams[':scope_mid'] = (int)$ctx['id'];
     }
 
@@ -906,7 +905,7 @@ if ($action === 'tasks_data' && $method === 'GET') {
         $params[':filter_status'] = $statusFilter;
     }
     if ($objectFilter > 0) {
-        $where[] = 't.object_id=:filter_object';
+        $where[] = 'EXISTS(SELECT 1 FROM sb_task_objects fo WHERE fo.task_id=t.id AND fo.object_id=:filter_object)';
         $params[':filter_object'] = $objectFilter;
     }
     if ($search !== '') {
@@ -931,6 +930,8 @@ if ($action === 'tasks_data' && $method === 'GET') {
 
     $tasksSql = "SELECT t.id,t.object_id,o.name AS object_name,t.title,t.description,t.priority,t.status,
         t.assignee_id,au.full_name AS assignee_name,t.created_by,cu.full_name AS creator_name,
+        (SELECT GROUP_CONCAT(DISTINCT u.full_name ORDER BY u.full_name SEPARATOR ', ') FROM sb_task_assignees ta JOIN sb_users u ON u.id=ta.user_id WHERE ta.task_id=t.id) AS assignee_names,
+        (SELECT GROUP_CONCAT(DISTINCT ob.name ORDER BY ob.name SEPARATOR ', ') FROM sb_task_objects txo JOIN sb_objects ob ON ob.id=txo.object_id WHERE txo.task_id=t.id) AS object_names,
         t.due_date,t.created_at,t.updated_at" . $filteredSql . "
         ORDER BY CASE WHEN t.status='done' THEN 1 ELSE 0 END, t.due_date IS NULL,
         t.due_date ASC, t.updated_at DESC, t.id DESC LIMIT " . $perPage . " OFFSET " . $offset;
@@ -954,7 +955,9 @@ if ($action === 'tasks_data' && $method === 'GET') {
         $task['comment_count'] = $commentCounts[$task['id']] ?? 0;
         $task['is_overdue'] = !empty($task['due_date']) && $task['due_date'] < date('Y-m-d') && $task['status'] !== 'done';
         $task['can_manage'] = $ctx['role'] !== 'user' && ($ctx['role'] === 'admin' || (int)$task['created_by'] === (int)$ctx['id']);
-        $task['can_update'] = ((int)$task['assignee_id'] === (int)$ctx['id']) || ($ctx['role'] === 'admin') || ($ctx['role'] === 'moderator' && (int)$task['created_by'] === (int)$ctx['id']);
+        $recipientCheck=$pdo->prepare('SELECT 1 FROM sb_task_assignees WHERE task_id=:task AND user_id=:user');
+        $recipientCheck->execute([':task'=>$task['id'],':user'=>(int)$ctx['id']]);
+        $task['can_update'] = $recipientCheck->fetchColumn() || $ctx['role']==='admin' || ($ctx['role']==='moderator' && (int)$task['created_by']===(int)$ctx['id']);
     }
 
     $objectsSql = "SELECT o.id,o.name FROM sb_objects o WHERE o.is_active=1";
@@ -970,7 +973,7 @@ if ($action === 'tasks_data' && $method === 'GET') {
 
     $assignees = [];
     if ($ctx['role'] !== 'user') {
-        $usersSql = "SELECT DISTINCT u.id,u.full_name,u.role,uo.object_id FROM sb_users u
+        $usersSql = "SELECT u.id,u.full_name,u.role,MIN(uo.object_id) AS object_id FROM sb_users u
             JOIN sb_user_objects uo ON uo.user_id=u.id JOIN sb_objects o ON o.id=uo.object_id
             WHERE u.is_active=1 AND o.is_active=1";
         $userParams = [];
@@ -978,7 +981,7 @@ if ($action === 'tasks_data' && $method === 'GET') {
             $usersSql .= " AND EXISTS(SELECT 1 FROM sb_user_objects mine WHERE mine.user_id=:mid AND mine.object_id=uo.object_id)";
             $userParams[':mid'] = (int)$ctx['id'];
         }
-        $usersSql .= " ORDER BY u.full_name";
+        $usersSql .= " GROUP BY u.id,u.full_name,u.role ORDER BY u.full_name";
         $us = $pdo->prepare($usersSql);
         $us->execute($userParams);
         $assignees = $us->fetchAll();
