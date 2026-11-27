@@ -935,11 +935,12 @@ if ($action === 'tasks_data' && $method === 'GET') {
         t.assignee_id,au.full_name AS assignee_name,t.created_by,cu.full_name AS creator_name,
         (SELECT GROUP_CONCAT(DISTINCT u.full_name ORDER BY u.full_name SEPARATOR ', ') FROM sb_task_assignees ta JOIN sb_users u ON u.id=ta.user_id WHERE ta.task_id=t.id) AS assignee_names,
         (SELECT GROUP_CONCAT(DISTINCT ob.name ORDER BY ob.name SEPARATOR ', ') FROM sb_task_objects txo JOIN sb_objects ob ON ob.id=txo.object_id WHERE txo.task_id=t.id AND EXISTS(SELECT 1 FROM sb_user_objects own WHERE own.user_id=:viewer_object_name AND own.object_id=txo.object_id)) AS object_names,
+        EXISTS(SELECT 1 FROM sb_task_assignees me WHERE me.task_id=t.id AND me.user_id=:viewer_recipient) AS is_recipient,
         t.due_date,t.created_at,t.updated_at" . $filteredSql . "
         ORDER BY CASE WHEN t.status='done' THEN 1 ELSE 0 END, t.due_date IS NULL,
         t.due_date ASC, t.updated_at DESC, t.id DESC LIMIT " . $perPage . " OFFSET " . $offset;
     $st = $pdo->prepare($tasksSql);
-    $tasksParams=$params; $tasksParams[':viewer_object_name']=(int)$ctx['id'];
+    $tasksParams=$params; $tasksParams[':viewer_object_name']=(int)$ctx['id']; $tasksParams[':viewer_recipient']=(int)$ctx['id'];
     $st->execute($tasksParams);
     $tasks = $st->fetchAll();
 
@@ -959,9 +960,7 @@ if ($action === 'tasks_data' && $method === 'GET') {
         $task['comment_count'] = $commentCounts[$task['id']] ?? 0;
         $task['is_overdue'] = !empty($task['due_date']) && $task['due_date'] < date('Y-m-d') && $task['status'] !== 'done';
         $task['can_manage'] = $ctx['role'] !== 'user' && ($ctx['role'] === 'admin' || (int)$task['created_by'] === (int)$ctx['id']);
-        $recipientCheck=$pdo->prepare('SELECT 1 FROM sb_task_assignees WHERE task_id=:task AND user_id=:user');
-        $recipientCheck->execute([':task'=>$task['id'],':user'=>(int)$ctx['id']]);
-        $task['is_recipient'] = (bool)$recipientCheck->fetchColumn();
+        $task['is_recipient'] = (bool)$task['is_recipient'];
         $task['can_update'] = $task['is_recipient'] || $ctx['role']==='admin' || ($ctx['role']==='moderator' && (int)$task['created_by']===(int)$ctx['id']);
     }
 
@@ -1033,7 +1032,7 @@ if ($action === 'task_create' && $method === 'POST') {
     if($ctx['role']==='moderator'&&$objectIds){$q=$pdo->prepare('SELECT COUNT(*) FROM sb_user_objects WHERE user_id=? AND object_id IN ('.implode(',',array_fill(0,count($objectIds),'?')).')');$q->execute(array_merge([(int)$ctx['id']],$objectIds));if((int)$q->fetchColumn()!==count($objectIds))reply(403,['ok'=>false,'error'=>'Нельзя назначать задачи по чужим объектам.']);}
     $recipients=[]; $targets=[];
     foreach($objectIds as $oid){$targets[$oid]=true;$q=$pdo->prepare('SELECT u.id FROM sb_users u JOIN sb_user_objects uo ON uo.user_id=u.id WHERE u.is_active=1 AND uo.object_id=?');$q->execute([$oid]);foreach($q->fetchAll(PDO::FETCH_COLUMN) as $uid)$recipients[(int)$uid]=true;}
-    if($assigneeIds){$q=$pdo->prepare('SELECT u.id,uo.object_id FROM sb_users u JOIN sb_user_objects uo ON uo.user_id=u.id JOIN sb_objects o ON o.id=uo.object_id AND o.is_active=1 WHERE u.is_active=1 AND u.id IN ('.implode(',',array_fill(0,count($assigneeIds),'?')).')');$q->execute($assigneeIds);$found=[];foreach($q->fetchAll() as $row){$uid=(int)$row['id'];$oid=(int)$row['object_id'];$found[$uid]=true;$targets[$oid]=true;if($ctx['role']==='moderator'){$chk=$pdo->prepare('SELECT 1 FROM sb_user_objects WHERE user_id=? AND object_id=?');$chk->execute([(int)$ctx['id'],$oid]);if(!$chk->fetchColumn())reply(403,['ok'=>false,'error'=>'Нельзя назначить сотрудника вне ваших объектов.']);}}
+    if($assigneeIds){$assigneeSql='SELECT u.id,uo.object_id FROM sb_users u JOIN sb_user_objects uo ON uo.user_id=u.id JOIN sb_objects o ON o.id=uo.object_id AND o.is_active=1 WHERE u.is_active=1 AND u.id IN ('.implode(',',array_fill(0,count($assigneeIds),'?')).')';$assigneeParams=$assigneeIds;if($ctx['role']==='moderator'){$assigneeSql.=' AND EXISTS(SELECT 1 FROM sb_user_objects mine WHERE mine.user_id=? AND mine.object_id=uo.object_id)';$assigneeParams[]=(int)$ctx['id'];}$q=$pdo->prepare($assigneeSql);$q->execute($assigneeParams);$found=[];foreach($q->fetchAll() as $row){$uid=(int)$row['id'];$oid=(int)$row['object_id'];$found[$uid]=true;$targets[$oid]=true;}
         if(count($found)!==count($assigneeIds))reply(400,['ok'=>false,'error'=>'Выбранный сотрудник неактивен или не закреплён за объектом.']); foreach($assigneeIds as $uid)$recipients[$uid]=true;}
     $recipientIds=array_keys($recipients); $targetIds=array_keys($targets); sort($recipientIds); sort($targetIds);
     if(!$recipientIds||!$targetIds) reply(400,['ok'=>false,'error'=>'На выбранных объектах нет активных сотрудников.']);
