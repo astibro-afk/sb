@@ -1088,7 +1088,7 @@ if ($action === 'reports_data' && $method === 'GET') {
     $perPage = (int)($_GET['per_page'] ?? 25);
     if (!in_array($perPage, [10, 25, 50, 100], true)) $perPage = 25;
     $pages = $total > 0 ? (int)ceil($total / $perPage) : 0;
-    if ($pages > 0) $page = min($page, $pages);
+    $page = $pages > 0 ? min($page, $pages) : 1;
     $offset = ($page - 1) * $perPage;
 
     // В список передаются только поля таблицы. Большой payload документа загружается
