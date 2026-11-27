@@ -148,7 +148,8 @@ function sb_push_dispatch_pending(PDO $pdo, int $limit = 4): void {
             foreach ($subscriptions as $sub) {
                 $endpoint = (string)$sub['endpoint'];
                 $endpointHash = (string)$sub['endpoint_hash'];
-                $endpointMap[$endpoint] = ['queue_id' => $queueId, 'subscription_id' => (int)$sub['id'], 'endpoint_hash' => $endpointHash];
+                if (!isset($endpointMap[$endpoint])) $endpointMap[$endpoint] = [];
+                $endpointMap[$endpoint][] = ['queue_id' => $queueId, 'subscription_id' => (int)$sub['id'], 'endpoint_hash' => $endpointHash];
                 $subscription = \Minishlink\WebPush\Subscription::create([
                     'endpoint' => $endpoint,
                     'keys' => ['p256dh' => (string)$sub['p256dh'], 'auth' => (string)$sub['auth']],
@@ -159,8 +160,8 @@ function sb_push_dispatch_pending(PDO $pdo, int $limit = 4): void {
 
         foreach ($webPush->flush() as $report) {
             $endpoint = $report->getEndpoint();
-            $mapped = $endpointMap[$endpoint] ?? null;
-            if (!$mapped) continue;
+            if (empty($endpointMap[$endpoint])) continue;
+            $mapped = array_shift($endpointMap[$endpoint]);
             $queueId = (int)$mapped['queue_id'];
             if ($report->isSuccess()) {
                 $outcomes[$queueId]['success'] = true;
