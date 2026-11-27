@@ -701,7 +701,7 @@ if ($action === 'dashboard_data' && $method === 'GET') {
 
     // Сводка и последние задачи: агрегаты считают весь доступный набор,
     // а подробные карточки ограничены шестью записями.
-    $taskWhere = ['o.is_active=1'];
+    $taskWhere = ["EXISTS(SELECT 1 FROM sb_task_objects active_txo JOIN sb_objects active_o ON active_o.id=active_txo.object_id WHERE active_txo.task_id=t.id AND active_o.is_active=1)"];
     $taskParams = [];
     if ($role === 'user') {
         $taskWhere[] = 'EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:task_uid)';
@@ -877,7 +877,7 @@ if ($action === 'tasks_data' && $method === 'GET') {
     }
     $objectFilter = max(0, (int)($_GET['object_id'] ?? 0));
 
-    $baseWhere = ['o.is_active=1'];
+    $baseWhere = ["EXISTS(SELECT 1 FROM sb_task_objects active_txo JOIN sb_objects active_o ON active_o.id=active_txo.object_id WHERE active_txo.task_id=t.id AND active_o.is_active=1)"];
     $baseParams = [];
     if ($ctx['role'] === 'user') {
         $baseWhere[] = "EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:scope_uid)";
