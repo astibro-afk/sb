@@ -1037,19 +1037,21 @@ if ($action === 'reports_data' && $method === 'GET') {
     }
 
     $baseWhere = implode(' AND ', $where);
-    $employeeSql = "SELECT DISTINCT a.owner_user_id,
+    $employeeSql = "SELECT DISTINCT COALESCE(a.owner_user_id, CASE WHEN JSON_VALID(a.payload) THEN
+            CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.owner_user_id')), '') AS UNSIGNED)
+            ELSE NULL END) AS owner_user_id,
         COALESCE(NULLIF(a.owner_name, ''), CASE WHEN JSON_VALID(a.payload) THEN
             COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.owner_name')), ''),
                      NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.data.b0_fio')), ''))
             ELSE '' END) AS employee_name
         FROM sb_archive_records a WHERE " . $baseWhere . "
-        AND a.owner_user_id IS NOT NULL
         ORDER BY employee_name";
     $employeeStmt = $pdo->prepare($employeeSql);
     $employeeStmt->execute($baseParams);
     $employees = [];
     foreach ($employeeStmt->fetchAll() as $employee) {
-        $employees[] = ['id' => (int)$employee['owner_user_id'], 'name' => (string)($employee['employee_name'] ?? '')];
+        $employeeIdOption = (int)($employee['owner_user_id'] ?? 0);
+        if ($employeeIdOption > 0) $employees[] = ['id' => $employeeIdOption, 'name' => (string)($employee['employee_name'] ?? '')];
     }
 
     $filteredWhere = $where;
@@ -1063,7 +1065,7 @@ if ($action === 'reports_data' && $method === 'GET') {
     if ($search !== '') {
         $search = mb_substr($search, 0, 120);
         $search = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search);
-        $filteredWhere[] = "CONCAT_WS(' ', a.report_date, a.object_name, a.owner_name,
+        $filteredWhere[] = "CONCAT_WS(' ', a.report_date, a.object_name, COALESCE(NULLIF(a.owner_name, ''), CASE WHEN JSON_VALID(a.payload) THEN JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.owner_name')) ELSE '' END),
             CASE WHEN JSON_VALID(a.payload) THEN
                 COALESCE(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.data.b0_fio')),
                          JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.fio')), '')
@@ -1074,7 +1076,9 @@ if ($action === 'reports_data' && $method === 'GET') {
 
     $summaryStmt = $pdo->prepare("SELECT COUNT(*) AS total,
         COUNT(DISTINCT a.object_name) AS object_count,
-        COUNT(DISTINCT COALESCE(CAST(a.owner_user_id AS CHAR), NULLIF(a.owner_name, ''))) AS employee_count
+        COUNT(DISTINCT COALESCE(CAST(a.owner_user_id AS CHAR),
+            CASE WHEN JSON_VALID(a.payload) THEN NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.owner_user_id')), '') ELSE NULL END,
+            NULLIF(a.owner_name, ''))) AS employee_count
         FROM sb_archive_records a WHERE " . $filteredSql);
     $summaryStmt->execute($params);
     $summary = $summaryStmt->fetch() ?: ['total' => 0, 'object_count' => 0, 'employee_count' => 0];
@@ -1091,6 +1095,10 @@ if ($action === 'reports_data' && $method === 'GET') {
     // отдельным запросом при открытии предпросмотра или скачивании.
     $listSql = "SELECT a.record_key, a.report_date, a.object_name, a.owner_user_id, a.owner_name,
         a.object_id, a.updated_at,
+        COALESCE(a.owner_user_id, CASE WHEN JSON_VALID(a.payload) THEN
+            CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.owner_user_id')), '') AS UNSIGNED)
+            ELSE NULL END) AS resolved_owner_user_id,
+        COALESCE(NULLIF(a.owner_name, ''), CASE WHEN JSON_VALID(a.payload) THEN JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.owner_name')) ELSE '' END) AS resolved_owner_name,
         CASE WHEN JSON_VALID(a.payload) THEN
             COALESCE(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.data.b0_fio')),
                      JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.fio')), '')
@@ -1111,8 +1119,8 @@ if ($action === 'reports_data' && $method === 'GET') {
             'date' => (string)$row['report_date'],
             'object' => (string)$row['object_name'],
             'employee' => (string)($row['employee_name'] ?? ''),
-            'author' => (string)($row['owner_name'] ?? ''),
-            'owner_user_id' => $row['owner_user_id'] !== null ? (int)$row['owner_user_id'] : null,
+            'author' => (string)($row['resolved_owner_name'] ?? ''),
+            'owner_user_id' => $row['resolved_owner_user_id'] !== null ? (int)$row['resolved_owner_user_id'] : null,
             'object_id' => $row['object_id'] !== null ? (int)$row['object_id'] : null,
             'updated_at' => (string)$row['updated_at'],
         ];
