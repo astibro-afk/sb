@@ -761,6 +761,7 @@ $ctx = user_ctx($pdo, $user);
 require_once __DIR__ . '/push-dispatch.php';
 register_shutdown_function(static function () use ($pdo): void {
     if ($pdo->inTransaction()) return;
+    if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
     if (function_exists('fastcgi_finish_request')) {
         @fastcgi_finish_request();
     } else {
