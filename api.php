@@ -1028,10 +1028,10 @@ if ($action === 'tasks_data' && $method === 'GET') {
 if ($action === 'task_archive' && $method === 'POST') {
     $body=input_json(); check_csrf($body); $id=(int)($body['id']??0);
     if($id<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
-    $st=$pdo->prepare('SELECT id,title,status,created_by,is_archived FROM sb_tasks WHERE id=? LIMIT 1');
-    $st->execute([$id]); $task=$st->fetch();
+    $st=$pdo->prepare("SELECT t.id,t.title,t.status,t.created_by,t.is_archived,EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:viewer) AS has_object FROM sb_tasks t WHERE t.id=:id LIMIT 1");
+    $st->execute([':viewer'=>(int)$ctx['id'],':id'=>$id]); $task=$st->fetch();
     if(!$task) reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
-    $canManage=$ctx['role']==='admin'||($ctx['role']==='moderator'&&(int)$task['created_by']===(int)$ctx['id']);
+    $canManage=$ctx['role']==='admin'||($ctx['role']==='moderator'&&(int)$task['created_by']===(int)$ctx['id']&&(int)$task['has_object']===1);
     if(!$canManage) reply(403,['ok'=>false,'error'=>'Архивировать задачи может только руководитель или постановщик с правами управления.']);
     if((string)$task['status']!=='done') reply(409,['ok'=>false,'error'=>'В архив можно отправить только выполненную задачу.']);
     if((int)$task['is_archived']===1) reply(409,['ok'=>false,'error'=>'Задача уже находится в архиве.']);
