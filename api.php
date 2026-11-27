@@ -730,7 +730,7 @@ if ($action === 'dashboard_data' && $method === 'GET') {
     $taskSummaryStmt->execute($taskParams);
     $taskSummary = $taskSummaryStmt->fetch() ?: [];
     $taskObjectScope = $role === 'admin' ? '1=1' : 'EXISTS(SELECT 1 FROM sb_user_objects own WHERE own.user_id=' . $uid . ' AND own.object_id=txo.object_id)';
-    $taskListStmt = $pdo->prepare("SELECT t.id,t.object_id,o.name AS object_name,t.title,t.priority,t.status,
+    $taskListStmt = $pdo->prepare("SELECT t.id,t.object_id,'' AS object_name,t.title,t.priority,t.status,
         t.assignee_id,au.full_name AS assignee_name,t.created_by,cu.full_name AS creator_name,
         (SELECT GROUP_CONCAT(DISTINCT u.full_name ORDER BY u.full_name SEPARATOR ', ') FROM sb_task_assignees ta JOIN sb_users u ON u.id=ta.user_id WHERE ta.task_id=t.id) AS assignee_names,
         (SELECT GROUP_CONCAT(DISTINCT ob.name ORDER BY ob.name SEPARATOR ', ') FROM sb_task_objects txo JOIN sb_objects ob ON ob.id=txo.object_id WHERE txo.task_id=t.id AND " . $taskObjectScope . ") AS object_names,
@@ -913,13 +913,18 @@ if ($action === 'tasks_data' && $method === 'GET') {
     }
     if ($search !== '') {
         $where[] = "(t.title LIKE :search_title OR t.description LIKE :search_description
-            OR o.name LIKE :search_object OR au.full_name LIKE :search_assignee OR cu.full_name LIKE :search_creator)";
+            OR au.full_name LIKE :search_assignee OR cu.full_name LIKE :search_creator
+            OR EXISTS(SELECT 1 FROM sb_task_objects tso JOIN sb_objects oso ON oso.id=tso.object_id
+                WHERE tso.task_id=t.id AND oso.name LIKE :search_object
+                AND (:viewer_admin_search=1 OR EXISTS(SELECT 1 FROM sb_user_objects own WHERE own.user_id=:viewer_search AND own.object_id=tso.object_id))))";
         $needle = '%' . $search . '%';
         $params[':search_title'] = $needle;
         $params[':search_description'] = $needle;
         $params[':search_object'] = $needle;
         $params[':search_assignee'] = $needle;
         $params[':search_creator'] = $needle;
+        $params[':viewer_admin_search'] = $ctx['role'] === 'admin' ? 1 : 0;
+        $params[':viewer_search'] = (int)$ctx['id'];
     }
     $filteredSql = " FROM sb_tasks t JOIN sb_objects o ON o.id=t.object_id
         JOIN sb_users au ON au.id=t.assignee_id JOIN sb_users cu ON cu.id=t.created_by
@@ -931,7 +936,7 @@ if ($action === 'tasks_data' && $method === 'GET') {
     $page = min($page, $totalPages);
     $offset = ($page - 1) * $perPage;
 
-    $tasksSql = "SELECT t.id,t.object_id,o.name AS object_name,t.title,t.description,t.priority,t.status,
+    $tasksSql = "SELECT t.id,t.object_id,'' AS object_name,t.title,t.description,t.priority,t.status,
         t.assignee_id,au.full_name AS assignee_name,t.created_by,cu.full_name AS creator_name,
         (SELECT GROUP_CONCAT(DISTINCT u.full_name ORDER BY u.full_name SEPARATOR ', ') FROM sb_task_assignees ta JOIN sb_users u ON u.id=ta.user_id WHERE ta.task_id=t.id) AS assignee_names,
         (SELECT GROUP_CONCAT(DISTINCT ob.name ORDER BY ob.name SEPARATOR ', ') FROM sb_task_objects txo JOIN sb_objects ob ON ob.id=txo.object_id WHERE txo.task_id=t.id AND (:viewer_is_admin=1 OR EXISTS(SELECT 1 FROM sb_user_objects own WHERE own.user_id=:viewer_object_name AND own.object_id=txo.object_id))) AS object_names,
