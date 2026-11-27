@@ -43,6 +43,7 @@ const priorityLabels={high:'Высокий приоритет',normal:'Обыч�
 function node(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n;}
 async function json(response){const raw=await response.text();if(!raw.trim())throw new Error('Сервер вернул пустой ответ. Обновите страницу.');try{return JSON.parse(raw);}catch(e){throw new Error('Сервер вернул некорректный ответ.');}}
 async function api(action,body){const r=await fetch('api.php?action='+encodeURIComponent(action),{method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify({...body,csrf:state.csrf}):undefined});const d=await json(r);if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось выполнить запрос.');return d;}
+async function get(action,params){const query=new URLSearchParams(params||{});const r=await fetch('api.php?action='+encodeURIComponent(action)+'&'+query.toString(),{credentials:'same-origin',cache:'no-store'});const d=await json(r);if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось выполнить запрос.');return d;}
 function showError(message){$('error').textContent=message;$('error').classList.remove('hidden');}
 function clearError(){$('error').textContent='';$('error').classList.add('hidden');}
 function date(v){if(!v)return 'Без срока';const d=new Date(v+'T00:00:00');return isNaN(d)?v:d.toLocaleDateString('ru-RU',{day:'2-digit',month:'long',year:'numeric'});}
@@ -67,8 +68,18 @@ function render(){
    if(t.status==='done'&&t.can_manage){const b=node('button','btn','Вернуть в работу');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'in_progress'}));actions.append(b);}
   }
   if(actions.childNodes.length)card.append(actions);
-  const details=node('details','comments'),summary=node('summary','', 'Комментарии ('+(t.comments||[]).length+')');details.append(summary);
-  (t.comments||[]).forEach(c=>{const item=node('div','comment');item.append(node('b','',c.user_name||'Сотрудник'),node('small','',time(c.created_at)),node('p','',c.comment));details.append(item);});
+  const details=node('details','comments'),summary=node('summary','','Комментарии ('+(t.comment_count||0)+')');details.append(summary);
+  const commentItems=node('div','comments-list');details.append(commentItems);
+  details.addEventListener('toggle',async()=>{
+   if(!details.open||details.dataset.loaded==='1')return;
+   details.dataset.loaded='1';commentItems.replaceChildren(node('div','comment','Загружаем комментарии…'));
+   try{
+    const data=await get('task_comments',{id:t.id});commentItems.replaceChildren();
+    (data.comments||[]).forEach(c=>{const item=node('div','comment');item.append(node('b','',c.user_name||'Сотрудник'),node('small','',time(c.created_at)),node('p','',c.comment));commentItems.append(item);});
+    summary.textContent='Комментарии ('+(data.comments||[]).length+')';
+    if(!(data.comments||[]).length)commentItems.append(node('div','comment','Комментариев пока нет.'));
+   }catch(err){details.dataset.loaded='0';commentItems.replaceChildren(node('div','comment',err.message));}
+  });
   const form=node('form','comment-form'),area=node('textarea');area.maxLength=3000;area.rows=1;area.placeholder='Добавить комментарий…';const send=node('button','btn','Отправить');send.type='submit';form.append(area,send);form.addEventListener('submit',e=>{e.preventDefault();const comment=area.value.trim();if(comment)change(t.id,{comment});});details.append(form);card.append(details);tasksEl.append(card);
  });
 }
