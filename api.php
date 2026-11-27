@@ -857,11 +857,15 @@ if ($action === 'dashboard_data' && $method === 'GET') {
 }
 
 if ($action === 'notifications_data' && $method === 'GET') {
-    $st = $pdo->prepare('SELECT id, type, title, message, link, is_read, created_at FROM sb_notifications WHERE user_id=:uid ORDER BY id DESC LIMIT 100');
+    // Полный счётчик непрочитанных не зависит от лимита истории на странице.
+    $countSt = $pdo->prepare('SELECT COUNT(*) FROM sb_notifications WHERE user_id=:uid AND is_read=0');
+    $countSt->execute([':uid'=>(int)$ctx['id']]);
+    $unread = (int)$countSt->fetchColumn();
+    // Центр уведомлений показывает последние 50 сообщений, включая прочитанные.
+    $st = $pdo->prepare('SELECT id, type, title, message, link, is_read, created_at FROM sb_notifications WHERE user_id=:uid ORDER BY id DESC LIMIT 50');
     $st->execute([':uid'=>(int)$ctx['id']]);
     $items = $st->fetchAll();
-    $unread = 0;
-    foreach ($items as &$item) { $item['is_read'] = (int)$item['is_read']; if (!$item['is_read']) $unread++; }
+    foreach ($items as &$item) { $item['is_read'] = (int)$item['is_read']; }
     unset($item);
     reply(200, ['ok'=>true, 'notifications'=>$items, 'unread'=>$unread, 'csrf'=>csrf_token()]);
 }

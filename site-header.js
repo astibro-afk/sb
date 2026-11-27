@@ -32,7 +32,8 @@ function renderNotices(data){
  const count=Number(data.unread)||0;setNoticeCount(count);
  const countNode=panel.querySelector('.sb-notice-count');if(countNode)countNode.textContent='Непрочитанных: '+count;
  const list=panel.querySelector('.sb-notice-list');list.replaceChildren();
- const items=Array.isArray(data.notifications)?data.notifications.slice(0,8):[];
+ // В выпадающем списке показываем только непрочитанные сообщения.
+ const items=Array.isArray(data.notifications)?data.notifications.filter(item=>!Number(item.is_read)).slice(0,8):[];
  if(!items.length){const empty=document.createElement('div');empty.className='sb-notice-empty';empty.textContent='Новых уведомлений пока нет.';list.append(empty);return;}
  items.forEach(item=>{
   const row=document.createElement('article');row.className='sb-notice-item'+(Number(item.is_read)?' is-read':' is-unread');
