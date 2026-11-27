@@ -875,8 +875,10 @@ if ($action === 'tasks_data' && $method === 'GET') {
     $statsSt = $pdo->prepare("SELECT COUNT(*) AS total,
         COALESCE(SUM(t.status='in_progress'),0) AS active,
         COALESCE(SUM(t.status='review'),0) AS review_count,
-        COALESCE(SUM(t.due_date IS NOT NULL AND t.due_date<CURDATE() AND t.status<>'done'),0) AS overdue" . $scopeSql);
-    $statsSt->execute($baseParams);
+        COALESCE(SUM(t.due_date IS NOT NULL AND t.due_date<:stats_today AND t.status<>'done'),0) AS overdue" . $scopeSql);
+    $statsParams = $baseParams;
+    $statsParams[':stats_today'] = date('Y-m-d');
+    $statsSt->execute($statsParams);
     $stats = $statsSt->fetch() ?: ['total'=>0,'active'=>0,'review_count'=>0,'overdue'=>0];
 
     $where = $baseWhere;
