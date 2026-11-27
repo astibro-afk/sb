@@ -148,20 +148,21 @@ async function ensureReportDetail(record){
  return record;
 }
 async function openRecord(key){
- selected=allRecords.find(r=>r.record_key===key);if(!selected)return;
+ const record=allRecords.find(r=>r.record_key===key);if(!record)return;
  try{
   setStatus('Загружаем документ…');
-  await ensureReportDetail(selected);
-  const source=Object.assign({},selected.data||{},{
-   b0_to:selected.object||(selected.data&&selected.data.b0_to)||'',
-   b0_fio:selected.employee||(selected.data&&selected.data.b0_fio)||'',
-   b0_date:selected.date||(selected.data&&selected.data.b0_date)||''
+  await ensureReportDetail(record);
+  selected=record;
+  const source=Object.assign({},record.data||{},{
+   b0_to:record.object||(record.data&&record.data.b0_to)||'',
+   b0_fio:record.employee||(record.data&&record.data.b0_fio)||'',
+   b0_date:record.date||(record.data&&record.data.b0_date)||''
   });
-  const documentData=window.SBDocument.build(source,selected.dyn||{});
+  const documentData=window.SBDocument.build(source,record.dyn||{});
   const pageCss='.page{width:210mm;min-height:297mm;background:#fff;margin:24px auto;padding:20mm 25mm 25mm 30mm;box-shadow:0 8px 32px rgba(0,0,0,.12);font-family:"Times New Roman",Times,serif;font-size:12pt;line-height:1.5;color:#000}.page h1{font-size:12pt;font-weight:bold;text-align:center;margin:0 0 16pt;line-height:1.35}.page p{margin:0 0 5pt;text-indent:1.25cm;text-align:justify}.page p.no-indent{text-indent:0}.page strong{font-weight:bold}.page .ph{color:#000;font-weight:bold}.page .sec-title{margin-top:10pt}@media(max-width:850px){.page{width:100%;min-height:0;margin:0;padding:28px 22px;box-shadow:none}}';
   const html='<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;padding:0;background:#eef2f2}'+pageCss+window.SBDocument.css()+'</style></head><body><div class="page">'+window.SBDocument.docHtml(documentData)+'</div></body></html>';
   $('previewFrame').srcdoc=html;
-  $('previewMeta').textContent=[selected.date,selected.object,selected.employee].filter(Boolean).join(' · ');
+  $('previewMeta').textContent=[record.date,record.object,record.employee].filter(Boolean).join(' · ');
   $('previewModal').classList.add('open');$('previewModal').setAttribute('aria-hidden','false');
   setStatus('Документ готов к просмотру.');
  }catch(e){setStatus('Не удалось сформировать предпросмотр: '+e.message,true);}
@@ -171,11 +172,12 @@ $('closePreview').addEventListener('click',closePreview);
 $('previewModal').addEventListener('click',e=>{if(e.target===$('previewModal'))closePreview();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePreview();});
 async function showDownload(key){
- selected=allRecords.find(r=>r.record_key===key);if(!selected)return;
+ const record=allRecords.find(r=>r.record_key===key);if(!record)return;
  try{
   $('downloadStatus').textContent='Загружаем документ…';
-  await ensureReportDetail(selected);
-  $('downloadMeta').textContent=[selected.date,selected.object,selected.employee].filter(Boolean).join(' · ');
+  await ensureReportDetail(record);
+  selected=record;
+  $('downloadMeta').textContent=[record.date,record.object,record.employee].filter(Boolean).join(' · ');
   $('downloadStatus').textContent='';
   $('downloadModal').classList.add('open');$('downloadModal').setAttribute('aria-hidden','false');
  }catch(e){$('downloadStatus').textContent=e.message;setStatus(e.message,true);}
