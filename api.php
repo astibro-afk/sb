@@ -662,6 +662,167 @@ if ($action === 'presence_ping' && $method === 'GET') {
     reply(200, ['ok'=>true]);
 }
 
+if ($action === 'dashboard_data' && $method === 'GET') {
+    $today = date('Y-m-d');
+    $monthStart = date('Y-m-01');
+    $role = (string)$ctx['role'];
+    $uid = (int)$ctx['id'];
+
+    // Объекты, доступные текущей роли. Для legacy-записей архива также сохраняем
+    // сопоставление по имени объекта, если object_id ещё не был записан.
+    $allowedObjects = [];
+    if ($role === 'admin') {
+        $allowedObjects = $pdo->query('SELECT id,name FROM sb_objects WHERE is_active=1 ORDER BY name')->fetchAll();
+    } else {
+        foreach (get_user_object_rows($pdo, $uid) as $object) {
+            if ((int)$object['is_active'] === 1) $allowedObjects[] = ['id'=>(int)$object['id'], 'name'=>(string)$object['name']];
+        }
+    }
+    $allowedIds = array_map(function($o) { return (int)$o['id']; }, $allowedObjects);
+    $allowedNames = array_map(function($o) { return (string)$o['name']; }, $allowedObjects);
+
+    // Сводка и последние задачи: агрегаты считают весь доступный набор,
+    // а подробные карточки ограничены шестью записями.
+    $taskWhere = ['o.is_active=1'];
+    $taskParams = [];
+    if ($role === 'user') {
+        $taskWhere[] = 't.assignee_id=:task_uid';
+        $taskWhere[] = 'EXISTS(SELECT 1 FROM sb_user_objects mine WHERE mine.user_id=:task_uid_obj AND mine.object_id=t.object_id)';
+        $taskParams[':task_uid'] = $uid;
+        $taskParams[':task_uid_obj'] = $uid;
+    } elseif ($role === 'moderator') {
+        if (!$allowedIds) {
+            $taskWhere[] = '1=0';
+        } else {
+            $marks = [];
+            foreach ($allowedIds as $i => $id) {
+                $key = ':task_object_' . $i;
+                $marks[] = $key;
+                $taskParams[$key] = $id;
+            }
+            $taskWhere[] = 't.object_id IN (' . implode(',', $marks) . ')';
+        }
+    }
+    $taskSqlWhere = implode(' AND ', $taskWhere);
+    $taskSummaryStmt = $pdo->prepare("SELECT COUNT(*) AS total,
+        SUM(CASE WHEN t.status<>'done' THEN 1 ELSE 0 END) AS active_count,
+        SUM(CASE WHEN t.status='review' THEN 1 ELSE 0 END) AS review_count,
+        SUM(CASE WHEN t.status<>'done' AND t.due_date IS NOT NULL AND t.due_date<CURDATE() THEN 1 ELSE 0 END) AS overdue_count
+        FROM sb_tasks t JOIN sb_objects o ON o.id=t.object_id WHERE " . $taskSqlWhere);
+    $taskSummaryStmt->execute($taskParams);
+    $taskSummary = $taskSummaryStmt->fetch() ?: [];
+    $taskListStmt = $pdo->prepare("SELECT t.id,t.object_id,o.name AS object_name,t.title,t.priority,t.status,
+        t.assignee_id,au.full_name AS assignee_name,t.created_by,cu.full_name AS creator_name,
+        t.due_date,t.updated_at
+        FROM sb_tasks t JOIN sb_objects o ON o.id=t.object_id
+        JOIN sb_users au ON au.id=t.assignee_id JOIN sb_users cu ON cu.id=t.created_by
+        WHERE " . $taskSqlWhere . "
+        ORDER BY CASE WHEN t.status='done' THEN 1 ELSE 0 END, t.due_date IS NULL, t.due_date ASC, t.updated_at DESC
+        LIMIT 6");
+    $taskListStmt->execute($taskParams);
+    $tasks = $taskListStmt->fetchAll();
+    foreach ($tasks as &$task) {
+        $task['id'] = (int)$task['id'];
+        $task['object_id'] = (int)$task['object_id'];
+        $task['assignee_id'] = (int)$task['assignee_id'];
+        $task['created_by'] = (int)$task['created_by'];
+        $task['is_overdue'] = !empty($task['due_date']) && $task['due_date'] < $today && $task['status'] !== 'done';
+    }
+    unset($task);
+
+    // Количество сотрудников в пределах той же зоны доступа, что и employees_data.
+    $employeeSql = 'SELECT COUNT(*) FROM sb_users u WHERE 1=1';
+    $employeeParams = [];
+    if ($role === 'user') {
+        $employeeSql .= ' AND u.id=:employee_self';
+        $employeeParams[':employee_self'] = $uid;
+    } elseif ($role === 'moderator') {
+        $employeeSql .= " AND (u.id=:employee_self OR (u.id<>:employee_self2 AND EXISTS (
+            SELECT 1 FROM sb_user_objects tuo
+            JOIN sb_user_objects muo ON muo.object_id=tuo.object_id
+            JOIN sb_objects ob ON ob.id=tuo.object_id AND ob.is_active=1
+            WHERE tuo.user_id=u.id AND muo.user_id=:employee_moderator
+        )))";
+        $employeeParams[':employee_self'] = $uid;
+        $employeeParams[':employee_self2'] = $uid;
+        $employeeParams[':employee_moderator'] = $uid;
+    }
+    $employeeStmt = $pdo->prepare($employeeSql);
+    $employeeStmt->execute($employeeParams);
+    $employeeCount = (int)$employeeStmt->fetchColumn();
+
+    $reportWhere = ['a.report_date >= :report_from', 'a.report_date <= :report_to'];
+    $reportParams = [':report_from'=>$monthStart, ':report_to'=>$today];
+    if ($role === 'user') {
+        $reportWhere[] = 'a.owner_user_id=:report_owner';
+        $reportParams[':report_owner'] = $uid;
+    } elseif ($role === 'moderator') {
+        if (!$allowedIds) {
+            $reportWhere[] = '1=0';
+        } else {
+            $idMarks = [];
+            $nameMarks = [];
+            foreach ($allowedIds as $i => $id) {
+                $idKey = ':report_object_id_' . $i;
+                $nameKey = ':report_object_name_' . $i;
+                $idMarks[] = $idKey;
+                $nameMarks[] = $nameKey;
+                $reportParams[$idKey] = $id;
+                $reportParams[$nameKey] = $allowedNames[$i];
+            }
+            $reportWhere[] = '(a.object_id IN (' . implode(',', $idMarks) . ') OR (a.object_id IS NULL AND a.object_name IN (' . implode(',', $nameMarks) . ')))';
+        }
+    }
+    $reportSqlWhere = implode(' AND ', $reportWhere);
+    $reportCountStmt = $pdo->prepare('SELECT COUNT(*) FROM sb_archive_records a WHERE ' . $reportSqlWhere);
+    $reportCountStmt->execute($reportParams);
+    $reportCount = (int)$reportCountStmt->fetchColumn();
+    $reportListStmt = $pdo->prepare("SELECT a.record_key,a.report_date,a.object_name,
+        COALESCE(NULLIF(a.owner_name,''), CASE WHEN JSON_VALID(a.payload) THEN
+            COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.payload,'$.owner_name')),''),
+                     NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.payload,'$.data.b0_fio')),''))
+            ELSE '' END) AS employee_name
+        FROM sb_archive_records a WHERE " . $reportSqlWhere . "
+        ORDER BY a.report_date DESC,a.updated_at DESC LIMIT 6");
+    $reportListStmt->execute($reportParams);
+    $reports = [];
+    foreach ($reportListStmt->fetchAll() as $row) {
+        $reports[] = ['record_key'=>(string)$row['record_key'],'date'=>(string)$row['report_date'],
+            'object'=>(string)$row['object_name'],'employee'=>(string)($row['employee_name'] ?? '')];
+    }
+    $lastReport = null;
+    if ($role === 'user') {
+        $lastStmt = $pdo->prepare('SELECT MAX(report_date) FROM sb_archive_records WHERE owner_user_id=:owner');
+        $lastStmt->execute([':owner'=>$uid]);
+        $lastReport = $lastStmt->fetchColumn() ?: null;
+    }
+
+    $notificationStmt = $pdo->prepare('SELECT id,type,title,message,link,is_read,created_at
+        FROM sb_notifications WHERE user_id=:notification_uid AND is_read=0
+        ORDER BY id DESC LIMIT 4');
+    $notificationStmt->execute([':notification_uid'=>$uid]);
+    $notifications = $notificationStmt->fetchAll();
+    foreach ($notifications as &$notification) $notification['is_read'] = (int)$notification['is_read'];
+    unset($notification);
+    $unreadStmt = $pdo->prepare('SELECT COUNT(*) FROM sb_notifications WHERE user_id=:unread_uid AND is_read=0');
+    $unreadStmt->execute([':unread_uid'=>$uid]);
+
+    reply(200, [
+        'ok'=>true, 'user'=>$ctx, 'csrf'=>csrf_token(),
+        'tasks'=>$tasks,
+        'task_summary'=>[
+            'total'=>(int)($taskSummary['total'] ?? 0),
+            'active'=>(int)($taskSummary['active_count'] ?? 0),
+            'review'=>(int)($taskSummary['review_count'] ?? 0),
+            'overdue'=>(int)($taskSummary['overdue_count'] ?? 0)
+        ],
+        'reports'=>$reports, 'reports_count'=>$reportCount,
+        'employees_count'=>$employeeCount, 'last_report'=>$lastReport,
+        'objects'=>$allowedObjects,
+        'notifications'=>$notifications, 'unread'=>(int)$unreadStmt->fetchColumn()
+    ]);
+}
+
 if ($action === 'notifications_data' && $method === 'GET') {
     $st = $pdo->prepare('SELECT id, type, title, message, link, is_read, created_at FROM sb_notifications WHERE user_id=:uid ORDER BY id DESC LIMIT 100');
     $st->execute([':uid'=>(int)$ctx['id']]);
