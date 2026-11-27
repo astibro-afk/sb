@@ -62,6 +62,9 @@ function render(){
   if(t.description)card.append(node('p','desc',t.description));
   const meta=node('div','meta');[['Объект',t.object_names||t.object_name],['Исполнители',t.assignee_names||t.assignee_name],['Поставил',t.creator_name],['Срок',date(t.due_date)],['Создана',time(t.created_at)],['Обновлена',time(t.updated_at)],...(state.archiveView?[['В архиве',time(t.archived_at)]]:[])].forEach(([k,v])=>{const x=node('div');x.append(node('b','',k+': '),document.createTextNode(v||'—'));meta.append(x);});card.append(meta);
   const actions=node('div','task-actions');
+  if(state.archiveView&&t.can_manage){
+   const restore=node('button','btn primary','Вернуть в работу');restore.type='button';restore.addEventListener('click',()=>restoreTask(t.id));actions.append(restore);
+  }
   if(!state.archiveView&&t.can_update){
    if(t.status==='new'||t.status==='review'){const b=node('button','btn',t.status==='review'?'Вернуть в работу':'Взять в работу');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'in_progress'}));actions.append(b);}
    if(t.status==='in_progress'&&t.is_recipient){const b=node('button','btn primary','На проверку');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'review'}));actions.append(b);}
@@ -85,6 +88,7 @@ function render(){
  });
 }
 async function archiveTask(id){if(!confirm('Переместить выполненную задачу в архив?'))return;clearError();try{await api('task_archive',{id});await load(state.pagination.page||1);}catch(e){showError(e.message);}}
+async function restoreTask(id){if(!confirm('Вернуть задачу из архива в работу?'))return;clearError();try{await api('task_restore',{id});await load(state.pagination.page||1);}catch(e){showError(e.message);}}
 async function change(id,payload){clearError();try{await api('task_update',{id,...payload});await load(state.pagination.page||1);}catch(e){showError(e.message);}}
 async function load(page){const token=++loadToken;clearError();try{
  const params={page:page||state.pagination.page||1,search:$('search').value.trim(),status:$('statusFilter').value,object_id:$('objectFilter').value,archive:state.archiveView?'1':'0'};
