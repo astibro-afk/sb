@@ -985,20 +985,16 @@ if ($action === 'tasks_data' && $method === 'GET') {
 if ($action === 'task_comments' && $method === 'GET') {
     $taskId=(int)($_GET['id']??0);
     if($taskId<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
-    $taskSt=$pdo->prepare("SELECT t.id,t.object_id,t.assignee_id FROM sb_tasks t
-        JOIN sb_objects o ON o.id=t.object_id WHERE t.id=:id AND o.is_active=1 LIMIT 1");
-    $taskSt->execute([':id'=>$taskId]);$task=$taskSt->fetch();
+    $taskSt=$pdo->prepare("SELECT t.id,t.object_id,t.assignee_id,
+        EXISTS(SELECT 1 FROM sb_user_objects uo
+            WHERE uo.user_id=:viewer_id AND uo.object_id=t.object_id) AS viewer_has_object
+        FROM sb_tasks t JOIN sb_objects o ON o.id=t.object_id
+        WHERE t.id=:id AND o.is_active=1 LIMIT 1");
+    $taskSt->execute([':id'=>$taskId,':viewer_id'=>(int)$ctx['id']]);$task=$taskSt->fetch();
     if(!$task) reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
-    $canSee=$ctx['role']==='admin';
-    if($ctx['role']==='moderator'){
-        $check=$pdo->prepare('SELECT COUNT(*) FROM sb_user_objects WHERE user_id=:uid AND object_id=:oid');
-        $check->execute([':uid'=>(int)$ctx['id'],':oid'=>(int)$task['object_id']]);
-        $canSee=(int)$check->fetchColumn()>0;
-    } elseif($ctx['role']==='user') {
-        $check=$pdo->prepare('SELECT COUNT(*) FROM sb_user_objects WHERE user_id=:uid AND object_id=:oid');
-        $check->execute([':uid'=>(int)$ctx['id'],':oid'=>(int)$task['object_id']]);
-        $canSee=(int)$task['assignee_id']===(int)$ctx['id']&&(int)$check->fetchColumn()>0;
-    }
+    $canSee=$ctx['role']==='admin'
+        || (($ctx['role']==='moderator'||$ctx['role']==='user') && (int)$task['viewer_has_object']===1
+            && ($ctx['role']!=='user'||(int)$task['assignee_id']===(int)$ctx['id']));
     if(!$canSee) reply(403,['ok'=>false,'error'=>'Нет доступа к комментариям этой задачи.']);
     $commentsSt=$pdo->prepare('SELECT user_name,comment,created_at FROM sb_task_comments WHERE task_id=:id ORDER BY id ASC');
     $commentsSt->execute([':id'=>$taskId]);
@@ -1013,17 +1009,23 @@ if ($action === 'task_create' && $method === 'POST') {
     if($title===''||mb_strlen($title)>180||mb_strlen($description)>5000) reply(400,['ok'=>false,'error'=>'Укажите название задачи (до 180 символов); описание — до 5000 символов.']);
     if(!in_array($priority,['low','normal','high'],true)) reply(400,['ok'=>false,'error'=>'Некорректный приоритет.']);
     if($due!==''&&!preg_match('/^\\d{4}-\\d{2}-\\d{2}$/',$due)) reply(400,['ok'=>false,'error'=>'Некорректный срок выполнения.']);
-    $obj=$pdo->prepare('SELECT id,name FROM sb_objects WHERE id=:id AND is_active=1');$obj->execute([':id'=>$objectId]);$object=$obj->fetch();
+    // Одним запросом проверяем объект, доступ модератора и назначение исполнителя.
+    $obj=$pdo->prepare("SELECT o.id,o.name,
+        EXISTS(SELECT 1 FROM sb_user_objects own
+            WHERE own.user_id=:creator_id AND own.object_id=o.id) AS creator_has_object,
+        EXISTS(SELECT 1 FROM sb_users u
+            JOIN sb_user_objects assignee_link ON assignee_link.user_id=u.id
+            WHERE u.id=:assignee_id AND u.is_active=1 AND assignee_link.object_id=o.id) AS assignee_valid
+        FROM sb_objects o WHERE o.id=:object_id AND o.is_active=1 LIMIT 1");
+    $obj->execute([':creator_id'=>(int)$ctx['id'],':assignee_id'=>$assigneeId,':object_id'=>$objectId]);
+    $object=$obj->fetch();
     if(!$object) reply(400,['ok'=>false,'error'=>'Выберите действующий объект.']);
-    if($ctx['role']==='moderator'){
-        $allowed=$pdo->prepare('SELECT COUNT(*) FROM sb_user_objects WHERE user_id=:uid AND object_id=:oid');
-        $allowed->execute([':uid'=>(int)$ctx['id'],':oid'=>$objectId]);
-        if((int)$allowed->fetchColumn()===0) reply(403,['ok'=>false,'error'=>'Нельзя ставить задачи по объектам, которые вам не назначены.']);
+    if($ctx['role']==='moderator'&&(int)$object['creator_has_object']!==1) {
+        reply(403,['ok'=>false,'error'=>'Нельзя ставить задачи по объектам, которые вам не назначены.']);
     }
-    $target=$pdo->prepare("SELECT u.id,u.full_name FROM sb_users u JOIN sb_user_objects uo ON uo.user_id=u.id
-        WHERE u.id=:uid AND u.is_active=1 AND uo.object_id=:oid LIMIT 1");
-    $target->execute([':uid'=>$assigneeId,':oid'=>$objectId]);$assignee=$target->fetch();
-    if(!$assignee) reply(400,['ok'=>false,'error'=>'Исполнитель должен быть активным сотрудником, назначенным на выбранный объект.']);
+    if((int)$object['assignee_valid']!==1) {
+        reply(400,['ok'=>false,'error'=>'Исполнитель должен быть активным сотрудником, назначенным на выбранный объект.']);
+    }
     $ins=$pdo->prepare('INSERT INTO sb_tasks(object_id,title,description,priority,status,assignee_id,created_by,due_date) VALUES(:oid,:title,:description,:priority,\'new\',:assignee,:creator,:due)');
     $ins->execute([':oid'=>$objectId,':title'=>$title,':description'=>$description,':priority'=>$priority,':assignee'=>$assigneeId,':creator'=>(int)$ctx['id'],':due'=>$due!==''?$due:null]);
     $id=(int)$pdo->lastInsertId();
@@ -1033,17 +1035,15 @@ if ($action === 'task_create' && $method === 'POST') {
 }
 if ($action === 'task_update' && $method === 'POST') {
     $body=input_json();check_csrf($body);$id=(int)($body['id']??0);
-    $st=$pdo->prepare('SELECT * FROM sb_tasks WHERE id=:id');$st->execute([':id'=>$id]);$task=$st->fetch();
+    $st=$pdo->prepare("SELECT t.*,
+        EXISTS(SELECT 1 FROM sb_user_objects uo
+            WHERE uo.user_id=:viewer_id AND uo.object_id=t.object_id) AS viewer_has_object
+        FROM sb_tasks t WHERE t.id=:id LIMIT 1");
+    $st->execute([':id'=>$id,':viewer_id'=>(int)$ctx['id']]);$task=$st->fetch();
     if(!$task) reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
-    $canSee=$ctx['role']==='admin';
-    if($ctx['role']==='moderator'){
-        $check=$pdo->prepare('SELECT COUNT(*) FROM sb_user_objects WHERE user_id=:uid AND object_id=:oid');
-        $check->execute([':uid'=>(int)$ctx['id'],':oid'=>(int)$task['object_id']]);$canSee=(int)$check->fetchColumn()>0;
-    } elseif($ctx['role']==='user') {
-        $check=$pdo->prepare('SELECT COUNT(*) FROM sb_user_objects WHERE user_id=:uid AND object_id=:oid');
-        $check->execute([':uid'=>(int)$ctx['id'],':oid'=>(int)$task['object_id']]);
-        $canSee=(int)$task['assignee_id']===(int)$ctx['id']&&(int)$check->fetchColumn()>0;
-    }
+    $canSee=$ctx['role']==='admin'
+        || (($ctx['role']==='moderator'||$ctx['role']==='user') && (int)$task['viewer_has_object']===1
+            && ($ctx['role']!=='user'||(int)$task['assignee_id']===(int)$ctx['id']));
     if(!$canSee) reply(403,['ok'=>false,'error'=>'Нет доступа к этой задаче.']);
     $status=(string)($body['status']??'');
     if($status!==''){
