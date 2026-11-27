@@ -756,6 +756,20 @@ if (!$user) {
 }
 $ctx = user_ctx($pdo, $user);
 
+// Dispatch only after the API response and only when no business transaction is open.
+// On PHP-FPM this lets the client receive the response before outbound push requests run.
+require_once __DIR__ . '/push-dispatch.php';
+register_shutdown_function(static function () use ($pdo): void {
+    if ($pdo->inTransaction()) return;
+    if (function_exists('fastcgi_finish_request')) {
+        @fastcgi_finish_request();
+    } else {
+        while (ob_get_level() > 0) { @ob_end_flush(); }
+        flush();
+    }
+    sb_push_dispatch_pending($pdo, 4);
+});
+
 if ($action === 'presence_ping' && $method === 'GET') {
     $st = $pdo->prepare('INSERT INTO sb_user_presence (user_id,last_seen) VALUES (:uid,NOW())
         ON DUPLICATE KEY UPDATE last_seen=NOW()');
