@@ -55,7 +55,7 @@ function renderPagination(){const p=state.pagination||{page:1,total_pages:1,tota
 function render(){
  const rows=state.tasks;
  stats();renderPagination();tasksEl.replaceChildren();
- if(!rows.length){tasksEl.append(node('div','empty',state.tasks.length?'По заданным фильтрам задач нет.':'Пока задач нет. Новые поручения появятся здесь.'));return;}
+ if(!rows.length){tasksEl.append(node('div','empty',Number(state.stats.total||0)>0?'По заданным фильтрам задач нет.':'Пока задач нет. Новые поручения появятся здесь.'));return;}
  rows.forEach(t=>{
   const card=node('article','task'+(t.is_overdue?' overdue':''));const head=node('div','task-head'),left=node('div');left.append(node('h2','',t.title));
   const badges=node('div','badges');badges.append(node('span','tag '+t.status,t.status==='done'?statusLabels.done:statusLabels[t.status]));badges.append(node('span','tag '+t.priority,t.priority==='high'?'Высокий':t.priority==='low'?'Низкий':'Обычный'));if(t.is_overdue)badges.append(node('span','tag overdue','Просрочена'));left.append(badges);head.append(left);card.append(head);
