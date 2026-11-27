@@ -34,3 +34,6 @@ jobs:
             **/.git*/**
             **/.github/**
             README.md
+            **/config.php
+            **/config.local.php
+            **/config.local.php.example

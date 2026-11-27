@@ -1,0 +1,23 @@
+<?php
+declare(strict_types=1);
+
+/*
+ * Скопируйте этот файл на сервер под именем config.local.php.
+ * Заполните значения в панели/FTP хостинга.
+ * Не коммитьте config.local.php и не отправляйте его содержимое в чаты.
+ */
+
+// Запрет прямого обращения к локальному конфигурационному файлу.
+if (isset($_SERVER['SCRIPT_FILENAME']) && realpath((string)$_SERVER['SCRIPT_FILENAME']) === __FILE__) {
+    http_response_code(404);
+    exit;
+}
+
+return [
+    'db_host' => 'CHANGE_ME',
+    'db_name' => 'CHANGE_ME',
+    'db_user' => 'CHANGE_ME',
+    'db_pass' => 'CHANGE_ME',
+    // Оставьте пустым, если первоначальная установка больше не требуется.
+    'setup_token' => '',
+];

@@ -2,20 +2,31 @@
 declare(strict_types=1);
 
 /*
- * Настройки серверного хранилища сайта СБ.
- * Не публикуйте этот файл и не передавайте пароли посторонним.
+ * Безопасный загрузчик настроек SB.
+ * Рабочие параметры хранятся в config.local.php на сервере и не коммитятся.
  */
-return [
-    'db_host' => 'sql313.infinityfree.com',
-    'db_name' => 'if0_43540058_sb_reports',
-    'db_user' => 'if0_43540058',
-    'db_pass' => 'Astibro333', // тестовая версия: пароль не менялся. Для продакшна смените в панели хостинга.
+$localConfigPath = __DIR__ . '/config.local.php';
 
-    /*
-     * Одноразовый токен первоначальной настройки (файл setup.php).
-     * 1. Замените значение ниже на длинную случайную строку (например, из генератора паролей).
-     * 2. Откройте setup.php и создайте администратора.
-     * 3. После установки удалите setup.php с сервера и очистите это значение ('').
-     */
-    'setup_token' => 'Astibro3',
-];
+if (!is_file($localConfigPath) || !is_readable($localConfigPath)) {
+    error_log('SB configuration error: config.local.php is missing or unreadable.');
+    throw new RuntimeException('Серверная конфигурация SB не настроена.');
+}
+
+$localConfig = require $localConfigPath;
+if (!is_array($localConfig)) {
+    error_log('SB configuration error: config.local.php must return an array.');
+    throw new RuntimeException('Некорректная серверная конфигурация SB.');
+}
+
+foreach (['db_host', 'db_name', 'db_user', 'db_pass'] as $requiredKey) {
+    if (!array_key_exists($requiredKey, $localConfig) || !is_string($localConfig[$requiredKey])) {
+        error_log('SB configuration error: required setting is missing or invalid.');
+        throw new RuntimeException('Некорректная серверная конфигурация SB.');
+    }
+}
+
+if (!isset($localConfig['setup_token']) || !is_string($localConfig['setup_token'])) {
+    $localConfig['setup_token'] = '';
+}
+
+return $localConfig;
