@@ -1053,6 +1053,7 @@ if ($action === 'push_pair_create' && $method === 'POST') {
     $targetSt->execute([':id'=>$targetId]); $target=$targetSt->fetch();
     if(!$target) reply(404,['ok'=>false,'error'=>'Активный сотрудник не найден.']);
     $token=bin2hex(random_bytes(32));
+    $pdo->exec("DELETE FROM sb_push_pairing_codes WHERE expires_at<DATE_SUB(NOW(),INTERVAL 7 DAY) OR claimed_at<DATE_SUB(NOW(),INTERVAL 7 DAY)");
     $pdo->prepare('UPDATE sb_push_pairing_codes SET expires_at=NOW() WHERE user_id=:uid AND claimed_at IS NULL AND expires_at>NOW()')->execute([':uid'=>$targetId]);
     $save=$pdo->prepare('INSERT INTO sb_push_pairing_codes(user_id,created_by,code_hash,expires_at) VALUES(:uid,:creator,:hash,DATE_ADD(NOW(),INTERVAL 15 MINUTE))');
     $save->execute([':uid'=>$targetId,':creator'=>(int)$ctx['id'],':hash'=>hash('sha256',$token)]);
