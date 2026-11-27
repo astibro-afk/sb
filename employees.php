@@ -137,8 +137,9 @@ function render(){
   cards.append(card);
  });
 }
-function refreshPresence(){fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(readJson).then(d=>{if(!d.ok)return;(d.employees||[]).forEach(u=>{const card=cards.querySelector('[data-user-id="'+CSS.escape(String(u.id))+'"]');if(!card)return;const online=!!u.is_online&&!!u.is_active;const dot=card.querySelector('.state'),tag=card.querySelector('[data-presence="1"]');if(dot){dot.classList.toggle('inactive',!online);dot.title=!u.is_active?'Аккаунт отключён':(online?'Пользователь в сети':'Пользователь не в сети');dot.setAttribute('aria-label',dot.title);}if(tag){tag.classList.toggle('off',!online);tag.textContent=!u.is_active?'Отключён':(online?'В сети':'Не в сети');}});}).catch(function(){});}
-setInterval(refreshPresence,30000);
+function refreshPresence(){if(document.visibilityState==='hidden')return;fetch('api.php?action=employees_presence',{credentials:'same-origin',cache:'no-store'}).then(readJson).then(d=>{if(!d.ok)return;(d.employees||[]).forEach(u=>{const card=cards.querySelector('[data-user-id="'+CSS.escape(String(u.id))+'"]');if(!card)return;const online=!!u.is_online&&!!u.is_active;const dot=card.querySelector('.state'),tag=card.querySelector('[data-presence="1"]');if(dot){dot.classList.toggle('inactive',!online);dot.title=!u.is_active?'Аккаунт отключён':(online?'Пользователь в сети':'Пользователь не в сети');dot.setAttribute('aria-label',dot.title);}if(tag){tag.classList.toggle('off',!online);tag.textContent=!u.is_active?'Отключён':(online?'В сети':'Не в сети');}});}).catch(function(){});}
+ setInterval(refreshPresence,60000);
+ document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')refreshPresence();});
 search.addEventListener('input',render);roleFilter.addEventListener('change',render);objectFilter.addEventListener('change',render);
 fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(async r=>{const d=await readJson(r);if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось загрузить сотрудников.');all=d.employees||[];
  const roleOrder=['admin','moderator','user'];const roles=[...new Set(all.map(u=>u.role).filter(Boolean))].sort((a,b)=>roleOrder.indexOf(a)-roleOrder.indexOf(b));roles.forEach(role=>roleFilter.append(new Option(labels[role]||role,role)));
@@ -147,7 +148,7 @@ fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store
 })();
 </script>
 <script>
-(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,30000);document.addEventListener('visibilitychange',ping);})();
+(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,60000);document.addEventListener('visibilitychange',ping);})();
 </script>
 <script src="site-header.js"></script>
 </body>
