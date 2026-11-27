@@ -23,8 +23,8 @@ if(empty($_SESSION['sb_user_id'])){header('Location: index.html');exit;}
 <div id="error" class="error hidden" role="alert"></div>
 <section id="createPanel" class="form-panel hidden"><h2>Поставить новую задачу</h2><form class="form" id="createForm">
 <div class="field wide"><label for="title">Название задачи *</label><input id="title" maxlength="180" required placeholder="Например: Проверить соблюдение кассовой дисциплины"></div>
-<div class="field"><label for="object">Объект *</label><select id="object" multiple size="4" aria-label="Выберите один или несколько объектов"></select></div>
-<div class="field"><label for="assignee">Исполнитель *</label><select id="assignee" multiple size="4" aria-label="Выберите одного или нескольких сотрудников"></select></div>
+<div class="field"><label for="object">Объекты (все активные сотрудники этих объектов)</label><select id="object" multiple size="4" aria-label="Выберите один или несколько объектов"></select></div>
+<div class="field"><label for="assignee">Дополнительные сотрудники</label><select id="assignee" multiple size="4" aria-label="Выберите одного или нескольких сотрудников"></select></div>
 <div class="field"><label for="priority">Приоритет</label><select id="priority"><option value="normal">Обычный</option><option value="high">Высокий</option><option value="low">Низкий</option></select></div>
 <div class="field"><label for="due">Срок выполнения</label><input id="due" type="date"></div>
 <div class="field full"><label for="description">Описание и ожидаемый результат</label><textarea id="description" maxlength="5000" placeholder="Опишите задачу, ожидаемый результат и важные детали"></textarea></div>
