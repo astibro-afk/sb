@@ -1058,7 +1058,9 @@ if ($action === 'reports_data' && $method === 'GET') {
     $params = $baseParams;
     $employeeId = (int)($_GET['employee_id'] ?? 0);
     if ($employeeId > 0) {
-        $filteredWhere[] = 'a.owner_user_id = :selected_employee_id';
+        $filteredWhere[] = "COALESCE(a.owner_user_id, CASE WHEN JSON_VALID(a.payload) THEN
+            CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.owner_user_id')), '') AS UNSIGNED)
+            ELSE NULL END) = :selected_employee_id";
         $params[':selected_employee_id'] = $employeeId;
     }
     $search = trim((string)($_GET['search'] ?? ''));
