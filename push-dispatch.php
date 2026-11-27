@@ -12,6 +12,19 @@ function sb_push_base64url_encode(string $value): string {
 function sb_push_dispatch_pending(PDO $pdo, int $limit = 4): void {
     if ($pdo->inTransaction()) return;
 
+    try {
+        $due = $pdo->query(
+            "SELECT 1 FROM sb_push_queue
+             WHERE (status='pending' AND next_attempt_at<=NOW())
+                OR (status='sending' AND next_attempt_at<=NOW())
+             LIMIT 1"
+        )->fetchColumn();
+        if (!$due) return;
+    } catch (Throwable $e) {
+        error_log('SB push queue check error: ' . $e->getMessage());
+        return;
+    }
+
     $autoload = __DIR__ . '/vendor/autoload.php';
     if (!is_file($autoload)) {
         error_log('SB push dispatcher: Composer autoload is missing.');
