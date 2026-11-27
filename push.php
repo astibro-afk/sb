@@ -64,6 +64,7 @@ async function acceptPairInvite(){
  const button=$('pairAccept');button.disabled=true;
  try{
   if(!window.isSecureContext)throw new Error('Для push требуется HTTPS.');
+  if(!('serviceWorker'in navigator)||!('PushManager'in window)||!('Notification'in window))throw new Error('Этот браузер не поддерживает Web Push.');
   const permission=await Notification.requestPermission();
   if(permission!=='granted')throw new Error('Разрешение на уведомления не предоставлено.');
   const cfg=await request('push_config');publicKey=cfg.public_key;
