@@ -164,7 +164,7 @@ function db(array $cfg): PDO {
         ]);
         // Инициализация схемы один раз на PHP-сессию, а не при каждом AJAX-запросе.
         // Версию можно повысить при добавлении новых миграций.
-        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-27-1') {
+        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-27-2') {
             $pdo->exec(
                 "CREATE TABLE IF NOT EXISTS sb_app_data (
                     data_key VARCHAR(100) NOT NULL PRIMARY KEY,
@@ -286,7 +286,8 @@ function db(array $cfg): PDO {
                 CONSTRAINT fk_presence_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
             ensure_user_objects($pdo);
-            $_SESSION['sb_schema_version'] = '2026-11-27-1';
+            ensure_task_targets($pdo);
+            $_SESSION['sb_schema_version'] = '2026-11-27-2';
         }
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
@@ -295,6 +296,23 @@ function db(array $cfg): PDO {
     return $pdo;
 }
 
+function ensure_task_targets(PDO $pdo): void {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_task_assignees (
+        task_id BIGINT UNSIGNED NOT NULL, user_id INT UNSIGNED NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (task_id, user_id), INDEX idx_task_assignees_user (user_id, task_id),
+        CONSTRAINT fk_task_assignees_task FOREIGN KEY (task_id) REFERENCES sb_tasks(id) ON DELETE CASCADE,
+        CONSTRAINT fk_task_assignees_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_task_objects (
+        task_id BIGINT UNSIGNED NOT NULL, object_id INT UNSIGNED NOT NULL,
+        PRIMARY KEY (task_id, object_id), INDEX idx_task_objects_object (object_id, task_id),
+        CONSTRAINT fk_task_objects_task FOREIGN KEY (task_id) REFERENCES sb_tasks(id) ON DELETE CASCADE,
+        CONSTRAINT fk_task_objects_object FOREIGN KEY (object_id) REFERENCES sb_objects(id) ON DELETE RESTRICT
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("INSERT IGNORE INTO sb_task_assignees (task_id,user_id) SELECT id,assignee_id FROM sb_tasks");
+    $pdo->exec("INSERT IGNORE INTO sb_task_objects (task_id,object_id) SELECT id,object_id FROM sb_tasks");
+}
 function ensure_user_objects(PDO $pdo): void {
     $pdo->exec("CREATE TABLE IF NOT EXISTS sb_user_objects (
         user_id INT UNSIGNED NOT NULL,
