@@ -49,7 +49,7 @@ function showError(message){$('error').textContent=message;$('error').classList.
 function clearError(){$('error').textContent='';$('error').classList.add('hidden');}
 function date(v){if(!v)return 'Без срока';const d=new Date(v+'T00:00:00');return isNaN(d)?v:d.toLocaleDateString('ru-RU',{day:'2-digit',month:'long',year:'numeric'});}
 function time(v){if(!v)return '';const d=new Date(String(v).replace(' ','T'));return isNaN(d)?v:d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
-function fillAssignees(){const sel=$('assignee');sel.replaceChildren();state.assignees.filter(u=>!state.user||Number(u.id)!==Number(state.user.id)).forEach(u=>sel.add(new Option(u.full_name+(u.role==='moderator'?' · модератор':''),u.id)));}
+function fillAssignees(){const sel=$('assignee');sel.replaceChildren();state.assignees.filter(u=>!state.user||Number(u.id)!==Number(state.user.id)).forEach(u=>sel.add(new Option(u.full_name,u.id)));}
 function stats(){const s=state.stats||{};$('total').textContent=Number(s.total||0);$('active').textContent=Number(s.active||0);$('reviewCount').textContent=Number(s.review||0);$('overdue').textContent=Number(s.overdue||0);}
 function renderPagination(){const p=state.pagination||{page:1,total_pages:1,total:0};const wrap=$('pagination');wrap.hidden=Number(p.total_pages)<=1;$('prevPage').disabled=Number(p.page)<=1;$('nextPage').disabled=Number(p.page)>=Number(p.total_pages);$('pageInfo').textContent='Страница '+p.page+' из '+p.total_pages+' · задач: '+p.total;}
 function render(){
