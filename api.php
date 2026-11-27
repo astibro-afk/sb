@@ -1092,8 +1092,68 @@ if ($action === 'task_comments' && $method === 'GET') {
     if(!$task) reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
     $allowed=$ctx['role']==='admin'||($ctx['role']==='user'&&(int)$task['recipient']===1)||($ctx['role']==='moderator'&&(int)$task['object_access']===1);
     if(!$allowed) reply(403,['ok'=>false,'error'=>'Нет доступа к комментариям этой задачи.']);
-    $cs=$pdo->prepare('SELECT user_name,comment,created_at FROM sb_task_comments WHERE task_id=:id ORDER BY id ASC'); $cs->execute([':id'=>$taskId]);
+    $cs=$pdo->prepare("SELECT c.id,c.user_id,c.user_name,c.comment,c.created_at,
+        CASE WHEN :comment_admin=1 THEN 1
+             WHEN c.user_id=:comment_owner THEN 1
+             WHEN :comment_moderator=1 AND EXISTS(
+                SELECT 1 FROM sb_task_objects txo
+                JOIN sb_user_objects mine ON mine.object_id=txo.object_id AND mine.user_id=:comment_moderator_scope
+                JOIN sb_user_objects author_scope ON author_scope.object_id=txo.object_id AND author_scope.user_id=c.user_id
+                WHERE txo.task_id=c.task_id
+             ) THEN 1 ELSE 0 END AS can_delete
+        FROM sb_task_comments c WHERE c.task_id=:id ORDER BY c.id ASC");
+    $cs->execute([
+        ':comment_admin'=>$ctx['role']==='admin'?1:0,
+        ':comment_owner'=>(int)$ctx['id'],
+        ':comment_moderator'=>$ctx['role']==='moderator'?1:0,
+        ':comment_moderator_scope'=>(int)$ctx['id'],
+        ':id'=>$taskId
+    ]);
     reply(200,['ok'=>true,'comments'=>$cs->fetchAll()]);
+}
+if ($action === 'task_comment_delete' && $method === 'POST') {
+    $body=input_json(); check_csrf($body);
+    $commentId=(int)($body['comment_id']??0);
+    if($commentId<1) reply(400,['ok'=>false,'error'=>'Не выбран комментарий.']);
+    $st=$pdo->prepare("SELECT c.id,c.task_id,c.user_id,c.user_name,c.comment,t.title,
+        EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:recipient_viewer) AS is_recipient,
+        EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects mine ON mine.object_id=txo.object_id AND mine.user_id=:moderator_task_viewer WHERE txo.task_id=t.id) AS moderator_task_access,
+        EXISTS(SELECT 1 FROM sb_task_objects txo
+            JOIN sb_user_objects mine ON mine.object_id=txo.object_id AND mine.user_id=:moderator_author_viewer
+            JOIN sb_user_objects author_scope ON author_scope.object_id=txo.object_id AND author_scope.user_id=c.user_id
+            WHERE txo.task_id=t.id) AS moderator_author_access
+        FROM sb_task_comments c JOIN sb_tasks t ON t.id=c.task_id WHERE c.id=:comment_id LIMIT 1");
+    $st->execute([
+        ':recipient_viewer'=>(int)$ctx['id'],
+        ':moderator_task_viewer'=>(int)$ctx['id'],
+        ':moderator_author_viewer'=>(int)$ctx['id'],
+        ':comment_id'=>$commentId
+    ]);
+    $comment=$st->fetch();
+    if(!$comment) reply(404,['ok'=>false,'error'=>'Комментарий не найден.']);
+    $isOwner=(int)$comment['user_id']===(int)$ctx['id'];
+    $canDelete=$ctx['role']==='admin'
+        ||($ctx['role']==='user'&&$isOwner&&(int)$comment['is_recipient']===1)
+        ||($ctx['role']==='moderator'&&(int)$comment['moderator_task_access']===1&&($isOwner||(int)$comment['moderator_author_access']===1));
+    if(!$canDelete) reply(403,['ok'=>false,'error'=>'У вас нет прав на удаление этого комментария.']);
+    try {
+        $pdo->beginTransaction();
+        $del=$pdo->prepare('DELETE FROM sb_task_comments WHERE id=?');
+        $del->execute([$commentId]);
+        if($del->rowCount()!==1) throw new RuntimeException('Комментарий уже был удалён.');
+        audit_log($pdo,$ctx,'task_comment_deleted','task',(int)$comment['task_id'],(string)$comment['title'],[
+            'comment_id'=>$commentId,
+            'comment_author_id'=>(int)$comment['user_id'],
+            'comment_author'=>(string)$comment['user_name'],
+            'comment'=>(string)$comment['comment']
+        ]);
+        $pdo->commit();
+    } catch(Throwable $e) {
+        if($pdo->inTransaction())$pdo->rollBack();
+        error_log('SB task comment delete error: '.$e->getMessage());
+        reply(500,['ok'=>false,'error'=>'Не удалось удалить комментарий. Обновите страницу и попробуйте снова.']);
+    }
+    reply(200,['ok'=>true]);
 }
 if ($action === 'task_create' && $method === 'POST') {
     if(!in_array($ctx['role'],['admin','moderator'],true)) reply(403,['ok'=>false,'error'=>'Создавать задачи могут только руководитель и модератор.']);
