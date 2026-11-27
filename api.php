@@ -1025,6 +1025,31 @@ if ($action === 'tasks_data' && $method === 'GET') {
         'pagination'=>['page'=>$page,'per_page'=>$perPage,'total'=>$filteredTotal,'total_pages'=>$totalPages]
     ]);
 }
+if ($action === 'task_delete' && $method === 'POST') {
+    if (($ctx['role'] ?? '') !== 'admin') reply(403,['ok'=>false,'error'=>'Удалять задачи может только администратор.']);
+    $body=input_json(); check_csrf($body); $id=(int)($body['id']??0);
+    if($id<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
+    $st=$pdo->prepare('SELECT id,title,status,is_archived,created_by FROM sb_tasks WHERE id=? LIMIT 1');
+    $st->execute([$id]); $task=$st->fetch();
+    if(!$task) reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
+    try {
+        $pdo->beginTransaction();
+        $q=$pdo->prepare('SELECT user_id FROM sb_task_assignees WHERE task_id=?'); $q->execute([$id]);
+        $recipients=array_map('intval',$q->fetchAll(PDO::FETCH_COLUMN));
+        if((int)$task['created_by']>0)$recipients[]=(int)$task['created_by'];
+        $recipients=array_values(array_unique(array_filter($recipients,function($uid)use($ctx){return $uid>0&&$uid!==(int)$ctx['id'];})));
+        audit_log($pdo,$ctx,'task_deleted','task',$id,(string)$task['title'],['status'=>(string)$task['status'],'is_archived'=>(int)$task['is_archived']]);
+        foreach($recipients as $uid) notification_add($pdo,$uid,'task','Задача удалена','Задача «'.$task['title'].'» была удалена администратором.','tasks.php');
+        $del=$pdo->prepare('DELETE FROM sb_tasks WHERE id=?'); $del->execute([$id]);
+        if($del->rowCount()!==1) throw new RuntimeException('Задача уже была удалена.');
+        $pdo->commit();
+    } catch(Throwable $e) {
+        if($pdo->inTransaction())$pdo->rollBack();
+        error_log('SB task delete error: '.$e->getMessage());
+        reply(500,['ok'=>false,'error'=>'Не удалось удалить задачу. Обновите страницу и попробуйте снова.']);
+    }
+    reply(200,['ok'=>true]);
+}
 if ($action === 'task_archive' && $method === 'POST') {
     $body=input_json(); check_csrf($body); $id=(int)($body['id']??0);
     if($id<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
