@@ -2,6 +2,7 @@
 declare(strict_types=1);
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Referrer-Policy: no-referrer');
 ini_set('session.use_strict_mode','1');
 $isHttps=!empty($_SERVER['HTTPS'])&&strtolower((string)$_SERVER['HTTPS'])!=='off';
 session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>$isHttps,'httponly'=>true,'samesite'=>'Strict']);
