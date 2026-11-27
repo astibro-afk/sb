@@ -934,12 +934,13 @@ if ($action === 'tasks_data' && $method === 'GET') {
     $tasksSql = "SELECT t.id,t.object_id,o.name AS object_name,t.title,t.description,t.priority,t.status,
         t.assignee_id,au.full_name AS assignee_name,t.created_by,cu.full_name AS creator_name,
         (SELECT GROUP_CONCAT(DISTINCT u.full_name ORDER BY u.full_name SEPARATOR ', ') FROM sb_task_assignees ta JOIN sb_users u ON u.id=ta.user_id WHERE ta.task_id=t.id) AS assignee_names,
-        (SELECT GROUP_CONCAT(DISTINCT ob.name ORDER BY ob.name SEPARATOR ', ') FROM sb_task_objects txo JOIN sb_objects ob ON ob.id=txo.object_id WHERE txo.task_id=t.id AND EXISTS(SELECT 1 FROM sb_user_objects own WHERE own.user_id='.(int)$ctx['id'].' AND own.object_id=txo.object_id)) AS object_names,
+        (SELECT GROUP_CONCAT(DISTINCT ob.name ORDER BY ob.name SEPARATOR ', ') FROM sb_task_objects txo JOIN sb_objects ob ON ob.id=txo.object_id WHERE txo.task_id=t.id AND EXISTS(SELECT 1 FROM sb_user_objects own WHERE own.user_id=:viewer_object_name AND own.object_id=txo.object_id)) AS object_names,
         t.due_date,t.created_at,t.updated_at" . $filteredSql . "
         ORDER BY CASE WHEN t.status='done' THEN 1 ELSE 0 END, t.due_date IS NULL,
         t.due_date ASC, t.updated_at DESC, t.id DESC LIMIT " . $perPage . " OFFSET " . $offset;
     $st = $pdo->prepare($tasksSql);
-    $st->execute($params);
+    $tasksParams=$params; $tasksParams[':viewer_object_name']=(int)$ctx['id'];
+    $st->execute($tasksParams);
     $tasks = $st->fetchAll();
 
     $commentCounts = [];
