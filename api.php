@@ -996,27 +996,24 @@ if ($action === 'reports_data' && $method === 'GET') {
         }
     }
 
-    $sql = 'SELECT a.record_key, a.report_date, a.object_name, a.owner_user_id, a.owner_name, a.object_id, a.payload, a.updated_at,
-                   c.comment AS manager_comment, c.author_name AS comment_author, c.updated_at AS comment_updated_at
-            FROM sb_archive_records a LEFT JOIN sb_report_comments c ON c.record_key = a.record_key
-            WHERE a.report_date >= :date_from AND a.report_date <= :date_to';
-    $params = [':date_from' => $from, ':date_to' => $to];
+    $where = ['a.report_date >= :date_from', 'a.report_date <= :date_to'];
+    $baseParams = [':date_from' => $from, ':date_to' => $to];
 
     if ($ctx['role'] !== 'admin') {
-        if (!$allowedIds) reply(200, ['ok' => true, 'objects' => [], 'records' => [], 'user' => $ctx, 'csrf' => csrf_token()]);
+        if (!$allowedIds) reply(200, ['ok' => true, 'objects' => [], 'employees' => [], 'records' => [], 'summary' => ['total' => 0, 'objects' => 0, 'employees' => 0], 'page' => 1, 'per_page' => 25, 'pages' => 0, 'user' => $ctx, 'csrf' => csrf_token()]);
         $idMarks = [];
         foreach ($allowedIds as $i => $id) {
             $key = ':allowed_id_' . $i;
             $idMarks[] = $key;
-            $params[$key] = $id;
+            $baseParams[$key] = $id;
         }
         $nameMarks = [];
         foreach ($allowedNames as $i => $name) {
             $key = ':allowed_name_' . $i;
             $nameMarks[] = $key;
-            $params[$key] = $name;
+            $baseParams[$key] = $name;
         }
-        $sql .= ' AND (a.object_id IN (' . implode(',', $idMarks) . ') OR (a.object_id IS NULL AND a.object_name IN (' . implode(',', $nameMarks) . ')))';
+        $where[] = '(a.object_id IN (' . implode(',', $idMarks) . ') OR (a.object_id IS NULL AND a.object_name IN (' . implode(',', $nameMarks) . ')))';
     }
 
     if ($objectIds) {
@@ -1027,53 +1024,162 @@ if ($action === 'reports_data' && $method === 'GET') {
             $nameKey = ':selected_name_' . $i;
             $idMarks[] = $idKey;
             $selectedNameMarks[] = $nameKey;
-            $params[$idKey] = $id;
-            $params[$nameKey] = (string)$availableById[$id]['name'];
+            $baseParams[$idKey] = $id;
+            $baseParams[$nameKey] = (string)$availableById[$id]['name'];
         }
-        $sql .= ' AND (a.object_id IN (' . implode(',', $idMarks) . ') OR (a.object_id IS NULL AND a.object_name IN (' . implode(',', $selectedNameMarks) . ')))';
-    }
-    // Пользователь видит только собственные отчёты; модератор — все отчёты
-    // по закреплённым объектам, администратор — все отчёты.
-    if ($ctx['role'] === 'user') {
-        $sql .= ' AND a.owner_user_id = :viewer_owner_id';
-        $params[':viewer_owner_id'] = (int)$ctx['id'];
+        $where[] = '(a.object_id IN (' . implode(',', $idMarks) . ') OR (a.object_id IS NULL AND a.object_name IN (' . implode(',', $selectedNameMarks) . ')))';
     }
 
+    // Пользователь видит только собственные отчёты; модератор — отчёты по своим объектам.
+    if ($ctx['role'] === 'user') {
+        $where[] = 'a.owner_user_id = :viewer_owner_id';
+        $baseParams[':viewer_owner_id'] = (int)$ctx['id'];
+    }
+
+    $baseWhere = implode(' AND ', $where);
+    $employeeSql = "SELECT DISTINCT COALESCE(a.owner_user_id, CASE WHEN JSON_VALID(a.payload) THEN
+            CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.owner_user_id')), '') AS UNSIGNED)
+            ELSE NULL END) AS owner_user_id,
+        COALESCE(NULLIF(a.owner_name, ''), CASE WHEN JSON_VALID(a.payload) THEN
+            COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.owner_name')), ''),
+                     NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.data.b0_fio')), ''))
+            ELSE '' END) AS employee_name
+        FROM sb_archive_records a WHERE " . $baseWhere . "
+        ORDER BY employee_name";
+    $employeeStmt = $pdo->prepare($employeeSql);
+    $employeeStmt->execute($baseParams);
+    $employees = [];
+    foreach ($employeeStmt->fetchAll() as $employee) {
+        $employeeIdOption = (int)($employee['owner_user_id'] ?? 0);
+        if ($employeeIdOption > 0) $employees[] = ['id' => $employeeIdOption, 'name' => (string)($employee['employee_name'] ?? '')];
+    }
+
+    $filteredWhere = $where;
+    $params = $baseParams;
     $employeeId = (int)($_GET['employee_id'] ?? 0);
     if ($employeeId > 0) {
-        $sql .= ' AND a.owner_user_id = :selected_employee_id';
+        $filteredWhere[] = 'a.owner_user_id = :selected_employee_id';
         $params[':selected_employee_id'] = $employeeId;
     }
+    $search = trim((string)($_GET['search'] ?? ''));
+    if ($search !== '') {
+        $search = mb_substr($search, 0, 120);
+        $search = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search);
+        $filteredWhere[] = "CONCAT_WS(' ', a.report_date, a.object_name, COALESCE(NULLIF(a.owner_name, ''), CASE WHEN JSON_VALID(a.payload) THEN JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.owner_name')) ELSE '' END),
+            CASE WHEN JSON_VALID(a.payload) THEN
+                COALESCE(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.data.b0_fio')),
+                         JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.fio')), '')
+            ELSE '' END) LIKE :search ESCAPE '!'";
+        $params[':search'] = '%' . $search . '%';
+    }
+    $filteredSql = implode(' AND ', $filteredWhere);
 
-    $sql .= ' ORDER BY a.report_date DESC, a.object_name ASC, a.updated_at DESC';
+    $summaryStmt = $pdo->prepare("SELECT COUNT(*) AS total,
+        COUNT(DISTINCT a.object_name) AS object_count,
+        COUNT(DISTINCT COALESCE(CAST(a.owner_user_id AS CHAR),
+            CASE WHEN JSON_VALID(a.payload) THEN NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.owner_user_id')), '') ELSE NULL END,
+            NULLIF(a.owner_name, ''))) AS employee_count
+        FROM sb_archive_records a WHERE " . $filteredSql);
+    $summaryStmt->execute($params);
+    $summary = $summaryStmt->fetch() ?: ['total' => 0, 'object_count' => 0, 'employee_count' => 0];
+    $total = (int)$summary['total'];
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $perPage = (int)($_GET['per_page'] ?? 25);
+    if (!in_array($perPage, [10, 25, 50, 100], true)) $perPage = 25;
+    $pages = $total > 0 ? (int)ceil($total / $perPage) : 0;
+    $page = $pages > 0 ? min($page, $pages) : 1;
+    $offset = ($page - 1) * $perPage;
+
+    // В список передаются только поля таблицы. Большой payload документа загружается
+    // отдельным запросом при открытии предпросмотра или скачивании.
+    $listSql = "SELECT a.record_key, a.report_date, a.object_name, a.owner_user_id, a.owner_name,
+        a.object_id, a.updated_at,
+        COALESCE(a.owner_user_id, CASE WHEN JSON_VALID(a.payload) THEN
+            CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.owner_user_id')), '') AS UNSIGNED)
+            ELSE NULL END) AS resolved_owner_user_id,
+        COALESCE(NULLIF(a.owner_name, ''), CASE WHEN JSON_VALID(a.payload) THEN JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.owner_name')) ELSE '' END) AS resolved_owner_name,
+        CASE WHEN JSON_VALID(a.payload) THEN
+            COALESCE(JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.data.b0_fio')),
+                     JSON_UNQUOTE(JSON_EXTRACT(a.payload, '$.fio')), '')
+            ELSE '' END AS employee_name
+        FROM sb_archive_records a WHERE " . $filteredSql . "
+        ORDER BY a.report_date DESC, a.object_name ASC, a.updated_at DESC, a.record_key ASC
+        LIMIT :limit OFFSET :offset";
+    $listStmt = $pdo->prepare($listSql);
+    foreach ($params as $key => $value) $listStmt->bindValue($key, $value);
+    $listStmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+    $listStmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $listStmt->execute();
+
     $records = [];
-    foreach ($stmt->fetchAll() as $row) {
-        $item = json_decode((string)$row['payload'], true);
-        if (!is_array($item)) continue;
-        $data = isset($item['data']) && is_array($item['data']) ? $item['data'] : [];
+    foreach ($listStmt->fetchAll() as $row) {
         $records[] = [
             'record_key' => (string)$row['record_key'],
-            'manager_comment' => (string)($row['manager_comment'] ?? ''),
-            'comment_author' => (string)($row['comment_author'] ?? ''),
-            'comment_updated_at' => (string)($row['comment_updated_at'] ?? ''),
-            'date' => (string)($data['b0_date'] ?? $row['report_date']),
-            'object' => (string)($data['b0_to'] ?? $row['object_name']),
-            'employee' => (string)($data['b0_fio'] ?? $item['fio'] ?? ''),
-            'author' => (string)($item['owner_name'] ?? $row['owner_name'] ?? ''),
-            'owner_user_id' => isset($item['owner_user_id']) ? (int)$item['owner_user_id'] : ($row['owner_user_id'] !== null ? (int)$row['owner_user_id'] : null),
-            'done' => (int)($item['done'] ?? 0),
-            'total' => (int)($item['total'] ?? 0),
-            'saved_at' => (int)($item['t'] ?? 0),
+            'date' => (string)$row['report_date'],
+            'object' => (string)$row['object_name'],
+            'employee' => (string)($row['employee_name'] ?? ''),
+            'author' => (string)($row['resolved_owner_name'] ?? ''),
+            'owner_user_id' => $row['resolved_owner_user_id'] !== null ? (int)$row['resolved_owner_user_id'] : null,
+            'object_id' => $row['object_id'] !== null ? (int)$row['object_id'] : null,
             'updated_at' => (string)$row['updated_at'],
-            'data' => $data,
-            'dyn' => isset($item['dyn']) && is_array($item['dyn']) ? $item['dyn'] : [],
         ];
     }
 
-    reply(200, ['ok' => true, 'objects' => $assignedRows, 'records' => $records, 'user' => $ctx, 'from' => $from, 'to' => $to, 'csrf' => csrf_token()]);
+    reply(200, [
+        'ok' => true,
+        'objects' => $assignedRows,
+        'employees' => $employees,
+        'records' => $records,
+        'summary' => ['total' => $total, 'objects' => (int)$summary['object_count'], 'employees' => (int)$summary['employee_count']],
+        'page' => $page,
+        'per_page' => $perPage,
+        'pages' => $pages,
+        'user' => $ctx,
+        'from' => $from,
+        'to' => $to,
+        'csrf' => csrf_token()
+    ]);
+}
+
+if ($action === 'report_detail' && $method === 'GET') {
+    $recordKey = trim((string)($_GET['record_key'] ?? ''));
+    if (!preg_match('/^[rd]:[a-f0-9]{64}$/i', $recordKey)) {
+        reply(400, ['ok' => false, 'error' => 'Некорректный идентификатор отчёта.']);
+    }
+    $stmt = $pdo->prepare('SELECT record_key, object_id, object_name, owner_user_id, payload
+        FROM sb_archive_records WHERE record_key = :k LIMIT 1');
+    $stmt->execute([':k' => $recordKey]);
+    $row = $stmt->fetch();
+    if (!$row) reply(404, ['ok' => false, 'error' => 'Отчёт не найден.']);
+
+    if ($ctx['role'] === 'user') {
+        if ($row['owner_user_id'] === null || (int)$row['owner_user_id'] !== (int)$ctx['id']) {
+            reply(403, ['ok' => false, 'error' => 'Нет доступа к этому отчёту.']);
+        }
+    } elseif ($ctx['role'] === 'moderator') {
+        $assignedIds = [];
+        $assignedNames = [];
+        foreach (get_user_object_rows($pdo, (int)$ctx['id']) as $assigned) {
+            if ((int)$assigned['is_active'] !== 1) continue;
+            $assignedIds[(int)$assigned['id']] = true;
+            $assignedNames[(string)$assigned['name']] = true;
+        }
+        $allowed = $row['object_id'] !== null
+            ? isset($assignedIds[(int)$row['object_id']])
+            : isset($assignedNames[(string)$row['object_name']]);
+        if (!$allowed) reply(403, ['ok' => false, 'error' => 'Нет доступа к этому отчёту.']);
+    } elseif ($ctx['role'] !== 'admin') {
+        reply(403, ['ok' => false, 'error' => 'Недостаточно прав.']);
+    }
+
+    $item = json_decode((string)$row['payload'], true);
+    if (!is_array($item)) reply(500, ['ok' => false, 'error' => 'Не удалось прочитать данные отчёта.']);
+    reply(200, [
+        'ok' => true,
+        'data' => isset($item['data']) && is_array($item['data']) ? $item['data'] : [],
+        'dyn' => isset($item['dyn']) && is_array($item['dyn']) ? $item['dyn'] : []
+    ]);
 }
 
 if ($action === 'load' && $method === 'GET') {
