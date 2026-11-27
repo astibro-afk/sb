@@ -984,8 +984,8 @@ if ($action === 'tasks_data' && $method === 'GET') {
     if ($ctx['role'] !== 'user') {
         $usersSql = "SELECT u.id,u.full_name,u.role,MIN(uo.object_id) AS object_id FROM sb_users u
             JOIN sb_user_objects uo ON uo.user_id=u.id JOIN sb_objects o ON o.id=uo.object_id
-            WHERE u.is_active=1 AND o.is_active=1";
-        $userParams = [];
+            WHERE u.is_active=1 AND o.is_active=1 AND u.id<>:exclude_self";
+        $userParams = [':exclude_self' => (int)$ctx['id']];
         if ($ctx['role'] === 'moderator') {
             $usersSql .= " AND EXISTS(SELECT 1 FROM sb_user_objects mine WHERE mine.user_id=:mid AND mine.object_id=uo.object_id)";
             $userParams[':mid'] = (int)$ctx['id'];
@@ -1027,6 +1027,7 @@ if ($action === 'task_create' && $method === 'POST') {
     $body=input_json(); check_csrf($body);
     $objectIds=array_values(array_unique(array_filter(array_map('intval',is_array($body['object_ids']??null)?$body['object_ids']:[]),function($v){return $v>0;})));
     $assigneeIds=array_values(array_unique(array_filter(array_map('intval',is_array($body['assignee_ids']??null)?$body['assignee_ids']:[]),function($v){return $v>0;})));
+    if(in_array((int)$ctx['id'],$assigneeIds,true)) reply(400,['ok'=>false,'error'=>'Вы не можете назначить себя исполнителем задачи.']);
     $title=trim((string)($body['title']??'')); $description=trim((string)($body['description']??'')); $priority=(string)($body['priority']??'normal'); $due=(string)($body['due_date']??'');
     if($title===''||mb_strlen($title)>180||mb_strlen($description)>5000) reply(400,['ok'=>false,'error'=>'Укажите название задачи (до 180 символов); описание — до 5000 символов.']);
     if(!in_array($priority,['low','normal','high'],true)) reply(400,['ok'=>false,'error'=>'Некорректный приоритет.']);
@@ -1036,7 +1037,7 @@ if ($action === 'task_create' && $method === 'POST') {
     foreach($objectIds as $oid) if(!isset($names[$oid])) reply(400,['ok'=>false,'error'=>'Выбран недействующий объект.']);
     if($ctx['role']==='moderator'&&$objectIds){$q=$pdo->prepare('SELECT COUNT(*) FROM sb_user_objects WHERE user_id=? AND object_id IN ('.implode(',',array_fill(0,count($objectIds),'?')).')');$q->execute(array_merge([(int)$ctx['id']],$objectIds));if((int)$q->fetchColumn()!==count($objectIds))reply(403,['ok'=>false,'error'=>'Нельзя назначать задачи по чужим объектам.']);}
     $recipients=[]; $targets=[];
-    foreach($objectIds as $oid){$targets[$oid]=true;$q=$pdo->prepare('SELECT u.id FROM sb_users u JOIN sb_user_objects uo ON uo.user_id=u.id WHERE u.is_active=1 AND uo.object_id=?');$q->execute([$oid]);foreach($q->fetchAll(PDO::FETCH_COLUMN) as $uid)$recipients[(int)$uid]=true;}
+    foreach($objectIds as $oid){$targets[$oid]=true;$q=$pdo->prepare('SELECT u.id FROM sb_users u JOIN sb_user_objects uo ON uo.user_id=u.id WHERE u.is_active=1 AND uo.object_id=?');$q->execute([$oid]);foreach($q->fetchAll(PDO::FETCH_COLUMN) as $uid)if((int)$uid!==(int)$ctx['id'])$recipients[(int)$uid]=true;}
     if($assigneeIds){$assigneeSql='SELECT u.id,uo.object_id FROM sb_users u JOIN sb_user_objects uo ON uo.user_id=u.id JOIN sb_objects o ON o.id=uo.object_id AND o.is_active=1 WHERE u.is_active=1 AND u.id IN ('.implode(',',array_fill(0,count($assigneeIds),'?')).')';$assigneeParams=$assigneeIds;if($ctx['role']==='moderator'){$assigneeSql.=' AND EXISTS(SELECT 1 FROM sb_user_objects mine WHERE mine.user_id=? AND mine.object_id=uo.object_id)';$assigneeParams[]=(int)$ctx['id'];}$q=$pdo->prepare($assigneeSql);$q->execute($assigneeParams);$found=[];foreach($q->fetchAll() as $row){$uid=(int)$row['id'];$oid=(int)$row['object_id'];$found[$uid]=true;$targets[$oid]=true;}
         if(count($found)!==count($assigneeIds))reply(400,['ok'=>false,'error'=>'Выбранный сотрудник неактивен или не закреплён за объектом.']); foreach($assigneeIds as $uid)$recipients[$uid]=true;}
     $recipientIds=array_keys($recipients); $targetIds=array_keys($targets); sort($recipientIds); sort($targetIds);
