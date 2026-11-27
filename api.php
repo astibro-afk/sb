@@ -1061,6 +1061,8 @@ if ($action === 'task_update' && $method === 'POST') {
         if(!$isRecipient&&!$isManager)reply(403,['ok'=>false,'error'=>'Недостаточно прав для изменения статуса.']);
         if($isManager&&!in_array($status,['in_progress','done'],true))reply(400,['ok'=>false,'error'=>'Руководитель может вернуть задачу в работу или подтвердить выполнение.']);
         if(!in_array($status,['in_progress','review','done'],true))reply(400,['ok'=>false,'error'=>'Недопустимый статус.']);
+        if($status==='review'&&$task['status']!=='in_progress')reply(409,['ok'=>false,'error'=>'Отправить на проверку можно только задачу, которая находится в работе.']);
+        if($status==='in_progress'&&!$isManager&&$task['status']==='done')reply(409,['ok'=>false,'error'=>'Выполненную задачу может вернуть в работу только руководитель.']);
         if($status==='done'&&$task['status']!=='review')reply(409,['ok'=>false,'error'=>'Подтвердить можно только задачу на проверке.']);
         $up=$pdo->prepare('UPDATE sb_tasks SET status=:status WHERE id=:id');$up->execute([':status'=>$status,':id'=>$id]);
         audit_log($pdo,$ctx,'task_status_changed','task',$id,(string)$task['title'],['from'=>$task['status'],'to'=>$status]);
