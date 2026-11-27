@@ -1,2 +1,5 @@
 # Local server configuration containing credentials
 /config.local.php
+
+# Composer dependencies are built in CI and uploaded to hosting
+/vendor/

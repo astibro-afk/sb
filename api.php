@@ -164,7 +164,7 @@ function db(array $cfg): PDO {
         ]);
         // Инициализация схемы один раз на PHP-сессию, а не при каждом AJAX-запросе.
         // Версию можно повысить при добавлении новых миграций.
-        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-27-3') {
+        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-28-1') {
             $pdo->exec(
                 "CREATE TABLE IF NOT EXISTS sb_app_data (
                     data_key VARCHAR(100) NOT NULL PRIMARY KEY,
@@ -288,7 +288,55 @@ function db(array $cfg): PDO {
             ensure_user_objects($pdo);
             ensure_task_targets($pdo);
             ensure_task_archive_columns($pdo);
-            $_SESSION['sb_schema_version'] = '2026-11-27-3';
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_push_subscriptions (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                user_id INT UNSIGNED NOT NULL,
+                endpoint_hash CHAR(64) NOT NULL UNIQUE,
+                endpoint TEXT NOT NULL,
+                p256dh VARCHAR(255) NOT NULL,
+                auth VARCHAR(255) NOT NULL,
+                user_agent VARCHAR(255) NOT NULL DEFAULT '',
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                last_used_at DATETIME NULL DEFAULT NULL,
+                INDEX idx_push_user_active (user_id,is_active),
+                CONSTRAINT fk_push_subscription_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_push_vapid_keys (
+                id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+                public_key VARCHAR(100) NOT NULL,
+                private_key_pem TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_push_queue (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                notification_id BIGINT UNSIGNED NOT NULL,
+                user_id INT UNSIGNED NOT NULL,
+                status VARCHAR(16) NOT NULL DEFAULT 'pending',
+                attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+                next_attempt_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_error VARCHAR(255) NOT NULL DEFAULT '',
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                sent_at DATETIME NULL DEFAULT NULL,
+                INDEX idx_push_queue_due (status,next_attempt_at),
+                INDEX idx_push_queue_user (user_id,created_at),
+                CONSTRAINT fk_push_queue_notification FOREIGN KEY (notification_id) REFERENCES sb_notifications(id) ON DELETE CASCADE,
+                CONSTRAINT fk_push_queue_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_push_pairing_codes (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                user_id INT UNSIGNED NOT NULL,
+                created_by INT UNSIGNED NOT NULL,
+                code_hash CHAR(64) NOT NULL UNIQUE,
+                expires_at DATETIME NOT NULL,
+                claimed_at DATETIME NULL DEFAULT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_push_pair_user (user_id,claimed_at,expires_at),
+                CONSTRAINT fk_push_pair_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE,
+                CONSTRAINT fk_push_pair_creator FOREIGN KEY (created_by) REFERENCES sb_users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $_SESSION['sb_schema_version'] = '2026-11-28-1';
         }
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
@@ -354,6 +402,10 @@ function notification_add(PDO $pdo, int $userId, string $type, string $title, st
     try {
         $st = $pdo->prepare('INSERT INTO sb_notifications (user_id, type, title, message, link) VALUES (:uid, :type, :title, :message, :link)');
         $st->execute([':uid'=>$userId, ':type'=>mb_substr($type,0,48), ':title'=>mb_substr($title,0,180), ':message'=>$message, ':link'=>mb_substr($link,0,255)]);
+        $notificationId = (int)$pdo->lastInsertId();
+        // Transactional outbox: no network requests are made inside business transactions.
+        $queue = $pdo->prepare("INSERT INTO sb_push_queue (notification_id,user_id) SELECT :nid,:uid WHERE EXISTS (SELECT 1 FROM sb_push_subscriptions WHERE user_id=:sub_uid AND is_active=1)");
+        $queue->execute([':nid'=>$notificationId, ':uid'=>$userId, ':sub_uid'=>$userId]);
     } catch (Throwable $e) { error_log('SB notification error: '.$e->getMessage()); }
 }
 
@@ -391,6 +443,37 @@ function user_ctx(PDO $pdo, array $u): array {
         'object_ids' => $objectIds,
         'object_names' => $objectNames,
     ];
+}
+
+function push_base64url_encode(string $value): string {
+    return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
+}
+
+function push_vapid_public_key(PDO $pdo): string {
+    $row = $pdo->query('SELECT public_key FROM sb_push_vapid_keys WHERE id=1')->fetch();
+    if ($row && !empty($row['public_key'])) return (string)$row['public_key'];
+    if (!function_exists('openssl_pkey_new') || !function_exists('openssl_pkey_export')) {
+        reply(500, ['ok'=>false,'error'=>'На сервере недоступна генерация VAPID-ключей.']);
+    }
+    $key = openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_EC,'curve_name'=>'prime256v1']);
+    if ($key === false || !openssl_pkey_export($key,$privatePem)) {
+        reply(500, ['ok'=>false,'error'=>'Не удалось создать VAPID-ключи.']);
+    }
+    $details = openssl_pkey_get_details($key);
+    $ec = is_array($details) ? ($details['ec'] ?? []) : [];
+    if (empty($ec['x']) || empty($ec['y'])) {
+        reply(500, ['ok'=>false,'error'=>'Не удалось получить публичную часть VAPID-ключа.']);
+    }
+    $publicKey = push_base64url_encode("\x04".$ec['x'].$ec['y']);
+    try {
+        $st=$pdo->prepare('INSERT INTO sb_push_vapid_keys (id,public_key,private_key_pem) VALUES (1,:pub,:priv) ON DUPLICATE KEY UPDATE id=id');
+        $st->execute([':pub'=>$publicKey,':priv'=>$privatePem]);
+    } catch (Throwable $e) {
+        error_log('SB VAPID key storage error: '.$e->getMessage());
+        reply(500, ['ok'=>false,'error'=>'Не удалось сохранить VAPID-ключи.']);
+    }
+    $saved=$pdo->query('SELECT public_key FROM sb_push_vapid_keys WHERE id=1')->fetch();
+    return (string)($saved['public_key'] ?? $publicKey);
 }
 
 function current_user(PDO $pdo): ?array {
@@ -685,6 +768,21 @@ if (!$user) {
 }
 $ctx = user_ctx($pdo, $user);
 
+// Dispatch only after the API response and only when no business transaction is open.
+// On PHP-FPM this lets the client receive the response before outbound push requests run.
+require_once __DIR__ . '/push-dispatch.php';
+register_shutdown_function(static function () use ($pdo): void {
+    if ($pdo->inTransaction()) return;
+    if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
+    if (function_exists('fastcgi_finish_request')) {
+        @fastcgi_finish_request();
+    } else {
+        while (ob_get_level() > 0) { @ob_end_flush(); }
+        flush();
+    }
+    sb_push_dispatch_pending($pdo, 4);
+});
+
 if ($action === 'presence_ping' && $method === 'GET') {
     $st = $pdo->prepare('INSERT INTO sb_user_presence (user_id,last_seen) VALUES (:uid,NOW())
         ON DUPLICATE KEY UPDATE last_seen=NOW()');
@@ -880,6 +978,134 @@ if ($action === 'notifications_read' && $method === 'POST') {
         $st->execute([':uid'=>(int)$ctx['id']]);
     } else reply(400, ['ok'=>false, 'error'=>'Не выбрано уведомление.']);
     reply(200, ['ok'=>true]);
+}
+
+if ($action === 'push_config' && $method === 'GET') {
+    reply(200, ['ok'=>true,'public_key'=>push_vapid_public_key($pdo),'csrf'=>csrf_token()]);
+}
+
+if ($action === 'push_status' && $method === 'GET') {
+    $st=$pdo->prepare('SELECT id,user_agent,created_at,updated_at,last_used_at FROM sb_push_subscriptions WHERE user_id=:uid AND is_active=1 ORDER BY updated_at DESC');
+    $st->execute([':uid'=>(int)$ctx['id']]);
+    reply(200,['ok'=>true,'devices'=>$st->fetchAll(),'csrf'=>csrf_token()]);
+}
+
+if ($action === 'push_subscribe' && $method === 'POST') {
+    $body=input_json(); check_csrf($body);
+    $sub=is_array($body['subscription']??null)?$body['subscription']:[];
+    $endpoint=(string)($sub['endpoint']??'');
+    $keys=is_array($sub['keys']??null)?$sub['keys']:[];
+    $p256dh=(string)($keys['p256dh']??''); $auth=(string)($keys['auth']??'');
+    $parts=parse_url($endpoint);
+    $host=strtolower((string)($parts['host']??''));
+    $allowedHost=in_array($host,['fcm.googleapis.com','web.push.apple.com','push.services.mozilla.com','updates.push.services.mozilla.com'],true);
+    if (strlen($endpoint)>2048 || !$parts || ($parts['scheme']??'')!=='https' || !$allowedHost || isset($parts['user']) || isset($parts['pass']) || (isset($parts['port']) && (int)$parts['port']!==443) || isset($parts['fragment']) || strlen($p256dh)>255 || strlen($auth)>255 || !preg_match('/^[A-Za-z0-9_-]{80,100}$/',$p256dh) || !preg_match('/^[A-Za-z0-9_-]{16,32}$/',$auth)) {
+        reply(400,['ok'=>false,'error'=>'Некорректная push-подписка браузера.']);
+    }
+    $hash=hash('sha256',$endpoint);
+    $ua=mb_substr((string)($_SERVER['HTTP_USER_AGENT']??''),0,255);
+    $st=$pdo->prepare('INSERT INTO sb_push_subscriptions (user_id,endpoint_hash,endpoint,p256dh,auth,user_agent,is_active) VALUES (:uid,:hash,:endpoint,:p256dh,:auth,:ua,1) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id),endpoint=VALUES(endpoint),p256dh=VALUES(p256dh),auth=VALUES(auth),user_agent=VALUES(user_agent),is_active=1,updated_at=CURRENT_TIMESTAMP');
+    $st->execute([':uid'=>(int)$ctx['id'],':hash'=>$hash,':endpoint'=>$endpoint,':p256dh'=>$p256dh,':auth'=>$auth,':ua'=>$ua]);
+    audit_log($pdo,$user,'push_subscribe','push_device',null,'Подключено устройство для push-уведомлений');
+    reply(200,['ok'=>true]);
+}
+
+if ($action === 'push_unsubscribe' && $method === 'POST') {
+    $body=input_json(); check_csrf($body);
+    $hash=(string)($body['endpoint_hash']??'');
+    if (!preg_match('/^[a-f0-9]{64}$/',$hash)) reply(400,['ok'=>false,'error'=>'Не выбрано устройство.']);
+    $st=$pdo->prepare('UPDATE sb_push_subscriptions SET is_active=0,updated_at=CURRENT_TIMESTAMP WHERE endpoint_hash=:hash AND user_id=:uid');
+    $st->execute([':hash'=>$hash,':uid'=>(int)$ctx['id']]);
+    reply(200,['ok'=>true]);
+}
+
+if ($action === 'push_devices_data' && $method === 'GET') {
+    if ($ctx['role']!=='admin') reply(403,['ok'=>false,'error'=>'Управлять устройствами может только администратор.']);
+    $rows=$pdo->query("SELECT s.id,s.user_id,u.full_name,u.username,s.user_agent,s.created_at,s.updated_at,s.last_used_at
+        FROM sb_push_subscriptions s JOIN sb_users u ON u.id=s.user_id
+        WHERE s.is_active=1 ORDER BY u.full_name,s.updated_at DESC")->fetchAll();
+    reply(200,['ok'=>true,'devices'=>$rows,'csrf'=>csrf_token()]);
+}
+
+if ($action === 'push_device_revoke' && $method === 'POST') {
+    $body=input_json(); check_csrf($body);
+    if ($ctx['role']!=='admin') reply(403,['ok'=>false,'error'=>'Отзывать устройства может только администратор.']);
+    $id=(int)($body['id']??0);
+    if($id<1) reply(400,['ok'=>false,'error'=>'Не выбрано устройство.']);
+    $st=$pdo->prepare('UPDATE sb_push_subscriptions SET is_active=0,updated_at=CURRENT_TIMESTAMP WHERE id=:id AND is_active=1');
+    $st->execute([':id'=>$id]);
+    audit_log($pdo,$user,'push_device_revoke','push_device',$id,'Администратор отключил push-устройство');
+    reply(200,['ok'=>true]);
+}
+
+if ($action === 'push_employees_data' && $method === 'GET') {
+    if ($ctx['role'] !== 'admin') reply(403,['ok'=>false,'error'=>'Только администратор может создавать ссылки подключения.']);
+    $rows=$pdo->query("SELECT id,full_name,username FROM sb_users WHERE is_active=1 ORDER BY full_name,username")->fetchAll();
+    reply(200,['ok'=>true,'employees'=>$rows]);
+}
+
+if ($action === 'push_pair_create' && $method === 'POST') {
+    $body=input_json(); check_csrf($body);
+    if ($ctx['role'] !== 'admin') reply(403,['ok'=>false,'error'=>'Только администратор может создавать ссылки подключения.']);
+    $targetId=(int)($body['user_id']??0);
+    if ($targetId<1) reply(400,['ok'=>false,'error'=>'Выберите сотрудника.']);
+    $targetSt=$pdo->prepare('SELECT id,full_name,username FROM sb_users WHERE id=:id AND is_active=1');
+    $targetSt->execute([':id'=>$targetId]); $target=$targetSt->fetch();
+    if(!$target) reply(404,['ok'=>false,'error'=>'Активный сотрудник не найден.']);
+    $token=bin2hex(random_bytes(32));
+    $pdo->exec("DELETE FROM sb_push_pairing_codes WHERE expires_at<DATE_SUB(NOW(),INTERVAL 7 DAY) OR claimed_at<DATE_SUB(NOW(),INTERVAL 7 DAY)");
+    $pdo->prepare('UPDATE sb_push_pairing_codes SET expires_at=NOW() WHERE user_id=:uid AND claimed_at IS NULL AND expires_at>NOW()')->execute([':uid'=>$targetId]);
+    $save=$pdo->prepare('INSERT INTO sb_push_pairing_codes(user_id,created_by,code_hash,expires_at) VALUES(:uid,:creator,:hash,DATE_ADD(NOW(),INTERVAL 15 MINUTE))');
+    $save->execute([':uid'=>$targetId,':creator'=>(int)$ctx['id'],':hash'=>hash('sha256',$token)]);
+    audit_log($pdo,$user,'push_pair_code_created','push_pairing',(int)$pdo->lastInsertId(),(string)$target['full_name']);
+    reply(200,['ok'=>true,'url'=>'https://sbmagnit.rf.gd/push.php?pair='.$token,'employee'=>$target['full_name'],'expires_in_minutes'=>15]);
+}
+
+if ($action === 'push_pair_info' && $method === 'GET') {
+    $token=(string)($_GET['token']??'');
+    if(!preg_match('/^[a-f0-9]{64}$/',$token)) reply(400,['ok'=>false,'error'=>'Некорректная ссылка подключения.']);
+    $st=$pdo->prepare("SELECT c.user_id,u.full_name,c.expires_at FROM sb_push_pairing_codes c JOIN sb_users u ON u.id=c.user_id WHERE c.code_hash=:hash AND c.claimed_at IS NULL AND c.expires_at>NOW() AND u.is_active=1 LIMIT 1");
+    $st->execute([':hash'=>hash('sha256',$token)]); $pair=$st->fetch();
+    if(!$pair) reply(410,['ok'=>false,'error'=>'Ссылка подключения недействительна или срок её действия истёк. Попросите администратора создать новую.']);
+    if((int)$pair['user_id']!==(int)$ctx['id']) reply(403,['ok'=>false,'error'=>'Эта ссылка создана для другой учётной записи. Войдите под своей учётной записью.']);
+    reply(200,['ok'=>true,'employee'=>$pair['full_name'],'expires_at'=>$pair['expires_at']]);
+}
+
+if ($action === 'push_pair_claim' && $method === 'POST') {
+    $body=input_json(); check_csrf($body);
+    $token=(string)($body['token']??'');
+    if(!preg_match('/^[a-f0-9]{64}$/',$token)) reply(400,['ok'=>false,'error'=>'Некорректная ссылка подключения.']);
+    $sub=is_array($body['subscription']??null)?$body['subscription']:[];
+    $endpoint=(string)($sub['endpoint']??'');
+    $keys=is_array($sub['keys']??null)?$sub['keys']:[];
+    $p256dh=(string)($keys['p256dh']??''); $auth=(string)($keys['auth']??'');
+    $parts=parse_url($endpoint);
+    $host=strtolower((string)($parts['host']??''));
+    $allowedHost=in_array($host,['fcm.googleapis.com','web.push.apple.com','push.services.mozilla.com','updates.push.services.mozilla.com'],true);
+    if(strlen($endpoint)>2048||!$parts||($parts['scheme']??'')!=='https'||!$allowedHost||isset($parts['user'])||isset($parts['pass'])||(isset($parts['port'])&&(int)$parts['port']!==443)||isset($parts['fragment'])||strlen($p256dh)>255||strlen($auth)>255||!preg_match('/^[A-Za-z0-9_-]{80,100}$/',$p256dh)||!preg_match('/^[A-Za-z0-9_-]{16,32}$/',$auth)){
+        reply(400,['ok'=>false,'error'=>'Некорректная push-подписка браузера.']);
+    }
+    try {
+        $pdo->beginTransaction();
+        $st=$pdo->prepare("SELECT id,user_id FROM sb_push_pairing_codes WHERE code_hash=:hash AND claimed_at IS NULL AND expires_at>NOW() LIMIT 1 FOR UPDATE");
+        $st->execute([':hash'=>hash('sha256',$token)]); $pair=$st->fetch();
+        if(!$pair){$pdo->rollBack();reply(410,['ok'=>false,'error'=>'Ссылка уже использована или срок её действия истёк.']);}
+        if((int)$pair['user_id']!==(int)$ctx['id']){$pdo->rollBack();reply(403,['ok'=>false,'error'=>'Ссылка создана для другой учётной записи.']);}
+        $hash=hash('sha256',$endpoint);
+        $ua=mb_substr((string)($_SERVER['HTTP_USER_AGENT']??''),0,255);
+        $save=$pdo->prepare('INSERT INTO sb_push_subscriptions (user_id,endpoint_hash,endpoint,p256dh,auth,user_agent,is_active) VALUES (:uid,:hash,:endpoint,:p256dh,:auth,:ua,1) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id),endpoint=VALUES(endpoint),p256dh=VALUES(p256dh),auth=VALUES(auth),user_agent=VALUES(user_agent),is_active=1,updated_at=CURRENT_TIMESTAMP');
+        $save->execute([':uid'=>(int)$ctx['id'],':hash'=>$hash,':endpoint'=>$endpoint,':p256dh'=>$p256dh,':auth'=>$auth,':ua'=>$ua]);
+        $claim=$pdo->prepare('UPDATE sb_push_pairing_codes SET claimed_at=NOW() WHERE id=:id AND claimed_at IS NULL');
+        $claim->execute([':id'=>(int)$pair['id']]);
+        if($claim->rowCount()!==1) throw new RuntimeException('Pairing code has already been claimed.');
+        $pdo->commit();
+        audit_log($pdo,$user,'push_pair_claimed','push_device',null,'Устройство подключено по одноразовой ссылке');
+    } catch(Throwable $e) {
+        if($pdo->inTransaction())$pdo->rollBack();
+        error_log('SB push pairing error: '.$e->getMessage());
+        reply(500,['ok'=>false,'error'=>'Не удалось подключить устройство. Создайте новую ссылку и попробуйте снова.']);
+    }
+    reply(200,['ok'=>true]);
 }
 
 if ($action === 'tasks_data' && $method === 'GET') {
