@@ -14,9 +14,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup PHP and Composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: curl, mbstring, openssl, json
+          tools: composer:v2
+
+      - name: Install production dependencies
+        run: composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+
       - name: Check PHP syntax
         run: |
-          find . -type f -name '*.php' -not -path './.git/*' -print0 | xargs -0 -r -n1 php -l
+          find . -type f -name '*.php' -not -path './.git/*' -not -path './vendor/*' -print0 | xargs -0 -r -n1 php -l
 
       - name: Upload site to InfinityFree
         if: github.event_name != 'pull_request'
