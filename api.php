@@ -999,7 +999,7 @@ if ($action === 'push_subscribe' && $method === 'POST') {
     $parts=parse_url($endpoint);
     $host=strtolower((string)($parts['host']??''));
     $allowedHost=in_array($host,['fcm.googleapis.com','web.push.apple.com','push.services.mozilla.com','updates.push.services.mozilla.com'],true);
-    if (strlen($endpoint)>2048 || !$parts || ($parts['scheme']??'')!=='https' || !$allowedHost || strlen($p256dh)>255 || strlen($auth)>255 || !preg_match('/^[A-Za-z0-9_-]{80,100}$/',$p256dh) || !preg_match('/^[A-Za-z0-9_-]{16,32}$/',$auth)) {
+    if (strlen($endpoint)>2048 || !$parts || ($parts['scheme']??'')!=='https' || !$allowedHost || isset($parts['user']) || isset($parts['pass']) || (isset($parts['port']) && (int)$parts['port']!==443) || isset($parts['fragment']) || strlen($p256dh)>255 || strlen($auth)>255 || !preg_match('/^[A-Za-z0-9_-]{80,100}$/',$p256dh) || !preg_match('/^[A-Za-z0-9_-]{16,32}$/',$auth)) {
         reply(400,['ok'=>false,'error'=>'Некорректная push-подписка браузера.']);
     }
     $hash=hash('sha256',$endpoint);
@@ -1082,7 +1082,7 @@ if ($action === 'push_pair_claim' && $method === 'POST') {
     $parts=parse_url($endpoint);
     $host=strtolower((string)($parts['host']??''));
     $allowedHost=in_array($host,['fcm.googleapis.com','web.push.apple.com','push.services.mozilla.com','updates.push.services.mozilla.com'],true);
-    if(strlen($endpoint)>2048||!$parts||($parts['scheme']??'')!=='https'||!$allowedHost||strlen($p256dh)>255||strlen($auth)>255||!preg_match('/^[A-Za-z0-9_-]{80,100}$/',$p256dh)||!preg_match('/^[A-Za-z0-9_-]{16,32}$/',$auth)){
+    if(strlen($endpoint)>2048||!$parts||($parts['scheme']??'')!=='https'||!$allowedHost||isset($parts['user'])||isset($parts['pass'])||(isset($parts['port'])&&(int)$parts['port']!==443)||isset($parts['fragment'])||strlen($p256dh)>255||strlen($auth)>255||!preg_match('/^[A-Za-z0-9_-]{80,100}$/',$p256dh)||!preg_match('/^[A-Za-z0-9_-]{16,32}$/',$auth)){
         reply(400,['ok'=>false,'error'=>'Некорректная push-подписка браузера.']);
     }
     try {
