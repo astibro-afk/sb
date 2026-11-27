@@ -23,8 +23,8 @@ if(empty($_SESSION['sb_user_id'])){header('Location: index.html');exit;}
 <div id="error" class="error hidden" role="alert"></div>
 <section id="createPanel" class="form-panel hidden"><h2>Поставить новую задачу</h2><form class="form" id="createForm">
 <div class="field wide"><label for="title">Название задачи *</label><input id="title" maxlength="180" required placeholder="Например: Проверить соблюдение кассовой дисциплины"></div>
-<div class="field"><label for="object">Объекты (все активные сотрудники этих объектов)</label><select id="object" multiple size="4" aria-label="Выберите один или несколько объектов"></select></div>
-<div class="field"><label for="assignee">Дополнительные сотрудники</label><select id="assignee" multiple size="4" aria-label="Выберите одного или нескольких сотрудников"></select></div>
+<div class="field"><label for="object">Объекты (все активные сотрудники, кроме вас)</label><select id="object" multiple size="4" aria-label="Выберите один или несколько объектов"></select></div>
+<div class="field"><label for="assignee">Дополнительные сотрудники (себя выбрать нельзя)</label><select id="assignee" multiple size="4" aria-label="Выберите одного или нескольких сотрудников"></select></div>
 <div class="field"><label for="priority">Приоритет</label><select id="priority"><option value="normal">Обычный</option><option value="high">Высокий</option><option value="low">Низкий</option></select></div>
 <div class="field"><label for="due">Срок выполнения</label><input id="due" type="date"></div>
 <div class="field full"><label for="description">Описание и ожидаемый результат</label><textarea id="description" maxlength="5000" placeholder="Опишите задачу, ожидаемый результат и важные детали"></textarea></div>
@@ -49,7 +49,7 @@ function showError(message){$('error').textContent=message;$('error').classList.
 function clearError(){$('error').textContent='';$('error').classList.add('hidden');}
 function date(v){if(!v)return 'Без срока';const d=new Date(v+'T00:00:00');return isNaN(d)?v:d.toLocaleDateString('ru-RU',{day:'2-digit',month:'long',year:'numeric'});}
 function time(v){if(!v)return '';const d=new Date(String(v).replace(' ','T'));return isNaN(d)?v:d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
-function fillAssignees(){const sel=$('assignee');sel.replaceChildren();state.assignees.forEach(u=>sel.add(new Option(u.full_name+' · '+(u.role==='moderator'?'модератор':'сотрудник'),u.id)));}
+function fillAssignees(){const sel=$('assignee');sel.replaceChildren();state.assignees.filter(u=>!state.user||Number(u.id)!==Number(state.user.id)).forEach(u=>sel.add(new Option(u.full_name+' · '+(u.role==='moderator'?'модератор':'сотрудник'),u.id)));}
 function stats(){const s=state.stats||{};$('total').textContent=Number(s.total||0);$('active').textContent=Number(s.active||0);$('reviewCount').textContent=Number(s.review||0);$('overdue').textContent=Number(s.overdue||0);}
 function renderPagination(){const p=state.pagination||{page:1,total_pages:1,total:0};const wrap=$('pagination');wrap.hidden=Number(p.total_pages)<=1;$('prevPage').disabled=Number(p.page)<=1;$('nextPage').disabled=Number(p.page)>=Number(p.total_pages);$('pageInfo').textContent='Страница '+p.page+' из '+p.total_pages+' · задач: '+p.total;}
 function render(){
