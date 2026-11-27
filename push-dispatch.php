@@ -180,7 +180,7 @@ function sb_push_dispatch_pending(PDO $pdo, int $limit = 4): void {
             $sentAt = null;
             $nextAt = date('Y-m-d H:i:s');
             $error = '';
-            if ($outcome['success']) {
+            if ($outcome['success'] && !$outcome['active_failure']) {
                 $status = 'sent';
                 $sentAt = date('Y-m-d H:i:s');
             } elseif (!$outcome['has_subscriptions'] || (!$outcome['active_failure'] && !empty($outcome['expired']))) {
