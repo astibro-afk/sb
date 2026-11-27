@@ -1004,97 +1004,71 @@ if ($action === 'tasks_data' && $method === 'GET') {
     ]);
 }
 if ($action === 'task_comments' && $method === 'GET') {
-    $taskId=(int)($_GET['id']??0);
-    if($taskId<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
-    $taskSt=$pdo->prepare("SELECT t.id,t.object_id,t.assignee_id,
-        EXISTS(SELECT 1 FROM sb_user_objects uo
-            WHERE uo.user_id=:viewer_id AND uo.object_id=t.object_id) AS viewer_has_object
-        FROM sb_tasks t JOIN sb_objects o ON o.id=t.object_id
-        WHERE t.id=:id AND o.is_active=1 LIMIT 1");
-    $taskSt->execute([':id'=>$taskId,':viewer_id'=>(int)$ctx['id']]);$task=$taskSt->fetch();
+    $taskId=(int)($_GET['id']??0); if($taskId<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
+    $st=$pdo->prepare("SELECT t.id, EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:uid) AS recipient, EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:mid) AS object_access FROM sb_tasks t WHERE t.id=:id LIMIT 1");
+    $st->execute([':uid'=>(int)$ctx['id'],':mid'=>(int)$ctx['id'],':id'=>$taskId]); $task=$st->fetch();
     if(!$task) reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
-    $canSee=$ctx['role']==='admin'
-        || (($ctx['role']==='moderator'||$ctx['role']==='user') && (int)$task['viewer_has_object']===1
-            && ($ctx['role']!=='user'||(int)$task['assignee_id']===(int)$ctx['id']));
-    if(!$canSee) reply(403,['ok'=>false,'error'=>'Нет доступа к комментариям этой задачи.']);
-    $commentsSt=$pdo->prepare('SELECT user_name,comment,created_at FROM sb_task_comments WHERE task_id=:id ORDER BY id ASC');
-    $commentsSt->execute([':id'=>$taskId]);
-    reply(200,['ok'=>true,'comments'=>$commentsSt->fetchAll()]);
+    $allowed=$ctx['role']==='admin'||($ctx['role']==='user'&&(int)$task['recipient']===1)||($ctx['role']==='moderator'&&(int)$task['object_access']===1);
+    if(!$allowed) reply(403,['ok'=>false,'error'=>'Нет доступа к комментариям этой задачи.']);
+    $cs=$pdo->prepare('SELECT user_name,comment,created_at FROM sb_task_comments WHERE task_id=:id ORDER BY id ASC'); $cs->execute([':id'=>$taskId]);
+    reply(200,['ok'=>true,'comments'=>$cs->fetchAll()]);
 }
 if ($action === 'task_create' && $method === 'POST') {
     if(!in_array($ctx['role'],['admin','moderator'],true)) reply(403,['ok'=>false,'error'=>'Создавать задачи могут только руководитель и модератор.']);
-    $body=input_json();check_csrf($body);
-    $objectId=(int)($body['object_id']??0);$assigneeId=(int)($body['assignee_id']??0);
-    $title=trim((string)($body['title']??''));$description=trim((string)($body['description']??''));
-    $priority=(string)($body['priority']??'normal');$due=(string)($body['due_date']??'');
+    $body=input_json(); check_csrf($body);
+    $objectIds=array_values(array_unique(array_filter(array_map('intval',is_array($body['object_ids']??null)?$body['object_ids']:[]),function($v){return $v>0;})));
+    $assigneeIds=array_values(array_unique(array_filter(array_map('intval',is_array($body['assignee_ids']??null)?$body['assignee_ids']:[]),function($v){return $v>0;})));
+    $title=trim((string)($body['title']??'')); $description=trim((string)($body['description']??'')); $priority=(string)($body['priority']??'normal'); $due=(string)($body['due_date']??'');
     if($title===''||mb_strlen($title)>180||mb_strlen($description)>5000) reply(400,['ok'=>false,'error'=>'Укажите название задачи (до 180 символов); описание — до 5000 символов.']);
     if(!in_array($priority,['low','normal','high'],true)) reply(400,['ok'=>false,'error'=>'Некорректный приоритет.']);
     if($due!==''&&!preg_match('/^\\d{4}-\\d{2}-\\d{2}$/',$due)) reply(400,['ok'=>false,'error'=>'Некорректный срок выполнения.']);
-    // Одним запросом проверяем объект, доступ модератора и назначение исполнителя.
-    $obj=$pdo->prepare("SELECT o.id,o.name,
-        EXISTS(SELECT 1 FROM sb_user_objects own
-            WHERE own.user_id=:creator_id AND own.object_id=o.id) AS creator_has_object,
-        EXISTS(SELECT 1 FROM sb_users u
-            JOIN sb_user_objects assignee_link ON assignee_link.user_id=u.id
-            WHERE u.id=:assignee_id AND u.is_active=1 AND assignee_link.object_id=o.id) AS assignee_valid
-        FROM sb_objects o WHERE o.id=:object_id AND o.is_active=1 LIMIT 1");
-    $obj->execute([':creator_id'=>(int)$ctx['id'],':assignee_id'=>$assigneeId,':object_id'=>$objectId]);
-    $object=$obj->fetch();
-    if(!$object) reply(400,['ok'=>false,'error'=>'Выберите действующий объект.']);
-    if($ctx['role']==='moderator'&&(int)$object['creator_has_object']!==1) {
-        reply(403,['ok'=>false,'error'=>'Нельзя ставить задачи по объектам, которые вам не назначены.']);
-    }
-    if((int)$object['assignee_valid']!==1) {
-        reply(400,['ok'=>false,'error'=>'Исполнитель должен быть активным сотрудником, назначенным на выбранный объект.']);
-    }
-    $ins=$pdo->prepare('INSERT INTO sb_tasks(object_id,title,description,priority,status,assignee_id,created_by,due_date) VALUES(:oid,:title,:description,:priority,\'new\',:assignee,:creator,:due)');
-    $ins->execute([':oid'=>$objectId,':title'=>$title,':description'=>$description,':priority'=>$priority,':assignee'=>$assigneeId,':creator'=>(int)$ctx['id'],':due'=>$due!==''?$due:null]);
-    $id=(int)$pdo->lastInsertId();
-    notification_add($pdo,$assigneeId,'task','Новая задача','Вам назначена задача «'.$title.'» по объекту «'.$object['name'].'».','tasks.php');
-    audit_log($pdo,$ctx,'task_created','task',$id,$title,['object'=>$object['name'],'assignee_id'=>$assigneeId]);
-    reply(200,['ok'=>true,'id'=>$id]);
+    if(!$objectIds&&!$assigneeIds) reply(400,['ok'=>false,'error'=>'Выберите сотрудников или объекты.']);
+    $allObjects=$pdo->query('SELECT id,name FROM sb_objects WHERE is_active=1')->fetchAll(); $names=[]; foreach($allObjects as $o)$names[(int)$o['id']]=$o['name'];
+    foreach($objectIds as $oid) if(!isset($names[$oid])) reply(400,['ok'=>false,'error'=>'Выбран недействующий объект.']);
+    if($ctx['role']==='moderator'&&$objectIds){$q=$pdo->prepare('SELECT COUNT(*) FROM sb_user_objects WHERE user_id=? AND object_id IN ('.implode(',',array_fill(0,count($objectIds),'?')).')');$q->execute(array_merge([(int)$ctx['id']],$objectIds));if((int)$q->fetchColumn()!==count($objectIds))reply(403,['ok'=>false,'error'=>'Нельзя назначать задачи по чужим объектам.']);}
+    $recipients=[]; $targets=[];
+    foreach($objectIds as $oid){$targets[$oid]=true;$q=$pdo->prepare('SELECT u.id FROM sb_users u JOIN sb_user_objects uo ON uo.user_id=u.id WHERE u.is_active=1 AND uo.object_id=?');$q->execute([$oid]);foreach($q->fetchAll(PDO::FETCH_COLUMN) as $uid)$recipients[(int)$uid]=true;}
+    if($assigneeIds){$q=$pdo->prepare('SELECT u.id,uo.object_id FROM sb_users u JOIN sb_user_objects uo ON uo.user_id=u.id JOIN sb_objects o ON o.id=uo.object_id AND o.is_active=1 WHERE u.is_active=1 AND u.id IN ('.implode(',',array_fill(0,count($assigneeIds),'?')).')');$q->execute($assigneeIds);$found=[];foreach($q->fetchAll() as $row){$uid=(int)$row['id'];$oid=(int)$row['object_id'];$found[$uid]=true;$targets[$oid]=true;if($ctx['role']==='moderator'){$chk=$pdo->prepare('SELECT 1 FROM sb_user_objects WHERE user_id=? AND object_id=?');$chk->execute([(int)$ctx['id'],$oid]);if(!$chk->fetchColumn())reply(403,['ok'=>false,'error'=>'Нельзя назначить сотрудника вне ваших объектов.']);}}
+        if(count($found)!==count($assigneeIds))reply(400,['ok'=>false,'error'=>'Выбранный сотрудник неактивен или не закреплён за объектом.']); foreach($assigneeIds as $uid)$recipients[$uid]=true;}
+    $recipientIds=array_keys($recipients); $targetIds=array_keys($targets); sort($recipientIds); sort($targetIds);
+    if(!$recipientIds||!$targetIds) reply(400,['ok'=>false,'error'=>'На выбранных объектах нет активных сотрудников.']);
+    $pdo->beginTransaction();
+    try {
+        $ins=$pdo->prepare("INSERT INTO sb_tasks(object_id,title,description,priority,status,assignee_id,created_by,due_date) VALUES(?,?,?,?,'new',?,?,?)");
+        $ins->execute([$targetIds[0],$title,$description,$priority,$recipientIds[0],(int)$ctx['id'],$due!==''?$due:null]); $id=(int)$pdo->lastInsertId();
+        $la=$pdo->prepare('INSERT INTO sb_task_assignees(task_id,user_id) VALUES(?,?)'); foreach($recipientIds as $uid)$la->execute([$id,$uid]);
+        $lo=$pdo->prepare('INSERT INTO sb_task_objects(task_id,object_id) VALUES(?,?)'); foreach($targetIds as $oid)$lo->execute([$id,$oid]);
+        $objectNames=array_map(function($oid)use($names){return $names[$oid]??'';},$targetIds);
+        foreach($recipientIds as $uid) notification_add($pdo,$uid,'task','Новая задача','Вам назначена задача «'.$title.'» по объектам: '.implode(', ',$objectNames).'.','tasks.php');
+        $pdo->commit();
+    } catch(Throwable $e) { if($pdo->inTransaction())$pdo->rollBack(); error_log('SB task create error: '.$e->getMessage()); reply(500,['ok'=>false,'error'=>'Не удалось создать задачу.']); }
+    audit_log($pdo,$ctx,'task_created','task',$id,$title,['object_ids'=>$targetIds,'assignee_ids'=>$recipientIds]); reply(200,['ok'=>true,'id'=>$id]);
 }
 if ($action === 'task_update' && $method === 'POST') {
-    $body=input_json();check_csrf($body);$id=(int)($body['id']??0);
-    $st=$pdo->prepare("SELECT t.*,
-        EXISTS(SELECT 1 FROM sb_user_objects uo
-            WHERE uo.user_id=:viewer_id AND uo.object_id=t.object_id) AS viewer_has_object
-        FROM sb_tasks t WHERE t.id=:id LIMIT 1");
-    $st->execute([':id'=>$id,':viewer_id'=>(int)$ctx['id']]);$task=$st->fetch();
-    if(!$task) reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
-    $canSee=$ctx['role']==='admin'
-        || (($ctx['role']==='moderator'||$ctx['role']==='user') && (int)$task['viewer_has_object']===1
-            && ($ctx['role']!=='user'||(int)$task['assignee_id']===(int)$ctx['id']));
-    if(!$canSee) reply(403,['ok'=>false,'error'=>'Нет доступа к этой задаче.']);
+    $body=input_json(); check_csrf($body); $id=(int)($body['id']??0);
+    $st=$pdo->prepare("SELECT t.*, EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:uid) AS is_recipient, EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:mid) AS has_object FROM sb_tasks t WHERE t.id=:id LIMIT 1");
+    $st->execute([':uid'=>(int)$ctx['id'],':mid'=>(int)$ctx['id'],':id'=>$id]); $task=$st->fetch(); if(!$task)reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
+    $isRecipient=(int)$task['is_recipient']===1; $isManager=$ctx['role']==='admin'||($ctx['role']==='moderator'&&(int)$task['created_by']===(int)$ctx['id']);
+    $canSee=$ctx['role']==='admin'||($ctx['role']==='user'&&$isRecipient)||($ctx['role']==='moderator'&&(int)$task['has_object']===1); if(!$canSee)reply(403,['ok'=>false,'error'=>'Нет доступа к этой задаче.']);
     $status=(string)($body['status']??'');
     if($status!==''){
-        $isAssignee=(int)$task['assignee_id']===(int)$ctx['id'];
-        $isManager=$ctx['role']==='admin'||($ctx['role']==='moderator'&&(int)$task['created_by']===(int)$ctx['id']);
-        if($isAssignee&&!$isManager&&!in_array($status,['in_progress','review'],true)) reply(403,['ok'=>false,'error'=>'Исполнитель может перевести задачу в работу или на проверку.']);
-        if(!$isAssignee&&!$isManager) reply(403,['ok'=>false,'error'=>'Недостаточно прав для изменения статуса.']);
-        if($isManager&&!in_array($status,['in_progress','done'],true)) reply(400,['ok'=>false,'error'=>'Недопустимый статус.']);
-        if(!in_array($status,['in_progress','review','done'],true)) reply(400,['ok'=>false,'error'=>'Недопустимый статус.']);
+        if($isRecipient&&!$isManager&&!in_array($status,['in_progress','review'],true))reply(403,['ok'=>false,'error'=>'Исполнитель может перевести задачу в работу или на проверку.']);
+        if(!$isRecipient&&!$isManager)reply(403,['ok'=>false,'error'=>'Недостаточно прав для изменения статуса.']);
+        if($isManager&&!in_array($status,['in_progress','done'],true))reply(400,['ok'=>false,'error'=>'Руководитель может вернуть задачу в работу или подтвердить выполнение.']);
+        if(!in_array($status,['in_progress','review','done'],true))reply(400,['ok'=>false,'error'=>'Недопустимый статус.']);
+        if($status==='done'&&$task['status']!=='review')reply(409,['ok'=>false,'error'=>'Подтвердить можно только задачу на проверке.']);
         $up=$pdo->prepare('UPDATE sb_tasks SET status=:status WHERE id=:id');$up->execute([':status'=>$status,':id'=>$id]);
         audit_log($pdo,$ctx,'task_status_changed','task',$id,(string)$task['title'],['from'=>$task['status'],'to'=>$status]);
-        if($status==='review'&&(int)$task['created_by']!==(int)$ctx['id']){
-            notification_add($pdo,(int)$task['created_by'],'task','Задача ожидает проверки','Сотрудник отметил задачу «'.$task['title'].'» как выполненную.','tasks.php');
-        }
-        if($status==='done'&&(int)$task['assignee_id']!==(int)$ctx['id']){
-            notification_add($pdo,(int)$task['assignee_id'],'task','Задача принята','Задача «'.$task['title'].'» отмечена выполненной.','tasks.php');
-        }
+        if($status==='review'&&(int)$task['created_by']!==(int)$ctx['id'])notification_add($pdo,(int)$task['created_by'],'task','Задача ожидает проверки','Сотрудник отправил задачу «'.$task['title'].'» на проверку.','tasks.php');
+        if($status==='done'){$q=$pdo->prepare('SELECT user_id FROM sb_task_assignees WHERE task_id=?');$q->execute([$id]);foreach($q->fetchAll(PDO::FETCH_COLUMN) as $uid)if((int)$uid!==(int)$ctx['id'])notification_add($pdo,(int)$uid,'task','Задача принята','Руководитель подтвердил выполнение задачи «'.$task['title'].'».','tasks.php');}
     }
-    $comment=trim((string)($body['comment']??''));
-    if($comment!==''){
-        if(mb_strlen($comment)>3000) reply(400,['ok'=>false,'error'=>'Комментарий не должен превышать 3000 символов.']);
-        $ins=$pdo->prepare('INSERT INTO sb_task_comments(task_id,user_id,user_name,comment) VALUES(:tid,:uid,:name,:comment)');
-        $ins->execute([':tid'=>$id,':uid'=>(int)$ctx['id'],':name'=>(string)$ctx['full_name'],':comment'=>$comment]);
-        $otherId=(int)$task['assignee_id']===(int)$ctx['id']?(int)$task['created_by']:(int)$task['assignee_id'];
-        if($otherId>0&&$otherId!==(int)$ctx['id']) notification_add($pdo,$otherId,'task','Комментарий к задаче','Новый комментарий к задаче «'.$task['title'].'».','tasks.php');
+    $comment=trim((string)($body['comment']??'')); if($comment!==''){if(mb_strlen($comment)>3000)reply(400,['ok'=>false,'error'=>'Комментарий не должен превышать 3000 символов.']);
+        $ins=$pdo->prepare('INSERT INTO sb_task_comments(task_id,user_id,user_name,comment) VALUES(?,?,?,?)');$ins->execute([$id,(int)$ctx['id'],(string)$ctx['full_name'],$comment]);
+        $q=$pdo->prepare('SELECT user_id FROM sb_task_assignees WHERE task_id=? UNION SELECT created_by FROM sb_tasks WHERE id=?');$q->execute([$id,$id]);foreach($q->fetchAll(PDO::FETCH_COLUMN) as $uid)if((int)$uid!==(int)$ctx['id'])notification_add($pdo,(int)$uid,'task','Комментарий к задаче','Новый комментарий к задаче «'.$task['title'].'».','tasks.php');
         audit_log($pdo,$ctx,'task_comment_added','task',$id,(string)$task['title']);
     }
     reply(200,['ok'=>true]);
 }
-
 if ($action === 'employees_data' && $method === 'GET') {
     $targetId = (int)($_GET['user_id'] ?? 0);
     $sql = "SELECT u.id,u.username,u.full_name,u.role,u.is_active,u.created_at,
