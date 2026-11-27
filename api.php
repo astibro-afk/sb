@@ -846,60 +846,139 @@ if ($action === 'notifications_read' && $method === 'POST') {
 }
 
 if ($action === 'tasks_data' && $method === 'GET') {
-    $sql = "SELECT t.id,t.object_id,o.name AS object_name,t.title,t.description,t.priority,t.status,
-        t.assignee_id,au.full_name AS assignee_name,t.created_by,cu.full_name AS creator_name,
-        t.due_date,t.created_at,t.updated_at
-        FROM sb_tasks t JOIN sb_objects o ON o.id=t.object_id
-        JOIN sb_users au ON au.id=t.assignee_id JOIN sb_users cu ON cu.id=t.created_by
-        WHERE o.is_active=1";
-    $params = [];
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $perPage = 50;
+    $search = trim((string)($_GET['search'] ?? ''));
+    if (mb_strlen($search) > 120) $search = mb_substr($search, 0, 120);
+    $statusFilter = (string)($_GET['status'] ?? '');
+    if (!in_array($statusFilter, ['', 'new', 'in_progress', 'review', 'done'], true)) {
+        reply(400, ['ok'=>false, 'error'=>'Некорректный фильтр статуса.']);
+    }
+    $objectFilter = max(0, (int)($_GET['object_id'] ?? 0));
+
+    $baseWhere = ['o.is_active=1'];
+    $baseParams = [];
     if ($ctx['role'] === 'user') {
-        $sql .= " AND t.assignee_id=:uid AND EXISTS(SELECT 1 FROM sb_user_objects mine WHERE mine.user_id=:uid_object AND mine.object_id=t.object_id)";
-        $params[':uid']=(int)$ctx['id']; $params[':uid_object']=(int)$ctx['id'];
+        $baseWhere[] = "t.assignee_id=:scope_uid AND EXISTS(SELECT 1 FROM sb_user_objects mine WHERE mine.user_id=:scope_uid_object AND mine.object_id=t.object_id)";
+        $baseParams[':scope_uid'] = (int)$ctx['id'];
+        $baseParams[':scope_uid_object'] = (int)$ctx['id'];
     } elseif ($ctx['role'] === 'moderator') {
-        $sql .= " AND EXISTS (SELECT 1 FROM sb_user_objects uo WHERE uo.user_id=:mid AND uo.object_id=t.object_id)";
-        $params[':mid']=(int)$ctx['id'];
+        $baseWhere[] = "EXISTS(SELECT 1 FROM sb_user_objects uo WHERE uo.user_id=:scope_mid AND uo.object_id=t.object_id)";
+        $baseParams[':scope_mid'] = (int)$ctx['id'];
     }
-    $sql .= " ORDER BY CASE WHEN t.status='done' THEN 1 ELSE 0 END, t.due_date IS NULL, t.due_date ASC, t.updated_at DESC LIMIT 500";
-    $st=$pdo->prepare($sql); $st->execute($params); $tasks=$st->fetchAll();
-    $commentCounts=[];
-    $ids=array_map(function($t){return (int)$t['id'];},$tasks);
+
+    // KPI рассчитываются по всему доступному пользователю набору задач,
+    // независимо от текущего поиска, фильтра и номера страницы.
+    $scopeSql = " FROM sb_tasks t JOIN sb_objects o ON o.id=t.object_id
+        JOIN sb_users au ON au.id=t.assignee_id JOIN sb_users cu ON cu.id=t.created_by
+        WHERE " . implode(' AND ', $baseWhere);
+    $statsSt = $pdo->prepare("SELECT COUNT(*) AS total,
+        COALESCE(SUM(t.status='in_progress'),0) AS active,
+        COALESCE(SUM(t.status='review'),0) AS review_count,
+        COALESCE(SUM(t.due_date IS NOT NULL AND t.due_date<CURDATE() AND t.status<>'done'),0) AS overdue" . $scopeSql);
+    $statsSt->execute($baseParams);
+    $stats = $statsSt->fetch() ?: ['total'=>0,'active'=>0,'review_count'=>0,'overdue'=>0];
+
+    $where = $baseWhere;
+    $params = $baseParams;
+    if ($statusFilter !== '') {
+        $where[] = 't.status=:filter_status';
+        $params[':filter_status'] = $statusFilter;
+    }
+    if ($objectFilter > 0) {
+        $where[] = 't.object_id=:filter_object';
+        $params[':filter_object'] = $objectFilter;
+    }
+    if ($search !== '') {
+        $where[] = "(t.title LIKE :search_title OR t.description LIKE :search_description
+            OR o.name LIKE :search_object OR au.full_name LIKE :search_assignee OR cu.full_name LIKE :search_creator)";
+        $needle = '%' . $search . '%';
+        $params[':search_title'] = $needle;
+        $params[':search_description'] = $needle;
+        $params[':search_object'] = $needle;
+        $params[':search_assignee'] = $needle;
+        $params[':search_creator'] = $needle;
+    }
+    $filteredSql = " FROM sb_tasks t JOIN sb_objects o ON o.id=t.object_id
+        JOIN sb_users au ON au.id=t.assignee_id JOIN sb_users cu ON cu.id=t.created_by
+        WHERE " . implode(' AND ', $where);
+    $countSt = $pdo->prepare('SELECT COUNT(*)' . $filteredSql);
+    $countSt->execute($params);
+    $filteredTotal = (int)$countSt->fetchColumn();
+    $totalPages = max(1, (int)ceil($filteredTotal / $perPage));
+    $page = min($page, $totalPages);
+    $offset = ($page - 1) * $perPage;
+
+    $tasksSql = "SELECT t.id,t.object_id,o.name AS object_name,t.title,t.description,t.priority,t.status,
+        t.assignee_id,au.full_name AS assignee_name,t.created_by,cu.full_name AS creator_name,
+        t.due_date,t.created_at,t.updated_at" . $filteredSql . "
+        ORDER BY CASE WHEN t.status='done' THEN 1 ELSE 0 END, t.due_date IS NULL,
+        t.due_date ASC, t.updated_at DESC, t.id DESC LIMIT " . $perPage . " OFFSET " . $offset;
+    $st = $pdo->prepare($tasksSql);
+    $st->execute($params);
+    $tasks = $st->fetchAll();
+
+    $commentCounts = [];
+    $ids = array_map(function($task) { return (int)$task['id']; }, $tasks);
     if ($ids) {
-        $marks=implode(',',array_fill(0,count($ids),'?'));
-        $cs=$pdo->prepare("SELECT task_id,COUNT(*) AS comment_count FROM sb_task_comments WHERE task_id IN ($marks) GROUP BY task_id");
+        $marks = implode(',', array_fill(0, count($ids), '?'));
+        $cs = $pdo->prepare("SELECT task_id,COUNT(*) AS comment_count FROM sb_task_comments WHERE task_id IN ($marks) GROUP BY task_id");
         $cs->execute($ids);
-        foreach($cs->fetchAll() as $c){$commentCounts[(int)$c['task_id']]=(int)$c['comment_count'];}
+        foreach ($cs->fetchAll() as $c) $commentCounts[(int)$c['task_id']] = (int)$c['comment_count'];
     }
-    foreach($tasks as &$task){
-        $task['id']=(int)$task['id']; $task['object_id']=(int)$task['object_id'];
-        $task['assignee_id']=(int)$task['assignee_id']; $task['created_by']=(int)$task['created_by'];
-        $task['comment_count']=$commentCounts[$task['id']]??0;
-        $task['is_overdue']=!empty($task['due_date']) && $task['due_date']<date('Y-m-d') && $task['status']!=='done';
-        $task['can_manage']=$ctx['role']!=='user' && ($ctx['role']==='admin' || (int)$task['created_by']===(int)$ctx['id']);
-        $task['can_update']=((int)$task['assignee_id']===(int)$ctx['id']) || ($ctx['role']==='admin') || ($ctx['role']==='moderator' && (int)$task['created_by']===(int)$ctx['id']);
+    foreach ($tasks as &$task) {
+        $task['id'] = (int)$task['id'];
+        $task['object_id'] = (int)$task['object_id'];
+        $task['assignee_id'] = (int)$task['assignee_id'];
+        $task['created_by'] = (int)$task['created_by'];
+        $task['comment_count'] = $commentCounts[$task['id']] ?? 0;
+        $task['is_overdue'] = !empty($task['due_date']) && $task['due_date'] < date('Y-m-d') && $task['status'] !== 'done';
+        $task['can_manage'] = $ctx['role'] !== 'user' && ($ctx['role'] === 'admin' || (int)$task['created_by'] === (int)$ctx['id']);
+        $task['can_update'] = ((int)$task['assignee_id'] === (int)$ctx['id']) || ($ctx['role'] === 'admin') || ($ctx['role'] === 'moderator' && (int)$task['created_by'] === (int)$ctx['id']);
     }
-    $objectsSql="SELECT o.id,o.name FROM sb_objects o WHERE o.is_active=1";
-    $objectParams=[];
-    if($ctx['role']!=='admin'){
-        $objectsSql.=" AND EXISTS(SELECT 1 FROM sb_user_objects uo WHERE uo.object_id=o.id AND uo.user_id=:viewer)";
-        $objectParams[':viewer']=(int)$ctx['id'];
+
+    $objectsSql = "SELECT o.id,o.name FROM sb_objects o WHERE o.is_active=1";
+    $objectParams = [];
+    if ($ctx['role'] !== 'admin') {
+        $objectsSql .= " AND EXISTS(SELECT 1 FROM sb_user_objects uo WHERE uo.object_id=o.id AND uo.user_id=:viewer)";
+        $objectParams[':viewer'] = (int)$ctx['id'];
     }
-    $objectsSql.=" ORDER BY o.name";
-    $os=$pdo->prepare($objectsSql);$os->execute($objectParams);$objects=$os->fetchAll();
-    $assignees=[];
-    if($ctx['role']!=='user'){
-        $usersSql="SELECT DISTINCT u.id,u.full_name,u.role,uo.object_id FROM sb_users u
+    $objectsSql .= " ORDER BY o.name";
+    $os = $pdo->prepare($objectsSql);
+    $os->execute($objectParams);
+    $objects = $os->fetchAll();
+
+    $assignees = [];
+    if ($ctx['role'] !== 'user') {
+        $usersSql = "SELECT DISTINCT u.id,u.full_name,u.role,uo.object_id FROM sb_users u
             JOIN sb_user_objects uo ON uo.user_id=u.id JOIN sb_objects o ON o.id=uo.object_id
             WHERE u.is_active=1 AND o.is_active=1";
-        $userParams=[];
-        if($ctx['role']==='moderator'){
-            $usersSql.=" AND EXISTS(SELECT 1 FROM sb_user_objects mine WHERE mine.user_id=:mid AND mine.object_id=uo.object_id)";
-            $userParams[':mid']=(int)$ctx['id'];
+        $userParams = [];
+        if ($ctx['role'] === 'moderator') {
+            $usersSql .= " AND EXISTS(SELECT 1 FROM sb_user_objects mine WHERE mine.user_id=:mid AND mine.object_id=uo.object_id)";
+            $userParams[':mid'] = (int)$ctx['id'];
         }
-        $usersSql.=" ORDER BY u.full_name";
-        $us=$pdo->prepare($usersSql);$us->execute($userParams);$assignees=$us->fetchAll();
+        $usersSql .= " ORDER BY u.full_name";
+        $us = $pdo->prepare($usersSql);
+        $us->execute($userParams);
+        $assignees = $us->fetchAll();
     }
-    reply(200,['ok'=>true,'tasks'=>$tasks,'objects'=>$objects,'assignees'=>$assignees,'user'=>$ctx,'csrf'=>csrf_token()]);
+
+    reply(200, [
+        'ok'=>true,
+        'tasks'=>$tasks,
+        'objects'=>$objects,
+        'assignees'=>$assignees,
+        'user'=>$ctx,
+        'csrf'=>csrf_token(),
+        'stats'=>[
+            'total'=>(int)$stats['total'],
+            'active'=>(int)$stats['active'],
+            'review'=>(int)$stats['review_count'],
+            'overdue'=>(int)$stats['overdue']
+        ],
+        'pagination'=>['page'=>$page,'per_page'=>$perPage,'total'=>$filteredTotal,'total_pages'=>$totalPages]
+    ]);
 }
 if ($action === 'task_comments' && $method === 'GET') {
     $taskId=(int)($_GET['id']??0);
