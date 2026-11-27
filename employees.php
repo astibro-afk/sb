@@ -79,21 +79,6 @@ h1{margin:0;font-size:23px;line-height:1.2;letter-spacing:-.45px;font-weight:750
 </head>
 <body>
 <header class="sb-site-header"><div class="sb-site-top"><a class="sb-site-brand" href="/index.html"><span class="sb-site-logo">СБ</span><span class="sb-site-brand-text"><strong>Служба безопасности</strong><small>Группа БФ Волгоград 1</small></span></a><div class="sb-site-actions"><div class="sb-site-user" id="sbHeaderUser" hidden><strong id="sbHeaderName"></strong><small id="sbHeaderMeta"></small></div><a class="sb-site-manage" id="sbHeaderAddUser" href="/add-user.php" hidden>Добавить пользователя</a><a class="sb-site-manage" id="sbHeaderManage" href="/users.php" hidden>Управление</a><a class="sb-site-notice" href="/notifications.php">Уведомления <span id="sbHeaderBadge" hidden>0</span></a><button class="sb-site-logout" id="sbHeaderLogout" type="button">Выход</button></div></div><nav class="sb-site-nav" aria-label="Основная навигация"><div class="sb-site-nav-inner"><a href="/index.html">Главная</a><a href="/reports.php">Отчёты</a><a href="/tasks.php">Задачи</a><a class="active" href="/employees.php">Сотрудники</a><a href="/notifications.php">Уведомления</a></div></nav></header>
-<script>
-(function(){
-  'use strict';
-  var add=document.getElementById('sbHeaderAddUser')||document.getElementById('btnHeaderAddUser');
-  var manage=document.getElementById('adminManageLink')||document.getElementById('sbHeaderManage')||document.getElementById('btnHeaderManage');
-  fetch('/api.php?action=status',{credentials:'same-origin',cache:'no-store'})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      var role=d&&d.authenticated&&d.user?d.user.role:'';
-      if(add)add.hidden=!(role==='admin'||role==='moderator');
-      if(manage)manage.hidden=role!=='admin';
-    })
-    .catch(function(){if(add)add.hidden=true;if(manage)manage.hidden=true;});
-})();
-</script>
 <main class="page">
 <div class="sb-page-title"><div><h1 id="heading">Сотрудники</h1><p class="subtitle" id="subtitle">Команда, отчёты и история активности</p></div></div>
 <div class="toolbar" id="toolbar">
@@ -152,8 +137,9 @@ function render(){
   cards.append(card);
  });
 }
-function refreshPresence(){fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(readJson).then(d=>{if(!d.ok)return;(d.employees||[]).forEach(u=>{const card=cards.querySelector('[data-user-id="'+CSS.escape(String(u.id))+'"]');if(!card)return;const online=!!u.is_online&&!!u.is_active;const dot=card.querySelector('.state'),tag=card.querySelector('[data-presence="1"]');if(dot){dot.classList.toggle('inactive',!online);dot.title=!u.is_active?'Аккаунт отключён':(online?'Пользователь в сети':'Пользователь не в сети');dot.setAttribute('aria-label',dot.title);}if(tag){tag.classList.toggle('off',!online);tag.textContent=!u.is_active?'Отключён':(online?'В сети':'Не в сети');}});}).catch(function(){});}
-setInterval(refreshPresence,30000);
+function refreshPresence(){if(document.visibilityState==='hidden')return;fetch('api.php?action=employees_presence',{credentials:'same-origin',cache:'no-store'}).then(readJson).then(d=>{if(!d.ok)return;(d.employees||[]).forEach(u=>{const card=cards.querySelector('[data-user-id="'+CSS.escape(String(u.id))+'"]');if(!card)return;const online=!!u.is_online&&!!u.is_active;const dot=card.querySelector('.state'),tag=card.querySelector('[data-presence="1"]');if(dot){dot.classList.toggle('inactive',!online);dot.title=!u.is_active?'Аккаунт отключён':(online?'Пользователь в сети':'Пользователь не в сети');dot.setAttribute('aria-label',dot.title);}if(tag){tag.classList.toggle('off',!online);tag.textContent=!u.is_active?'Отключён':(online?'В сети':'Не в сети');}});}).catch(function(){});}
+ setInterval(refreshPresence,60000);
+ document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')refreshPresence();});
 search.addEventListener('input',render);roleFilter.addEventListener('change',render);objectFilter.addEventListener('change',render);
 fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store'}).then(async r=>{const d=await readJson(r);if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось загрузить сотрудников.');all=d.employees||[];
  const roleOrder=['admin','moderator','user'];const roles=[...new Set(all.map(u=>u.role).filter(Boolean))].sort((a,b)=>roleOrder.indexOf(a)-roleOrder.indexOf(b));roles.forEach(role=>roleFilter.append(new Option(labels[role]||role,role)));
@@ -162,7 +148,7 @@ fetch('api.php?action=employees_data',{credentials:'same-origin',cache:'no-store
 })();
 </script>
 <script>
-(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,30000);document.addEventListener('visibilitychange',ping);})();
+(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,60000);document.addEventListener('visibilitychange',ping);})();
 </script>
 <script src="site-header.js"></script>
 </body>

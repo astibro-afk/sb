@@ -28,21 +28,6 @@
 <a class="brand" href="index.html"><div class="logo">СБ</div><div><h1>Служба безопасности</h1><p>Группа БФ Волгоград 1</p></div></a>
 <div class="header-right"><div class="user-chip" id="userChip" hidden><span class="user-name" id="userName"></span><span class="user-meta" id="userMeta"></span></div><a class="btn" id="sbHeaderAddUser" href="add-user.php" hidden>Добавить пользователя</a><a class="btn" id="adminManageLink" href="users.php" hidden>Управление</a><a class="btn" href="notifications.php">Уведомления <span class="tag" id="notificationBadge" hidden>0</span></a><button class="btn" id="logout" type="button">Выход</button></div>
 </div><nav class="nav" aria-label="Основная навигация"><div class="nav-inner"><a class="active" href="index.html">Главная</a><a href="reports.php">Отчёты</a><a href="tasks.php">Задачи</a><a href="employees.php">Сотрудники</a><a href="notifications.php">Уведомления</a></div></nav></header>
-<script>
-(function(){
-  'use strict';
-  var add=document.getElementById('sbHeaderAddUser')||document.getElementById('btnHeaderAddUser');
-  var manage=document.getElementById('adminManageLink')||document.getElementById('sbHeaderManage')||document.getElementById('btnHeaderManage');
-  fetch('/api.php?action=status',{credentials:'same-origin',cache:'no-store'})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      var role=d&&d.authenticated&&d.user?d.user.role:'';
-      if(add)add.hidden=!(role==='admin'||role==='moderator');
-      if(manage)manage.hidden=role!=='admin';
-    })
-    .catch(function(){if(add)add.hidden=true;if(manage)manage.hidden=true;});
-})();
-</script>
 <main class="page">
 <section class="welcome"><div><div class="eyebrow" id="roleLabel">Персональная панель</div><h2 id="greeting">Добро пожаловать</h2><p id="welcomeText">Загружаем вашу сводку…</p></div><div class="actions"><a class="btn primary" href="reports/daily-report.php">＋ Ежедневный отчёт</a><a class="btn" href="reports.php">Открыть отчёты</a></div></section>
 <section class="kpis" id="kpis"><div class="kpi"><div class="kpi-label">Загрузка</div><div class="kpi-value">—</div><div class="kpi-note">Получаем данные</div></div><div class="kpi"><div class="kpi-label">Загрузка</div><div class="kpi-value">—</div><div class="kpi-note">Получаем данные</div></div><div class="kpi"><div class="kpi-label">Загрузка</div><div class="kpi-value">—</div><div class="kpi-note">Получаем данные</div></div><div class="kpi"><div class="kpi-label">Загрузка</div><div class="kpi-value">—</div><div class="kpi-note">Получаем данные</div></div></section>
@@ -84,6 +69,6 @@ if(d[0])renderTasks(tasks);else error('taskList',errs[0]);if(d[1])renderReports(
 async function init(){try{const s=await get('status');if(!s.authenticated){$('loginOverlay').classList.add('show');$('loginUser').focus();return;}user=s.user;await dashboard();}catch(e){$('welcomeText').textContent=e.message;error('taskList',e.message);}}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();const b=$('loginSubmit'),msg=$('loginError');b.disabled=true;b.textContent='Проверяем…';msg.style.display='none';try{const s=await get('status'),body=new URLSearchParams({username:$('loginUser').value.trim(),password:$('loginPass').value,csrf:csrf||s.csrf||''});const r=await fetch('api.php?action=login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8','Accept':'application/json'},body:body.toString()});await read(r);window.location.reload();}catch(err){msg.textContent=err.message;msg.style.display='block';b.disabled=false;b.textContent='Войти';}});
 $('logout').addEventListener('click',async()=>{try{await fetch('api.php?action=logout',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf})});}finally{window.location.reload();}});
-function ping(){if(document.visibilityState!=='hidden')fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(()=>{});}ping();setInterval(ping,30000);document.addEventListener('visibilitychange',ping);init();
+function ping(){if(document.visibilityState!=='hidden')fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(()=>{});}ping();setInterval(ping,60000);document.addEventListener('visibilitychange',ping);init();
 })();
 </script></body></html>

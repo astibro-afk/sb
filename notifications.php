@@ -14,21 +14,7 @@ if (empty($_SESSION['sb_user_id'])) { header('Location: index.html'); exit; }
 </style><link rel="stylesheet" href="site-header.css">
 </head><body>
 <header class="sb-site-header"><div class="sb-site-top"><a class="sb-site-brand" href="/index.html"><span class="sb-site-logo">СБ</span><span class="sb-site-brand-text"><strong>Служба безопасности</strong><small>Группа БФ Волгоград 1</small></span></a><div class="sb-site-actions"><div class="sb-site-user" id="sbHeaderUser" hidden><strong id="sbHeaderName"></strong><small id="sbHeaderMeta"></small></div><a class="sb-site-manage" id="sbHeaderAddUser" href="/add-user.php" hidden>Добавить пользователя</a><a class="sb-site-manage" id="sbHeaderManage" href="/users.php" hidden>Управление</a><a class="sb-site-notice" href="/notifications.php">Уведомления <span id="sbHeaderBadge" hidden>0</span></a><button class="sb-site-logout" id="sbHeaderLogout" type="button">Выход</button></div></div><nav class="sb-site-nav" aria-label="Основная навигация"><div class="sb-site-nav-inner"><a href="/index.html">Главная</a><a href="/reports.php">Отчёты</a><a href="/tasks.php">Задачи</a><a href="/employees.php">Сотрудники</a><a class="active" href="/notifications.php">Уведомления</a></div></nav></header>
-<script>
-(function(){
-  'use strict';
-  var add=document.getElementById('sbHeaderAddUser')||document.getElementById('btnHeaderAddUser');
-  var manage=document.getElementById('adminManageLink')||document.getElementById('sbHeaderManage')||document.getElementById('btnHeaderManage');
-  fetch('/api.php?action=status',{credentials:'same-origin',cache:'no-store'})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      var role=d&&d.authenticated&&d.user?d.user.role:'';
-      if(add)add.hidden=!(role==='admin'||role==='moderator');
-      if(manage)manage.hidden=role!=='admin';
-    })
-    .catch(function(){if(add)add.hidden=true;if(manage)manage.hidden=true;});
-})();
-</script><main class="page"><div class="sb-page-title"><div><h1>Центр уведомлений</h1><p>Важные события вашей учётной записи и отчётов</p></div><button class="btn primary" id="readAll" type="button">Прочитать все</button></div><div class="summary"><strong id="unread">Непрочитанных: —</strong><span class="count" id="total"></span></div><section class="list" id="list"><div class="empty">Загружаем уведомления…</div></section></main>
+<main class="page"><div class="sb-page-title"><div><h1>Центр уведомлений</h1><p>Важные события вашей учётной записи и отчётов</p></div><button class="btn primary" id="readAll" type="button">Прочитать все</button></div><div class="summary"><strong id="unread">Непрочитанных: —</strong><span class="count" id="total"></span></div><section class="list" id="list"><div class="empty">Загружаем уведомления…</div></section></main>
 <script>
 (function(){
 'use strict';
@@ -57,6 +43,6 @@ document.getElementById('readAll').addEventListener('click',()=>mark(0,true).cat
 load().catch(e=>{list.replaceChildren(el('div','empty',e.message));});
 })();
 </script><script>
-(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,30000);document.addEventListener('visibilitychange',ping);})();
+(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,60000);document.addEventListener('visibilitychange',ping);})();
 </script><script src="site-header.js"></script>
 </body></html>

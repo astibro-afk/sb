@@ -1562,23 +1562,6 @@ body { background: #F3F8F7; }
     </div>
   </nav>
 </header>
-<script>
-(function(){
-  'use strict';
-  var add=document.getElementById('sbHeaderAddUser')||document.getElementById('btnHeaderAddUser');
-  var manage=document.getElementById('adminManageLink')||document.getElementById('sbHeaderManage')||document.getElementById('btnHeaderManage');
-  fetch('/api.php?action=status',{credentials:'same-origin',cache:'no-store'})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      var role=d&&d.authenticated&&d.user?d.user.role:'';
-      if(add)add.hidden=!(role==='admin'||role==='moderator');
-      if(manage)manage.hidden=role!=='admin';
-    })
-    .catch(function(){if(add)add.hidden=true;if(manage)manage.hidden=true;});
-})();
-</script>
-
-
 <div class="progress-wrap">
   <div class="progress-card">
     <div class="progress-header">
@@ -4877,7 +4860,7 @@ var colIdx = [];
   </div>
 </div>
 <script>
-(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('../api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,30000);document.addEventListener('visibilitychange',ping);})();
+(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('../api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,60000);document.addEventListener('visibilitychange',ping);})();
 </script>
 </body>
 </html>

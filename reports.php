@@ -35,21 +35,6 @@ button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inte
 </head>
 <body>
 <header class="sb-site-header"><div class="sb-site-top"><a class="sb-site-brand" href="/index.html"><span class="sb-site-logo">СБ</span><span class="sb-site-brand-text"><strong>Служба безопасности</strong><small>Группа БФ Волгоград 1</small></span></a><div class="sb-site-actions"><div class="sb-site-user" id="sbHeaderUser" hidden><strong id="sbHeaderName"></strong><small id="sbHeaderMeta"></small></div><a class="sb-site-manage" id="sbHeaderAddUser" href="/add-user.php" hidden>Добавить пользователя</a><a class="sb-site-manage" id="sbHeaderManage" href="/users.php" hidden>Управление</a><a class="sb-site-notice" href="/notifications.php">Уведомления <span id="sbHeaderBadge" hidden>0</span></a><button class="sb-site-logout" id="sbHeaderLogout" type="button">Выход</button></div></div><nav class="sb-site-nav" aria-label="Основная навигация"><div class="sb-site-nav-inner"><a href="/index.html">Главная</a><a class="active" href="/reports.php">Отчёты</a><a href="/tasks.php">Задачи</a><a href="/employees.php">Сотрудники</a><a href="/notifications.php">Уведомления</a></div></nav></header>
-<script>
-(function(){
-  'use strict';
-  var add=document.getElementById('sbHeaderAddUser')||document.getElementById('btnHeaderAddUser');
-  var manage=document.getElementById('adminManageLink')||document.getElementById('sbHeaderManage')||document.getElementById('btnHeaderManage');
-  fetch('/api.php?action=status',{credentials:'same-origin',cache:'no-store'})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      var role=d&&d.authenticated&&d.user?d.user.role:'';
-      if(add)add.hidden=!(role==='admin'||role==='moderator');
-      if(manage)manage.hidden=role!=='admin';
-    })
-    .catch(function(){if(add)add.hidden=true;if(manage)manage.hidden=true;});
-})();
-</script>
 <main>
 <div class="sb-page-title"><div><h1>Отчёты сотрудников</h1><p>Архив ежедневных отчётов</p></div><a class="linkbtn outline" href="reports/daily-report.php">Ежедневный отчёт</a></div>
 <section class="panel">
@@ -262,7 +247,7 @@ load().catch(e=>{setStatus(e.message,true);$('rows').innerHTML='<tr><td colspan=
 })();
 </script>
 <script>
-(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,30000);document.addEventListener('visibilitychange',ping);})();
+(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,60000);document.addEventListener('visibilitychange',ping);})();
 </script>
 <script src="site-header.js"></script>
 </body>
