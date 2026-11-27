@@ -25,7 +25,7 @@ function sb_push_dispatch_pending(PDO $pdo, int $limit = 4): void {
     try {
         $pdo->beginTransaction();
         $rows = $pdo->query(
-            "SELECT id,user_id,attempts
+            "SELECT id,notification_id,user_id,attempts
              FROM sb_push_queue
              WHERE (status='pending' AND next_attempt_at<=NOW())
                 OR (status='sending' AND next_attempt_at<=NOW())
@@ -178,7 +178,7 @@ function sb_push_dispatch_pending(PDO $pdo, int $limit = 4): void {
         foreach ($outcomes as $queueId => $outcome) {
             $status = 'pending';
             $sentAt = null;
-            $nextAt = null;
+            $nextAt = date('Y-m-d H:i:s');
             $error = '';
             if ($outcome['success']) {
                 $status = 'sent';
