@@ -957,7 +957,8 @@ if ($action === 'tasks_data' && $method === 'GET') {
         $task['can_manage'] = $ctx['role'] !== 'user' && ($ctx['role'] === 'admin' || (int)$task['created_by'] === (int)$ctx['id']);
         $recipientCheck=$pdo->prepare('SELECT 1 FROM sb_task_assignees WHERE task_id=:task AND user_id=:user');
         $recipientCheck->execute([':task'=>$task['id'],':user'=>(int)$ctx['id']]);
-        $task['can_update'] = $recipientCheck->fetchColumn() || $ctx['role']==='admin' || ($ctx['role']==='moderator' && (int)$task['created_by']===(int)$ctx['id']);
+        $task['is_recipient'] = (bool)$recipientCheck->fetchColumn();
+        $task['can_update'] = $task['is_recipient'] || $ctx['role']==='admin' || ($ctx['role']==='moderator' && (int)$task['created_by']===(int)$ctx['id']);
     }
 
     $objectsSql = "SELECT o.id,o.name FROM sb_objects o WHERE o.is_active=1";
