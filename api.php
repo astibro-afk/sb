@@ -1092,7 +1092,23 @@ if ($action === 'task_comments' && $method === 'GET') {
     if(!$task) reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
     $allowed=$ctx['role']==='admin'||($ctx['role']==='user'&&(int)$task['recipient']===1)||($ctx['role']==='moderator'&&(int)$task['object_access']===1);
     if(!$allowed) reply(403,['ok'=>false,'error'=>'Нет доступа к комментариям этой задачи.']);
-    $cs=$pdo->prepare('SELECT user_name,comment,created_at FROM sb_task_comments WHERE task_id=:id ORDER BY id ASC'); $cs->execute([':id'=>$taskId]);
+    $cs=$pdo->prepare("SELECT c.id,c.user_id,c.user_name,c.comment,c.created_at,
+        CASE WHEN :comment_admin=1 THEN 1
+             WHEN c.user_id=:comment_owner THEN 1
+             WHEN :comment_moderator=1 AND EXISTS(
+                SELECT 1 FROM sb_task_objects txo
+                JOIN sb_user_objects mine ON mine.object_id=txo.object_id AND mine.user_id=:comment_moderator_scope
+                JOIN sb_user_objects author_scope ON author_scope.object_id=txo.object_id AND author_scope.user_id=c.user_id
+                WHERE txo.task_id=c.task_id
+             ) THEN 1 ELSE 0 END AS can_delete
+        FROM sb_task_comments c WHERE c.task_id=:id ORDER BY c.id ASC");
+    $cs->execute([
+        ':comment_admin'=>$ctx['role']==='admin'?1:0,
+        ':comment_owner'=>(int)$ctx['id'],
+        ':comment_moderator'=>$ctx['role']==='moderator'?1:0,
+        ':comment_moderator_scope'=>(int)$ctx['id'],
+        ':id'=>$taskId
+    ]);
     reply(200,['ok'=>true,'comments'=>$cs->fetchAll()]);
 }
 if ($action === 'task_comment_delete' && $method === 'POST') {
