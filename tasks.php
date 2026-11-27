@@ -18,7 +18,7 @@ if(empty($_SESSION['sb_user_id'])){header('Location: index.html');exit;}
 </head><body>
 <header class="sb-site-header"><div class="sb-site-top"><a class="sb-site-brand" href="/index.html"><span class="sb-site-logo">СБ</span><span class="sb-site-brand-text"><strong>Служба безопасности</strong><small>Группа БФ Волгоград 1</small></span></a><div class="sb-site-actions"><div class="sb-site-user" id="sbHeaderUser" hidden><strong id="sbHeaderName"></strong><small id="sbHeaderMeta"></small></div><a class="sb-site-manage" id="sbHeaderAddUser" href="/add-user.php" hidden>Добавить пользователя</a><a class="sb-site-manage" id="sbHeaderManage" href="/users.php" hidden>Управление</a><a class="sb-site-notice" href="/notifications.php">Уведомления <span id="sbHeaderBadge" hidden>0</span></a><button class="sb-site-logout" id="sbHeaderLogout" type="button">Выход</button></div></div><nav class="sb-site-nav" aria-label="Основная навигация"><div class="sb-site-nav-inner"><a href="/index.html">Главная</a><a href="/reports.php">Отчёты</a><a class="active" href="/tasks.php">Задачи</a><a href="/employees.php">Сотрудники</a><a href="/notifications.php">Уведомления</a></div></nav></header>
 <main class="page">
-<div class="sb-page-title"><div><h1>Задачи и поручения</h1><p>Постановка задач, контроль сроков и обратная связь по объектам</p></div><button class="btn" id="reload" type="button">Обновить</button></div>
+<div class="sb-page-title"><div><h1 id="tasksHeading">Задачи и поручения</h1><p>Постановка задач, контроль сроков и обратная связь по объектам</p></div><div class="actions"><button class="btn" id="archiveToggle" type="button">Архив задач</button><button class="btn" id="reload" type="button">Обновить</button></div></div>
 <div class="summary"><div class="stat"><strong id="total">—</strong><span>Всего задач</span></div><div class="stat"><strong id="active">—</strong><span>В работе</span></div><div class="stat"><strong id="reviewCount">—</strong><span>На проверке</span></div><div class="stat"><strong id="overdue">—</strong><span>Просрочено</span></div></div>
 <div id="error" class="error hidden" role="alert"></div>
 <section id="createPanel" class="form-panel hidden"><h2>Поставить новую задачу</h2><form class="form" id="createForm">
@@ -38,7 +38,7 @@ if(empty($_SESSION['sb_user_id'])){header('Location: index.html');exit;}
 (function(){
 'use strict';
 const $=id=>document.getElementById(id),tasksEl=$('tasks');
-let state={tasks:[],objects:[],assignees:[],user:null,csrf:'',stats:{},pagination:{page:1,total_pages:1,total:0}};let loadToken=0,searchTimer=null;
+let state={tasks:[],objects:[],assignees:[],user:null,csrf:'',stats:{},archiveView:false,pagination:{page:1,total_pages:1,total:0}};let loadToken=0,searchTimer=null;
 const statusLabels={new:'Новая',in_progress:'В работе',review:'На проверке',done:'Выполнена'};
 const priorityLabels={high:'Высокий приоритет',normal:'Обычный приоритет',low:'Низкий приоритет'};
 function node(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n;}
@@ -58,15 +58,15 @@ function render(){
  if(!rows.length){tasksEl.append(node('div','empty',Number(state.stats.total||0)>0?'По заданным фильтрам задач нет.':'Пока задач нет. Новые поручения появятся здесь.'));return;}
  rows.forEach(t=>{
   const card=node('article','task'+(t.is_overdue?' overdue':''));const head=node('div','task-head'),left=node('div');left.append(node('h2','',t.title));
-  const badges=node('div','badges');badges.append(node('span','tag '+t.status,t.status==='done'?statusLabels.done:statusLabels[t.status]));badges.append(node('span','tag '+t.priority,t.priority==='high'?'Высокий':t.priority==='low'?'Низкий':'Обычный'));if(t.is_overdue)badges.append(node('span','tag overdue','Просрочена'));left.append(badges);head.append(left);card.append(head);
+  const badges=node('div','badges');badges.append(node('span','tag '+t.status,t.status==='done'?statusLabels.done:statusLabels[t.status]));badges.append(node('span','tag '+t.priority,t.priority==='high'?'Высокий':t.priority==='low'?'Низкий':'Обычный'));if(t.is_overdue)badges.append(node('span','tag overdue','Просрочена'));if(state.archiveView)badges.append(node('span','tag done','В архиве'));left.append(badges);head.append(left);card.append(head);
   if(t.description)card.append(node('p','desc',t.description));
-  const meta=node('div','meta');[['Объект',t.object_names||t.object_name],['Исполнители',t.assignee_names||t.assignee_name],['Поставил',t.creator_name],['Срок',date(t.due_date)],['Создана',time(t.created_at)],['Обновлена',time(t.updated_at)]].forEach(([k,v])=>{const x=node('div');x.append(node('b','',k+': '),document.createTextNode(v||'—'));meta.append(x);});card.append(meta);
+  const meta=node('div','meta');[['Объект',t.object_names||t.object_name],['Исполнители',t.assignee_names||t.assignee_name],['Поставил',t.creator_name],['Срок',date(t.due_date)],['Создана',time(t.created_at)],['Обновлена',time(t.updated_at)],...(state.archiveView?[['В архиве',time(t.archived_at)]]:[])].forEach(([k,v])=>{const x=node('div');x.append(node('b','',k+': '),document.createTextNode(v||'—'));meta.append(x);});card.append(meta);
   const actions=node('div','task-actions');
-  if(t.can_update){
+  if(!state.archiveView&&t.can_update){
    if(t.status==='new'||t.status==='review'){const b=node('button','btn',t.status==='review'?'Вернуть в работу':'Взять в работу');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'in_progress'}));actions.append(b);}
    if(t.status==='in_progress'&&t.is_recipient){const b=node('button','btn primary','На проверку');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'review'}));actions.append(b);}
    if(t.status==='review'&&t.can_manage){const b=node('button','btn primary','Принять выполнение');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'done'}));actions.append(b);}
-   if(t.status==='done'&&t.can_manage){const b=node('button','btn','Вернуть в работу');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'in_progress'}));actions.append(b);}
+   if(t.status==='done'&&t.can_manage&&!state.archiveView){const b=node('button','btn','Вернуть в работу');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'in_progress'}));actions.append(b);const archive=node('button','btn primary','В архив');archive.type='button';archive.addEventListener('click',()=>archiveTask(t.id));actions.append(archive);}
   }
   if(actions.childNodes.length)card.append(actions);
   const details=node('details','comments'),summary=node('summary','','Комментарии ('+(t.comment_count||0)+')');details.append(summary);
@@ -81,12 +81,13 @@ function render(){
     if(!(data.comments||[]).length)commentItems.append(node('div','comment','Комментариев пока нет.'));
    }catch(err){details.dataset.loaded='0';commentItems.replaceChildren(node('div','comment',err.message));}
   });
-  const form=node('form','comment-form'),area=node('textarea');area.maxLength=3000;area.rows=1;area.placeholder='Добавить комментарий…';const send=node('button','btn','Отправить');send.type='submit';form.append(area,send);form.addEventListener('submit',e=>{e.preventDefault();const comment=area.value.trim();if(comment)change(t.id,{comment});});details.append(form);card.append(details);tasksEl.append(card);
+  if(!state.archiveView){const form=node('form','comment-form'),area=node('textarea');area.maxLength=3000;area.rows=1;area.placeholder='Добавить комментарий…';const send=node('button','btn','Отправить');send.type='submit';form.append(area,send);form.addEventListener('submit',e=>{e.preventDefault();const comment=area.value.trim();if(comment)change(t.id,{comment});});details.append(form);}card.append(details);tasksEl.append(card);
  });
 }
+async function archiveTask(id){if(!confirm('Переместить выполненную задачу в архив?'))return;clearError();try{await api('task_archive',{id});await load(state.pagination.page||1);}catch(e){showError(e.message);}}
 async function change(id,payload){clearError();try{await api('task_update',{id,...payload});await load(state.pagination.page||1);}catch(e){showError(e.message);}}
 async function load(page){const token=++loadToken;clearError();try{
- const params={page:page||state.pagination.page||1,search:$('search').value.trim(),status:$('statusFilter').value,object_id:$('objectFilter').value};
+ const params={page:page||state.pagination.page||1,search:$('search').value.trim(),status:$('statusFilter').value,object_id:$('objectFilter').value,archive:state.archiveView?'1':'0'};
  const d=await get('tasks_data',params);if(token!==loadToken)return;
  state.tasks=d.tasks||[];state.stats=d.stats||{};state.pagination=d.pagination||{page:1,total_pages:1,total:0};state.objects=d.objects||[];state.assignees=d.assignees||[];state.user=d.user;state.csrf=d.csrf||'';
  const canCreate=state.user.role==='admin'||state.user.role==='moderator';$('createPanel').classList.toggle('hidden',!canCreate);
@@ -103,6 +104,7 @@ $('search').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=
 $('statusFilter').addEventListener('change',()=>load(1));$('objectFilter').addEventListener('change',()=>load(1));
 $('prevPage').addEventListener('click',()=>load(Math.max(1,Number(state.pagination.page)-1)));
 $('nextPage').addEventListener('click',()=>load(Math.min(Number(state.pagination.total_pages),Number(state.pagination.page)+1)));
+$('archiveToggle').addEventListener('click',()=>{state.archiveView=!state.archiveView;$('archiveToggle').textContent=state.archiveView?'Текущие задачи':'Архив задач';$('tasksHeading').textContent=state.archiveView?'Архив задач':'Задачи и поручения';$('statusFilter').value='';$('search').value='';$('objectFilter').value='';load(1);});
 $('reload').addEventListener('click',()=>load(state.pagination.page||1));load(1);
 })();
 </script>

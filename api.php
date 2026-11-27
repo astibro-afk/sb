@@ -164,7 +164,7 @@ function db(array $cfg): PDO {
         ]);
         // Инициализация схемы один раз на PHP-сессию, а не при каждом AJAX-запросе.
         // Версию можно повысить при добавлении новых миграций.
-        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-27-2') {
+        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-27-3') {
             $pdo->exec(
                 "CREATE TABLE IF NOT EXISTS sb_app_data (
                     data_key VARCHAR(100) NOT NULL PRIMARY KEY,
@@ -287,13 +287,25 @@ function db(array $cfg): PDO {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
             ensure_user_objects($pdo);
             ensure_task_targets($pdo);
-            $_SESSION['sb_schema_version'] = '2026-11-27-2';
+            ensure_task_archive_columns($pdo);
+            $_SESSION['sb_schema_version'] = '2026-11-27-3';
         }
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
         reply(500, ['ok' => false, 'error' => 'Не удалось подключиться к MySQL. Проверьте config.php и наличие базы данных.']);
     }
     return $pdo;
+}
+
+function ensure_task_archive_columns(PDO $pdo): void {
+    $have = $pdo->query("SELECT COLUMN_NAME FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sb_tasks'")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('is_archived', $have, true)) {
+        $pdo->exec("ALTER TABLE sb_tasks ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0");
+    }
+    if (!in_array('archived_at', $have, true)) {
+        $pdo->exec("ALTER TABLE sb_tasks ADD COLUMN archived_at DATETIME NULL DEFAULT NULL");
+    }
 }
 
 function ensure_task_targets(PDO $pdo): void {
@@ -877,8 +889,9 @@ if ($action === 'tasks_data' && $method === 'GET') {
     }
     $objectFilter = max(0, (int)($_GET['object_id'] ?? 0));
 
-    $baseWhere = ["EXISTS(SELECT 1 FROM sb_task_objects active_txo JOIN sb_objects active_o ON active_o.id=active_txo.object_id WHERE active_txo.task_id=t.id AND active_o.is_active=1)"];
-    $baseParams = [];
+    $archiveView = (string)($_GET['archive'] ?? '0') === '1';
+    $baseWhere = ["t.is_archived=:archive_state", "EXISTS(SELECT 1 FROM sb_task_objects active_txo JOIN sb_objects active_o ON active_o.id=active_txo.object_id WHERE active_txo.task_id=t.id AND active_o.is_active=1)"];
+    $baseParams = [':archive_state' => $archiveView ? 1 : 0];
     if ($ctx['role'] === 'user') {
         $baseWhere[] = "EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:scope_uid)";
         $baseParams[':scope_uid'] = (int)$ctx['id'];
@@ -941,7 +954,7 @@ if ($action === 'tasks_data' && $method === 'GET') {
         (SELECT GROUP_CONCAT(DISTINCT u.full_name ORDER BY u.full_name SEPARATOR ', ') FROM sb_task_assignees ta JOIN sb_users u ON u.id=ta.user_id WHERE ta.task_id=t.id) AS assignee_names,
         (SELECT GROUP_CONCAT(DISTINCT ob.name ORDER BY ob.name SEPARATOR ', ') FROM sb_task_objects txo JOIN sb_objects ob ON ob.id=txo.object_id WHERE txo.task_id=t.id AND (:viewer_is_admin=1 OR EXISTS(SELECT 1 FROM sb_user_objects own WHERE own.user_id=:viewer_object_name AND own.object_id=txo.object_id))) AS object_names,
         EXISTS(SELECT 1 FROM sb_task_assignees me WHERE me.task_id=t.id AND me.user_id=:viewer_recipient) AS is_recipient,
-        t.due_date,t.created_at,t.updated_at" . $filteredSql . "
+        t.due_date,t.created_at,t.updated_at,t.archived_at" . $filteredSql . "
         ORDER BY CASE WHEN t.status='done' THEN 1 ELSE 0 END, t.due_date IS NULL,
         t.due_date ASC, t.updated_at DESC, t.id DESC LIMIT " . $perPage . " OFFSET " . $offset;
     $st = $pdo->prepare($tasksSql);
@@ -1012,6 +1025,23 @@ if ($action === 'tasks_data' && $method === 'GET') {
         'pagination'=>['page'=>$page,'per_page'=>$perPage,'total'=>$filteredTotal,'total_pages'=>$totalPages]
     ]);
 }
+if ($action === 'task_archive' && $method === 'POST') {
+    $body=input_json(); check_csrf($body); $id=(int)($body['id']??0);
+    if($id<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
+    $st=$pdo->prepare("SELECT t.id,t.title,t.status,t.created_by,t.is_archived,EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:viewer) AS has_object FROM sb_tasks t WHERE t.id=:id LIMIT 1");
+    $st->execute([':viewer'=>(int)$ctx['id'],':id'=>$id]); $task=$st->fetch();
+    if(!$task) reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
+    $canManage=$ctx['role']==='admin'||($ctx['role']==='moderator'&&(int)$task['created_by']===(int)$ctx['id']&&(int)$task['has_object']===1);
+    if(!$canManage) reply(403,['ok'=>false,'error'=>'Архивировать задачи может только руководитель или постановщик с правами управления.']);
+    if((string)$task['status']!=='done') reply(409,['ok'=>false,'error'=>'В архив можно отправить только выполненную задачу.']);
+    if((int)$task['is_archived']===1) reply(409,['ok'=>false,'error'=>'Задача уже находится в архиве.']);
+    $up=$pdo->prepare('UPDATE sb_tasks SET is_archived=1,archived_at=NOW() WHERE id=? AND is_archived=0');
+    $up->execute([$id]);
+    audit_log($pdo,$ctx,'task_archived','task',$id,(string)$task['title']);
+    $q=$pdo->prepare('SELECT user_id FROM sb_task_assignees WHERE task_id=?');$q->execute([$id]);
+    foreach($q->fetchAll(PDO::FETCH_COLUMN) as $uid) notification_add($pdo,(int)$uid,'task','Задача перемещена в архив','Выполненная задача «'.$task['title'].'» перемещена в архив.','tasks.php?archive=1');
+    reply(200,['ok'=>true]);
+}
 if ($action === 'task_comments' && $method === 'GET') {
     $taskId=(int)($_GET['id']??0); if($taskId<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
     $st=$pdo->prepare("SELECT t.id, EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:uid) AS recipient, EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:mid) AS object_access FROM sb_tasks t WHERE t.id=:id LIMIT 1");
@@ -1058,6 +1088,7 @@ if ($action === 'task_update' && $method === 'POST') {
     $body=input_json(); check_csrf($body); $id=(int)($body['id']??0);
     $st=$pdo->prepare("SELECT t.*, EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:uid) AS is_recipient, EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:mid) AS has_object FROM sb_tasks t WHERE t.id=:id LIMIT 1");
     $st->execute([':uid'=>(int)$ctx['id'],':mid'=>(int)$ctx['id'],':id'=>$id]); $task=$st->fetch(); if(!$task)reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
+    if((int)$task['is_archived']===1)reply(409,['ok'=>false,'error'=>'Архивную задачу нельзя изменять.']);
     $isRecipient=(int)$task['is_recipient']===1; $isManager=$ctx['role']==='admin'||($ctx['role']==='moderator'&&(int)$task['created_by']===(int)$ctx['id']);
     $canSee=$ctx['role']==='admin'||($ctx['role']==='user'&&$isRecipient)||($ctx['role']==='moderator'&&(int)$task['has_object']===1); if(!$canSee)reply(403,['ok'=>false,'error'=>'Нет доступа к этой задаче.']);
     $status=(string)($body['status']??'');
