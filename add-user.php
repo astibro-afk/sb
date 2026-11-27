@@ -5,21 +5,7 @@ declare(strict_types=1);
 <link rel="stylesheet" href="site-header.css">
 </head><body>
 <header class="sb-site-header"><div class="sb-site-top"><a class="sb-site-brand" href="/index.html"><span class="sb-site-logo">СБ</span><span class="sb-site-brand-text"><strong>Служба безопасности</strong><small>Группа БФ Волгоград 1</small></span></a><div class="sb-site-actions"><div class="sb-site-user" id="sbHeaderUser" hidden><strong id="sbHeaderName"></strong><small id="sbHeaderMeta"></small></div><a class="sb-site-manage" id="sbHeaderAddUser" href="/add-user.php" hidden>Добавить пользователя</a><a class="sb-site-manage" id="sbHeaderManage" href="/users.php" hidden>Управление</a><a class="sb-site-notice" href="/notifications.php">Уведомления <span id="sbHeaderBadge" hidden>0</span></a><button class="sb-site-logout" id="sbHeaderLogout" type="button">Выход</button></div></div><nav class="sb-site-nav" aria-label="Основная навигация"><div class="sb-site-nav-inner"><a href="/index.html">Главная</a><a href="/reports.php">Отчёты</a><a href="/tasks.php">Задачи</a><a href="/employees.php">Сотрудники</a><a href="/notifications.php">Уведомления</a></div></nav></header>
-<script>
-(function(){
-  'use strict';
-  var add=document.getElementById('sbHeaderAddUser')||document.getElementById('btnHeaderAddUser');
-  var manage=document.getElementById('adminManageLink')||document.getElementById('sbHeaderManage')||document.getElementById('btnHeaderManage');
-  fetch('/api.php?action=status',{credentials:'same-origin',cache:'no-store'})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      var role=d&&d.authenticated&&d.user?d.user.role:'';
-      if(add)add.hidden=!(role==='admin'||role==='moderator');
-      if(manage)manage.hidden=role!=='admin';
-    })
-    .catch(function(){if(add)add.hidden=true;if(manage)manage.hidden=true;});
-})();
-</script><main class="card"><h2>Добавить пользователя</h2><p class="muted">Укажите логин и ФИО. Пользователь самостоятельно задаст пароль по ссылке активации. Ссылка действует 48 часов.</p>
+<main class="card"><h2>Добавить пользователя</h2><p class="muted">Укажите логин и ФИО. Пользователь самостоятельно задаст пароль по ссылке активации. Ссылка действует 48 часов.</p>
 <form id="form"><label for="username">Логин</label><input id="username" required minlength="3" maxlength="64" pattern="[A-Za-z0-9._-]+" autocomplete="off"><label for="full_name">ФИО</label><input id="full_name" required maxlength="255"><div id="objectsWrap" hidden><label for="objectIds">Торговые объекты (можно выбрать несколько)</label><select id="objectIds" multiple size="4" style="width:100%;padding:8px;border:1px solid #b8cece;border-radius:8px;background:white"></select><p class="muted">Для выбора нескольких объектов используйте Ctrl или Shift.</p></div><button class="btn">Создать пользователя и получить ссылку</button></form><p id="msg" role="status"></p><section id="result" class="result" hidden><strong>Передайте эту ссылку сотруднику:</strong><p><a id="url" target="_blank" rel="noopener"></a></p><button class="btn" id="copy" type="button">Скопировать ссылку</button></section><p><a href="index.html">Вернуться к отчётам</a></p></main>
 <script>
 let csrf='',defaultObjectsSelected=false;const msg=document.getElementById('msg'),result=document.getElementById('result'),url=document.getElementById('url'),objectSelect=document.getElementById('objectIds');
