@@ -862,18 +862,18 @@ if ($action === 'tasks_data' && $method === 'GET') {
     }
     $sql .= " ORDER BY CASE WHEN t.status='done' THEN 1 ELSE 0 END, t.due_date IS NULL, t.due_date ASC, t.updated_at DESC LIMIT 500";
     $st=$pdo->prepare($sql); $st->execute($params); $tasks=$st->fetchAll();
+    $commentCounts=[];
     $ids=array_map(function($t){return (int)$t['id'];},$tasks);
-    $comments=[];
     if ($ids) {
         $marks=implode(',',array_fill(0,count($ids),'?'));
-        $cs=$pdo->prepare("SELECT task_id,user_id,user_name,comment,created_at FROM sb_task_comments WHERE task_id IN ($marks) ORDER BY id ASC");
+        $cs=$pdo->prepare("SELECT task_id,COUNT(*) AS comment_count FROM sb_task_comments WHERE task_id IN ($marks) GROUP BY task_id");
         $cs->execute($ids);
-        foreach($cs->fetchAll() as $c){$comments[(int)$c['task_id']][]=$c;}
+        foreach($cs->fetchAll() as $c){$commentCounts[(int)$c['task_id']]=(int)$c['comment_count'];}
     }
     foreach($tasks as &$task){
         $task['id']=(int)$task['id']; $task['object_id']=(int)$task['object_id'];
         $task['assignee_id']=(int)$task['assignee_id']; $task['created_by']=(int)$task['created_by'];
-        $task['comments']=$comments[$task['id']]??[];
+        $task['comment_count']=$commentCounts[$task['id']]??0;
         $task['is_overdue']=!empty($task['due_date']) && $task['due_date']<date('Y-m-d') && $task['status']!=='done';
         $task['can_manage']=$ctx['role']!=='user' && ($ctx['role']==='admin' || (int)$task['created_by']===(int)$ctx['id']);
         $task['can_update']=((int)$task['assignee_id']===(int)$ctx['id']) || ($ctx['role']==='admin') || ($ctx['role']==='moderator' && (int)$task['created_by']===(int)$ctx['id']);
@@ -900,6 +900,28 @@ if ($action === 'tasks_data' && $method === 'GET') {
         $us=$pdo->prepare($usersSql);$us->execute($userParams);$assignees=$us->fetchAll();
     }
     reply(200,['ok'=>true,'tasks'=>$tasks,'objects'=>$objects,'assignees'=>$assignees,'user'=>$ctx,'csrf'=>csrf_token()]);
+}
+if ($action === 'task_comments' && $method === 'GET') {
+    $taskId=(int)($_GET['id']??0);
+    if($taskId<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
+    $taskSt=$pdo->prepare("SELECT t.id,t.object_id,t.assignee_id FROM sb_tasks t
+        JOIN sb_objects o ON o.id=t.object_id WHERE t.id=:id AND o.is_active=1 LIMIT 1");
+    $taskSt->execute([':id'=>$taskId]);$task=$taskSt->fetch();
+    if(!$task) reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
+    $canSee=$ctx['role']==='admin';
+    if($ctx['role']==='moderator'){
+        $check=$pdo->prepare('SELECT COUNT(*) FROM sb_user_objects WHERE user_id=:uid AND object_id=:oid');
+        $check->execute([':uid'=>(int)$ctx['id'],':oid'=>(int)$task['object_id']]);
+        $canSee=(int)$check->fetchColumn()>0;
+    } elseif($ctx['role']==='user') {
+        $check=$pdo->prepare('SELECT COUNT(*) FROM sb_user_objects WHERE user_id=:uid AND object_id=:oid');
+        $check->execute([':uid'=>(int)$ctx['id'],':oid'=>(int)$task['object_id']]);
+        $canSee=(int)$task['assignee_id']===(int)$ctx['id']&&(int)$check->fetchColumn()>0;
+    }
+    if(!$canSee) reply(403,['ok'=>false,'error'=>'Нет доступа к комментариям этой задачи.']);
+    $commentsSt=$pdo->prepare('SELECT user_name,comment,created_at FROM sb_task_comments WHERE task_id=:id ORDER BY id ASC');
+    $commentsSt->execute([':id'=>$taskId]);
+    reply(200,['ok'=>true,'comments'=>$commentsSt->fetchAll()]);
 }
 if ($action === 'task_create' && $method === 'POST') {
     if(!in_array($ctx['role'],['admin','moderator'],true)) reply(403,['ok'=>false,'error'=>'Создавать задачи могут только руководитель и модератор.']);
