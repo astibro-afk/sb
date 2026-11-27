@@ -68,7 +68,7 @@ button,.linkbtn{border:0;border-radius:10px;padding:11px 16px;font:600 13px Inte
 (function(){
 'use strict';
 const $=id=>document.getElementById(id);
-let allRecords=[], selected=null, currentUser=null, csrfToken='', currentPage=1, pageSize=25, searchTerm='';
+let allRecords=[], selected=null, currentUser=null, csrfToken='', currentPage=1, pageSize=25, searchTerm='', totalRecords=0, totalPages=0, searchTimer=null, requestSeq=0;
 function loadScript(src,test){return new Promise((resolve,reject)=>{if(test())return resolve();const s=document.createElement('script');s.src=src;s.async=true;s.onload=()=>test()?resolve():reject(new Error('Библиотека не загрузилась.'));s.onerror=()=>reject(new Error('Не удалось загрузить библиотеку. Проверьте интернет.'));document.head.appendChild(s);});}
 const today=new Date(), iso=d=>{const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,10)};
 $('from').value='2026-01-01';$('to').value=iso(today);
@@ -76,34 +76,47 @@ function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;',
 function val(v){if(v==null||v==='')return '—';if(typeof v==='object')return JSON.stringify(v);return String(v);}
 function setStatus(s,error){$('status').textContent=s;$('status').className='status'+(error?' error':'');}
 async function load(){
+ const requestId=++requestSeq;
  setStatus('Загружаем архив…');
- const qs=new URLSearchParams({action:'reports_data',from:$('from').value,to:$('to').value});
+ const qs=new URLSearchParams({
+  action:'reports_data',from:$('from').value,to:$('to').value,
+  page:String(currentPage),per_page:String(pageSize),search:searchTerm
+ });
  if($('object').value)qs.set('object_ids',$('object').value);
+ if($('employee').value)qs.set('employee_id',$('employee').value);
  const response=await fetch('api.php?'+qs.toString(),{credentials:'same-origin',cache:'no-store'});
  const data=await response.json();
+ if(requestId!==requestSeq)return;
  if(!response.ok||!data.ok)throw new Error(data.error||'Не удалось загрузить отчёты.');
- currentUser=data.user;csrfToken=data.csrf||'';allRecords=data.records||[];
+ currentUser=data.user;csrfToken=data.csrf||'';
+ allRecords=data.records||[];
+ totalRecords=Number(data.summary&&data.summary.total||0);
+ totalPages=Number(data.pages||0);
+ currentPage=Number(data.page||1);
  const objects=data.objects||[];
- if(!$('object').dataset.ready){objects.forEach(o=>{const op=document.createElement('option');op.value=o.id;op.textContent=o.name;$('object').appendChild(op)});$('object').dataset.ready='1';}
- const employees=new Map();
- allRecords.forEach(r=>{if(r.owner_user_id)employees.set(String(r.owner_user_id),r.author||r.employee||('Сотрудник #'+r.owner_user_id));});
- const old=$('employee').value;$('employee').innerHTML='<option value="">Все сотрудники</option>';
- [...employees].sort((a,b)=>a[1].localeCompare(b[1],'ru')).forEach(([id,name])=>{const op=document.createElement('option');op.value=id;op.textContent=name;$('employee').appendChild(op)});
- if(employees.has(old))$('employee').value=old;
- render();
- setStatus('Найдено отчётов: '+allRecords.length+'.');
+ if(!$('object').dataset.ready){
+  objects.forEach(o=>{const op=document.createElement('option');op.value=o.id;op.textContent=o.name;$('object').appendChild(op)});
+  $('object').dataset.ready='1';
+ }
+ const employees=data.employees||[];
+ const oldEmployee=$('employee').value;
+ $('employee').innerHTML='<option value="">Все сотрудники</option>';
+ employees.forEach(e=>{
+  const op=document.createElement('option');op.value=e.id;op.textContent=e.name||('Сотрудник #'+e.id);$('employee').appendChild(op);
+ });
+ if(employees.some(e=>String(e.id)===oldEmployee))$('employee').value=oldEmployee;
+ render(data.summary||{});
+ setStatus('Найдено отчётов: '+totalRecords+'.');
 }
-function render(){
- const objectId=$('object').value, employeeId=$('employee').value, q=searchTerm.trim().toLocaleLowerCase('ru');
- const filtered=allRecords.filter(r=>(!objectId||(r.object_id?String(r.object_id)===objectId:true))&&(!employeeId||String(r.owner_user_id||'')===employeeId)&&(!q||[r.date,r.object,r.employee,r.author].some(v=>String(v||'').toLocaleLowerCase('ru').includes(q))));
- const pages=Math.max(1,Math.ceil(filtered.length/pageSize));currentPage=Math.min(currentPage,pages);
- const start=(currentPage-1)*pageSize, visible=filtered.slice(start,start+pageSize);
- $('summary').innerHTML='<span class="pill">Отчётов: '+filtered.length+'</span><span class="pill">Объектов: '+new Set(filtered.map(r=>r.object)).size+'</span><span class="pill">Сотрудников: '+new Set(filtered.map(r=>r.owner_user_id||r.author)).size+'</span>';
- $('searchCount').textContent=filtered.length+' найдено';
- $('pageInfo').textContent=filtered.length?(start+1)+'–'+Math.min(start+pageSize,filtered.length)+' из '+filtered.length:'0 из 0';
- $('prevPage').disabled=currentPage<=1;$('nextPage').disabled=currentPage>=pages;
- $('pagination').hidden=filtered.length===0;
- $('rows').innerHTML=visible.length?visible.map((r)=>'<tr><td>'+esc(r.date)+'</td><td>'+esc(r.object)+'</td><td>'+esc(r.employee)+'</td><td>'+esc(r.author)+'</td><td>'+esc(r.updated_at||'')+'</td><td><div class="actions"><button class="secondary" data-key="'+esc(r.record_key)+'">Открыть</button><button class="outline" data-download="'+esc(r.record_key)+'">Скачать</button><button class="danger" data-delete="'+esc(r.record_key)+'">Удалить</button></div></td></tr>').join(''):'<tr><td colspan="6" class="empty">По заданным условиям отчёты не найдены.</td></tr>';
+function render(summary){
+ const total=Number(summary.total||0), objectCount=Number(summary.objects||0), employeeCount=Number(summary.employees||0);
+ const start=total?(currentPage-1)*pageSize+1:0, end=Math.min(currentPage*pageSize,total);
+ $('summary').innerHTML='<span class="pill">Отчётов: '+total+'</span><span class="pill">Объектов: '+objectCount+'</span><span class="pill">Сотрудников: '+employeeCount+'</span>';
+ $('searchCount').textContent=total+' найдено';
+ $('pageInfo').textContent=total?start+'–'+end+' из '+total:'0 из 0';
+ $('prevPage').disabled=currentPage<=1;$('nextPage').disabled=totalPages===0||currentPage>=totalPages;
+ $('pagination').hidden=total===0;
+ $('rows').innerHTML=allRecords.length?allRecords.map(r=>'<tr><td>'+esc(r.date)+'</td><td>'+esc(r.object)+'</td><td>'+esc(r.employee)+'</td><td>'+esc(r.author)+'</td><td>'+esc(r.updated_at||'')+'</td><td><div class="actions"><button class="secondary" data-key="'+esc(r.record_key)+'">Открыть</button><button class="outline" data-download="'+esc(r.record_key)+'">Скачать</button><button class="danger" data-delete="'+esc(r.record_key)+'">Удалить</button></div></td></tr>').join(''):'<tr><td colspan="6" class="empty">По заданным условиям отчёты не найдены.</td></tr>';
  $('rows').querySelectorAll('button[data-key]').forEach(b=>b.addEventListener('click',()=>openRecord(b.dataset.key)));
  $('rows').querySelectorAll('button[data-download]').forEach(b=>b.addEventListener('click',()=>showDownload(b.dataset.download)));
  $('rows').querySelectorAll('button[data-delete]').forEach(b=>b.addEventListener('click',()=>deleteRecord(b.dataset.delete)));
@@ -125,9 +138,20 @@ async function deleteRecord(key){
   setStatus('Отчёт удалён.');
  }catch(e){setStatus(e.message,true);}
 }
-function openRecord(key){
+async function ensureReportDetail(record){
+ if(record.data&&record.dyn)return record;
+ const qs=new URLSearchParams({action:'report_detail',record_key:record.record_key});
+ const response=await fetch('api.php?'+qs.toString(),{credentials:'same-origin',cache:'no-store'});
+ const detail=await response.json();
+ if(!response.ok||!detail.ok)throw new Error(detail.error||'Не удалось загрузить документ.');
+ record.data=detail.data||{};record.dyn=detail.dyn||{};
+ return record;
+}
+async function openRecord(key){
  selected=allRecords.find(r=>r.record_key===key);if(!selected)return;
  try{
+  setStatus('Загружаем документ…');
+  await ensureReportDetail(selected);
   const source=Object.assign({},selected.data||{},{
    b0_to:selected.object||(selected.data&&selected.data.b0_to)||'',
    b0_fio:selected.employee||(selected.data&&selected.data.b0_fio)||'',
@@ -139,13 +163,23 @@ function openRecord(key){
   $('previewFrame').srcdoc=html;
   $('previewMeta').textContent=[selected.date,selected.object,selected.employee].filter(Boolean).join(' · ');
   $('previewModal').classList.add('open');$('previewModal').setAttribute('aria-hidden','false');
+  setStatus('Документ готов к просмотру.');
  }catch(e){setStatus('Не удалось сформировать предпросмотр: '+e.message,true);}
 }
 function closePreview(){$('previewModal').classList.remove('open');$('previewModal').setAttribute('aria-hidden','true');$('previewFrame').srcdoc='';}
 $('closePreview').addEventListener('click',closePreview);
 $('previewModal').addEventListener('click',e=>{if(e.target===$('previewModal'))closePreview();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePreview();});
-function showDownload(key){selected=allRecords.find(r=>r.record_key===key);if(!selected)return;$('downloadMeta').textContent=[selected.date,selected.object,selected.employee].filter(Boolean).join(' · ');$('downloadStatus').textContent='';$('downloadModal').classList.add('open');$('downloadModal').setAttribute('aria-hidden','false');}
+async function showDownload(key){
+ selected=allRecords.find(r=>r.record_key===key);if(!selected)return;
+ try{
+  $('downloadStatus').textContent='Загружаем документ…';
+  await ensureReportDetail(selected);
+  $('downloadMeta').textContent=[selected.date,selected.object,selected.employee].filter(Boolean).join(' · ');
+  $('downloadStatus').textContent='';
+  $('downloadModal').classList.add('open');$('downloadModal').setAttribute('aria-hidden','false');
+ }catch(e){$('downloadStatus').textContent=e.message;setStatus(e.message,true);}
+}
 function closeDownload(){$('downloadModal').classList.remove('open');$('downloadModal').setAttribute('aria-hidden','true');}
 $('closeModal').addEventListener('click',closeDownload);
 $('downloadModal').addEventListener('click',e=>{if(e.target===$('downloadModal'))closeDownload();});
@@ -238,11 +272,15 @@ function safe(s){return String(s||'Отчёт').replace(/[^\p{L}\p{N}_-]+/gu,'_'
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);}
 $('search').addEventListener('click',()=>{currentPage=1;load().catch(e=>setStatus(e.message,true));});
 $('object').addEventListener('change',()=>{currentPage=1;load().catch(e=>setStatus(e.message,true));});
-$('employee').addEventListener('change',()=>{currentPage=1;render();});
-$('reportSearch').addEventListener('input',()=>{searchTerm=$('reportSearch').value;currentPage=1;render();});
-$('pageSize').addEventListener('change',()=>{pageSize=Math.max(1,Number($('pageSize').value)||25);currentPage=1;render();});
-$('prevPage').addEventListener('click',()=>{if(currentPage>1){currentPage--;render();}});
-$('nextPage').addEventListener('click',()=>{currentPage++;render();});
+$('employee').addEventListener('change',()=>{currentPage=1;load().catch(e=>setStatus(e.message,true));});
+$('reportSearch').addEventListener('input',()=>{
+ searchTerm=$('reportSearch').value;currentPage=1;
+ if(searchTimer)clearTimeout(searchTimer);
+ searchTimer=setTimeout(()=>load().catch(e=>setStatus(e.message,true)),300);
+});
+$('pageSize').addEventListener('change',()=>{pageSize=Math.max(1,Number($('pageSize').value)||25);currentPage=1;load().catch(e=>setStatus(e.message,true));});
+$('prevPage').addEventListener('click',()=>{if(currentPage>1){currentPage--;load().catch(e=>setStatus(e.message,true));}});
+$('nextPage').addEventListener('click',()=>{if(currentPage<totalPages){currentPage++;load().catch(e=>setStatus(e.message,true));}});
 load().catch(e=>{setStatus(e.message,true);$('rows').innerHTML='<tr><td colspan="6" class="empty">Не удалось загрузить архив.</td></tr>';});
 })();
 </script>
