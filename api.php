@@ -134,10 +134,14 @@ function ensure_archive_columns(PDO $pdo): void {
             try { $pdo->exec($sql); } catch (Throwable $e) { error_log('SB auth alter: ' . $e->getMessage()); }
         }
     }
+    $indexes = $pdo->query("SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sb_archive_records'")
+        ->fetchAll(PDO::FETCH_COLUMN);
     foreach (['idx_owner_user' => "CREATE INDEX idx_owner_user ON sb_archive_records (owner_user_id)",
               'idx_object_id'  => "CREATE INDEX idx_object_id ON sb_archive_records (object_id)"] as $idx => $sql) {
-        if (!in_array($idx, ['idx_owner_user', 'idx_object_id'], true)) continue;
-        try { $pdo->exec($sql); } catch (Throwable $e) { /* уже существует */ }
+        if (!in_array($idx, $indexes, true)) {
+            try { $pdo->exec($sql); } catch (Throwable $e) { error_log('SB archive index: ' . $e->getMessage()); }
+        }
     }
 }
 
@@ -158,127 +162,132 @@ function db(array $cfg): PDO {
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
         ]);
-        $pdo->exec(
-            "CREATE TABLE IF NOT EXISTS sb_app_data (
-                data_key VARCHAR(100) NOT NULL PRIMARY KEY,
-                payload LONGTEXT NOT NULL,
-                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    ON UPDATE CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-        );
-        $pdo->exec(
-            "CREATE TABLE IF NOT EXISTS sb_archive_records (
+        // Инициализация схемы один раз на PHP-сессию, а не при каждом AJAX-запросе.
+        // Версию можно повысить при добавлении новых миграций.
+        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-27-1') {
+            $pdo->exec(
+                "CREATE TABLE IF NOT EXISTS sb_app_data (
+                    data_key VARCHAR(100) NOT NULL PRIMARY KEY,
+                    payload LONGTEXT NOT NULL,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                        ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+            $pdo->exec(
+                "CREATE TABLE IF NOT EXISTS sb_archive_records (
+                    record_key CHAR(66) NOT NULL PRIMARY KEY,
+                    report_date VARCHAR(10) NOT NULL DEFAULT '',
+                    object_name VARCHAR(255) NOT NULL DEFAULT '',
+                    owner_user_id INT UNSIGNED NULL DEFAULT NULL,
+                    owner_name VARCHAR(255) NULL DEFAULT NULL,
+                    object_id INT UNSIGNED NULL DEFAULT NULL,
+                    payload LONGTEXT NOT NULL,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                        ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_report_date (report_date),
+                    INDEX idx_object_name (object_name)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+            $pdo->exec(
+                "CREATE TABLE IF NOT EXISTS sb_users (
+                    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    username VARCHAR(64) NOT NULL UNIQUE,
+                    password_hash VARCHAR(255) NOT NULL,
+                    full_name VARCHAR(255) NOT NULL DEFAULT '',
+                    role VARCHAR(16) NOT NULL DEFAULT 'user',
+                    object_id INT UNSIGNED NULL DEFAULT NULL,
+                    is_active TINYINT(1) NOT NULL DEFAULT 1,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+            $pdo->exec(
+                "CREATE TABLE IF NOT EXISTS sb_objects (
+                    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL UNIQUE,
+                    is_active TINYINT(1) NOT NULL DEFAULT 1,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_user_activation_tokens (
+                    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT UNSIGNED NOT NULL,
+                    token_hash CHAR(64) NOT NULL UNIQUE,
+                    expires_at DATETIME NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_activation_user (user_id),
+                    CONSTRAINT fk_activation_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            ensure_archive_columns($pdo);
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_report_comments (
                 record_key CHAR(66) NOT NULL PRIMARY KEY,
-                report_date VARCHAR(10) NOT NULL DEFAULT '',
-                object_name VARCHAR(255) NOT NULL DEFAULT '',
-                owner_user_id INT UNSIGNED NULL DEFAULT NULL,
-                owner_name VARCHAR(255) NULL DEFAULT NULL,
-                object_id INT UNSIGNED NULL DEFAULT NULL,
-                payload LONGTEXT NOT NULL,
-                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    ON UPDATE CURRENT_TIMESTAMP,
-                INDEX idx_report_date (report_date),
-                INDEX idx_object_name (object_name)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-        );
-        $pdo->exec(
-            "CREATE TABLE IF NOT EXISTS sb_users (
-                id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                username VARCHAR(64) NOT NULL UNIQUE,
-                password_hash VARCHAR(255) NOT NULL,
-                full_name VARCHAR(255) NOT NULL DEFAULT '',
-                role VARCHAR(16) NOT NULL DEFAULT 'user',
-                object_id INT UNSIGNED NULL DEFAULT NULL,
-                is_active TINYINT(1) NOT NULL DEFAULT 1,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-        );
-        $pdo->exec(
-            "CREATE TABLE IF NOT EXISTS sb_objects (
-                id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(255) NOT NULL UNIQUE,
-                is_active TINYINT(1) NOT NULL DEFAULT 1,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-        );
-        $pdo->exec("CREATE TABLE IF NOT EXISTS sb_user_activation_tokens (
-                id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                user_id INT UNSIGNED NOT NULL,
-                token_hash CHAR(64) NOT NULL UNIQUE,
-                expires_at DATETIME NOT NULL,
+                comment TEXT NOT NULL,
+                author_user_id INT UNSIGNED NOT NULL,
+                author_name VARCHAR(255) NOT NULL DEFAULT '',
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_activation_user (user_id),
-                CONSTRAINT fk_activation_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_report_comment_author (author_user_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-        ensure_archive_columns($pdo);
-        $pdo->exec("CREATE TABLE IF NOT EXISTS sb_report_comments (
-            record_key CHAR(66) NOT NULL PRIMARY KEY,
-            comment TEXT NOT NULL,
-            author_user_id INT UNSIGNED NOT NULL,
-            author_name VARCHAR(255) NOT NULL DEFAULT '',
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            INDEX idx_report_comment_author (author_user_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-        $pdo->exec("CREATE TABLE IF NOT EXISTS sb_audit_log (
-            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            actor_user_id INT UNSIGNED NULL DEFAULT NULL,
-            actor_name VARCHAR(255) NOT NULL DEFAULT '',
-            action VARCHAR(64) NOT NULL,
-            target_type VARCHAR(64) NOT NULL DEFAULT '',
-            target_id INT UNSIGNED NULL DEFAULT NULL,
-            target_label VARCHAR(255) NOT NULL DEFAULT '',
-            details TEXT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_audit_created (created_at),
-            INDEX idx_audit_actor (actor_user_id),
-            INDEX idx_audit_action (action)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-        $pdo->exec("CREATE TABLE IF NOT EXISTS sb_notifications (
-            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            user_id INT UNSIGNED NOT NULL,
-            type VARCHAR(48) NOT NULL DEFAULT 'info',
-            title VARCHAR(180) NOT NULL,
-            message TEXT NOT NULL,
-            link VARCHAR(255) NOT NULL DEFAULT '',
-            is_read TINYINT(1) NOT NULL DEFAULT 0,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_notifications_user_read (user_id, is_read, created_at),
-            CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-        $pdo->exec("CREATE TABLE IF NOT EXISTS sb_tasks (
-            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            object_id INT UNSIGNED NOT NULL,
-            title VARCHAR(180) NOT NULL,
-            description TEXT NULL,
-            priority VARCHAR(16) NOT NULL DEFAULT 'normal',
-            status VARCHAR(24) NOT NULL DEFAULT 'new',
-            assignee_id INT UNSIGNED NOT NULL,
-            created_by INT UNSIGNED NOT NULL,
-            due_date DATE NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            INDEX idx_tasks_object (object_id, status, due_date),
-            INDEX idx_tasks_assignee (assignee_id, status, due_date),
-            INDEX idx_tasks_creator (created_by)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-        $pdo->exec("CREATE TABLE IF NOT EXISTS sb_task_comments (
-            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            task_id BIGINT UNSIGNED NOT NULL,
-            user_id INT UNSIGNED NOT NULL,
-            user_name VARCHAR(255) NOT NULL DEFAULT '',
-            comment TEXT NOT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_task_comments_task (task_id, created_at),
-            CONSTRAINT fk_task_comments_task FOREIGN KEY (task_id) REFERENCES sb_tasks(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-        $pdo->exec("CREATE TABLE IF NOT EXISTS sb_user_presence (
-            user_id INT UNSIGNED NOT NULL PRIMARY KEY,
-            last_seen DATETIME NOT NULL,
-            INDEX idx_presence_last_seen (last_seen),
-            CONSTRAINT fk_presence_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-        ensure_user_objects($pdo);
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_audit_log (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                actor_user_id INT UNSIGNED NULL DEFAULT NULL,
+                actor_name VARCHAR(255) NOT NULL DEFAULT '',
+                action VARCHAR(64) NOT NULL,
+                target_type VARCHAR(64) NOT NULL DEFAULT '',
+                target_id INT UNSIGNED NULL DEFAULT NULL,
+                target_label VARCHAR(255) NOT NULL DEFAULT '',
+                details TEXT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_audit_created (created_at),
+                INDEX idx_audit_actor (actor_user_id),
+                INDEX idx_audit_action (action)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_notifications (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                user_id INT UNSIGNED NOT NULL,
+                type VARCHAR(48) NOT NULL DEFAULT 'info',
+                title VARCHAR(180) NOT NULL,
+                message TEXT NOT NULL,
+                link VARCHAR(255) NOT NULL DEFAULT '',
+                is_read TINYINT(1) NOT NULL DEFAULT 0,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_notifications_user_read (user_id, is_read, created_at),
+                CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_tasks (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                object_id INT UNSIGNED NOT NULL,
+                title VARCHAR(180) NOT NULL,
+                description TEXT NULL,
+                priority VARCHAR(16) NOT NULL DEFAULT 'normal',
+                status VARCHAR(24) NOT NULL DEFAULT 'new',
+                assignee_id INT UNSIGNED NOT NULL,
+                created_by INT UNSIGNED NOT NULL,
+                due_date DATE NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_tasks_object (object_id, status, due_date),
+                INDEX idx_tasks_assignee (assignee_id, status, due_date),
+                INDEX idx_tasks_creator (created_by)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_task_comments (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                task_id BIGINT UNSIGNED NOT NULL,
+                user_id INT UNSIGNED NOT NULL,
+                user_name VARCHAR(255) NOT NULL DEFAULT '',
+                comment TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_task_comments_task (task_id, created_at),
+                CONSTRAINT fk_task_comments_task FOREIGN KEY (task_id) REFERENCES sb_tasks(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_user_presence (
+                user_id INT UNSIGNED NOT NULL PRIMARY KEY,
+                last_seen DATETIME NOT NULL,
+                INDEX idx_presence_last_seen (last_seen),
+                CONSTRAINT fk_presence_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            ensure_user_objects($pdo);
+            $_SESSION['sb_schema_version'] = '2026-11-27-1';
+        }
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
         reply(500, ['ok' => false, 'error' => 'Не удалось подключиться к MySQL. Проверьте config.php и наличие базы данных.']);
@@ -825,10 +834,21 @@ if ($action === 'employees_data' && $method === 'GET') {
     if ($targetId > 0) { $sql .= ' AND u.id=:target_id'; $params[':target_id']=$targetId; }
     $sql .= ' ORDER BY u.full_name,u.id';
     $st=$pdo->prepare($sql); $st->execute($params); $users=$st->fetchAll();
-    $objectSt=$pdo->prepare('SELECT o.name FROM sb_user_objects uo JOIN sb_objects o ON o.id=uo.object_id WHERE uo.user_id=:uid ORDER BY o.name');
+    // Загружаем назначения одним запросом вместо отдельного запроса на каждого сотрудника.
+    $objectsByUser = [];
+    if ($users) {
+        $userIds = array_map(function($employee) { return (int)$employee['id']; }, $users);
+        $marks = implode(',', array_fill(0, count($userIds), '?'));
+        $objectSt = $pdo->prepare("SELECT uo.user_id,o.name FROM sb_user_objects uo
+            JOIN sb_objects o ON o.id=uo.object_id
+            WHERE uo.user_id IN ($marks) ORDER BY o.name");
+        $objectSt->execute($userIds);
+        foreach ($objectSt->fetchAll() as $objectRow) {
+            $objectsByUser[(int)$objectRow['user_id']][] = (string)$objectRow['name'];
+        }
+    }
     foreach ($users as &$employee) {
-        $objectSt->execute([':uid'=>(int)$employee['id']]);
-        $employee['objects']=array_column($objectSt->fetchAll(),'name');
+        $employee['objects'] = $objectsByUser[(int)$employee['id']] ?? [];
         $employee['reports_count']=(int)$employee['reports_count'];
         $employee['is_active']=(int)$employee['is_active'];
         $employee['is_online']=(int)($employee['is_online'] ?? 0);
@@ -837,6 +857,39 @@ if ($action === 'employees_data' && $method === 'GET') {
     if ($targetId > 0 && !$users) reply(404,['ok'=>false,'error'=>'Сотрудник не найден или у вас нет доступа.']);
     reply(200,['ok'=>true,'employees'=>$users,'user'=>$ctx,'csrf'=>csrf_token()]);
 }
+if ($action === 'employees_presence' && $method === 'GET') {
+    // Лёгкий endpoint для обновления статусов без повторной загрузки карточек и статистики.
+    $sql = "SELECT u.id,u.is_active,
+        CASE WHEN p.last_seen >= DATE_SUB(NOW(), INTERVAL 90 SECOND) THEN 1 ELSE 0 END AS is_online
+        FROM sb_users u LEFT JOIN sb_user_presence p ON p.user_id=u.id WHERE 1=1";
+    $params = [];
+    if ($ctx['role'] === 'user') {
+        $sql .= ' AND u.id=:self_id';
+        $params[':self_id'] = (int)$ctx['id'];
+    } elseif ($ctx['role'] === 'moderator') {
+        $sql .= " AND (u.id=:self_id OR (u.id<>:self_id2 AND EXISTS (
+            SELECT 1 FROM sb_user_objects tuo
+            JOIN sb_user_objects muo ON muo.object_id=tuo.object_id
+            JOIN sb_objects ob ON ob.id=tuo.object_id AND ob.is_active=1
+            WHERE tuo.user_id=u.id AND muo.user_id=:moderator_id
+        )))";
+        $params[':self_id'] = (int)$ctx['id'];
+        $params[':self_id2'] = (int)$ctx['id'];
+        $params[':moderator_id'] = (int)$ctx['id'];
+    }
+    $sql .= ' ORDER BY u.id';
+    $st = $pdo->prepare($sql);
+    $st->execute($params);
+    $employees = $st->fetchAll();
+    foreach ($employees as &$employee) {
+        $employee['id'] = (int)$employee['id'];
+        $employee['is_active'] = (int)$employee['is_active'];
+        $employee['is_online'] = (int)$employee['is_online'];
+    }
+    unset($employee);
+    reply(200, ['ok' => true, 'employees' => $employees]);
+}
+
 if ($action === 'employee_history' && $method === 'GET') {
     $targetId=(int)($_GET['user_id'] ?? 0);
     if ($targetId < 1) reply(400,['ok'=>false,'error'=>'Не выбран сотрудник.']);
