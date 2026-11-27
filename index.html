@@ -86,4 +86,5 @@ $('loginForm').addEventListener('submit',async e=>{e.preventDefault();const b=$(
 $('logout').addEventListener('click',async()=>{try{await fetch('api.php?action=logout',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf})});}finally{window.location.reload();}});
 function ping(){if(document.visibilityState!=='hidden')fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(()=>{});}ping();setInterval(ping,60000);document.addEventListener('visibilitychange',ping);init();
 })();
-</script></body></html>
+</script><script src="site-header.js"></script>
+</body></html>
