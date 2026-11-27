@@ -1042,6 +1042,24 @@ if ($action === 'task_archive' && $method === 'POST') {
     foreach($q->fetchAll(PDO::FETCH_COLUMN) as $uid) notification_add($pdo,(int)$uid,'task','Задача перемещена в архив','Выполненная задача «'.$task['title'].'» перемещена в архив.','tasks.php?archive=1');
     reply(200,['ok'=>true]);
 }
+if ($action === 'task_restore' && $method === 'POST') {
+    $body=input_json(); check_csrf($body); $id=(int)($body['id']??0);
+    if($id<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
+    $st=$pdo->prepare("SELECT t.id,t.title,t.status,t.created_by,t.is_archived,EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:viewer) AS has_object FROM sb_tasks t WHERE t.id=:id LIMIT 1");
+    $st->execute([':viewer'=>(int)$ctx['id'],':id'=>$id]); $task=$st->fetch();
+    if(!$task) reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
+    $canManage=$ctx['role']==='admin'||($ctx['role']==='moderator'&&(int)$task['created_by']===(int)$ctx['id']&&(int)$task['has_object']===1);
+    if(!$canManage) reply(403,['ok'=>false,'error'=>'Восстанавливать задачи может только руководитель или постановщик с правами управления.']);
+    if((int)$task['is_archived']!==1) reply(409,['ok'=>false,'error'=>'Задача уже находится в общем списке.']);
+    $up=$pdo->prepare("UPDATE sb_tasks SET is_archived=0,archived_at=NULL,status='in_progress' WHERE id=? AND is_archived=1");
+    $up->execute([$id]);
+    if($up->rowCount()!==1) reply(409,['ok'=>false,'error'=>'Не удалось восстановить задачу. Обновите список и попробуйте снова.']);
+    audit_log($pdo,$ctx,'task_restored','task',$id,(string)$task['title'],['status'=>'in_progress']);
+    $q=$pdo->prepare('SELECT user_id FROM sb_task_assignees WHERE task_id=?');$q->execute([$id]);
+    foreach($q->fetchAll(PDO::FETCH_COLUMN) as $uid) if((int)$uid!==(int)$ctx['id']) notification_add($pdo,(int)$uid,'task','Задача возвращена в работу','Задача «'.$task['title'].'» восстановлена из архива и снова находится в работе.','tasks.php');
+    if((int)$task['created_by']!==(int)$ctx['id']) notification_add($pdo,(int)$task['created_by'],'task','Задача восстановлена','Задача «'.$task['title'].'» возвращена из архива в работу.','tasks.php');
+    reply(200,['ok'=>true]);
+}
 if ($action === 'task_comments' && $method === 'GET') {
     $taskId=(int)($_GET['id']??0); if($taskId<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
     $st=$pdo->prepare("SELECT t.id, EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:uid) AS recipient, EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:mid) AS object_access FROM sb_tasks t WHERE t.id=:id LIMIT 1");
