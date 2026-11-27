@@ -71,6 +71,9 @@ function render(){
    if(t.status==='review'&&t.can_manage){const b=node('button','btn primary','Принять выполнение');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'done'}));actions.append(b);}
    if(t.status==='done'&&t.can_manage&&!state.archiveView){const b=node('button','btn','Вернуть в работу');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'in_progress'}));actions.append(b);const archive=node('button','btn primary','В архив');archive.type='button';archive.addEventListener('click',()=>archiveTask(t.id));actions.append(archive);}
   }
+  if(state.user&&state.user.role==='admin'){
+   const del=node('button','btn','Удалить');del.type='button';del.addEventListener('click',()=>deleteTask(t.id,t.title));actions.append(del);
+  }
   if(actions.childNodes.length)card.append(actions);
   const details=node('details','comments'),summary=node('summary','','Комментарии ('+(t.comment_count||0)+')');details.append(summary);
   const commentItems=node('div','comments-list');details.append(commentItems);
@@ -89,6 +92,7 @@ function render(){
 }
 async function archiveTask(id){if(!confirm('Переместить выполненную задачу в архив?'))return;clearError();try{await api('task_archive',{id});await load(state.pagination.page||1);}catch(e){showError(e.message);}}
 async function restoreTask(id){if(!confirm('Вернуть задачу из архива в работу?'))return;clearError();try{await api('task_restore',{id});await load(state.pagination.page||1);}catch(e){showError(e.message);}}
+async function deleteTask(id,title){if(!confirm('Удалить задачу «'+title+'» без возможности восстановления? Комментарии и назначения этой задачи также будут удалены.'))return;clearError();try{await api('task_delete',{id});await load(state.pagination.page||1);}catch(e){showError(e.message);}}
 async function change(id,payload){clearError();try{await api('task_update',{id,...payload});await load(state.pagination.page||1);}catch(e){showError(e.message);}}
 async function load(page){const token=++loadToken;clearError();try{
  const params={page:page||state.pagination.page||1,search:$('search').value.trim(),status:$('statusFilter').value,object_id:$('objectFilter').value,archive:state.archiveView?'1':'0'};
