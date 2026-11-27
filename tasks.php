@@ -23,8 +23,8 @@ if(empty($_SESSION['sb_user_id'])){header('Location: index.html');exit;}
 <div id="error" class="error hidden" role="alert"></div>
 <section id="createPanel" class="form-panel hidden"><h2>Поставить новую задачу</h2><form class="form" id="createForm">
 <div class="field wide"><label for="title">Название задачи *</label><input id="title" maxlength="180" required placeholder="Например: Проверить соблюдение кассовой дисциплины"></div>
-<div class="field"><label for="object">Объект *</label><select id="object" required><option value="">Выберите объект</option></select></div>
-<div class="field"><label for="assignee">Исполнитель *</label><select id="assignee" required><option value="">Сначала выберите объект</option></select></div>
+<div class="field"><label for="object">Объекты (все активные сотрудники этих объектов)</label><select id="object" multiple size="4" aria-label="Выберите один или несколько объектов"></select></div>
+<div class="field"><label for="assignee">Дополнительные сотрудники</label><select id="assignee" multiple size="4" aria-label="Выберите одного или нескольких сотрудников"></select></div>
 <div class="field"><label for="priority">Приоритет</label><select id="priority"><option value="normal">Обычный</option><option value="high">Высокий</option><option value="low">Низкий</option></select></div>
 <div class="field"><label for="due">Срок выполнения</label><input id="due" type="date"></div>
 <div class="field full"><label for="description">Описание и ожидаемый результат</label><textarea id="description" maxlength="5000" placeholder="Опишите задачу, ожидаемый результат и важные детали"></textarea></div>
@@ -49,7 +49,7 @@ function showError(message){$('error').textContent=message;$('error').classList.
 function clearError(){$('error').textContent='';$('error').classList.add('hidden');}
 function date(v){if(!v)return 'Без срока';const d=new Date(v+'T00:00:00');return isNaN(d)?v:d.toLocaleDateString('ru-RU',{day:'2-digit',month:'long',year:'numeric'});}
 function time(v){if(!v)return '';const d=new Date(String(v).replace(' ','T'));return isNaN(d)?v:d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
-function fillAssignees(){const oid=Number($('object').value);const sel=$('assignee');sel.replaceChildren(new Option('Выберите исполнителя',''));state.assignees.filter(u=>Number(u.object_id)===oid).forEach(u=>sel.add(new Option(u.full_name+' · '+(u.role==='moderator'?'модератор':'сотрудник'),u.id)));}
+function fillAssignees(){const sel=$('assignee');sel.replaceChildren();state.assignees.forEach(u=>sel.add(new Option(u.full_name+' · '+(u.role==='moderator'?'модератор':'сотрудник'),u.id)));}
 function stats(){const s=state.stats||{};$('total').textContent=Number(s.total||0);$('active').textContent=Number(s.active||0);$('reviewCount').textContent=Number(s.review||0);$('overdue').textContent=Number(s.overdue||0);}
 function renderPagination(){const p=state.pagination||{page:1,total_pages:1,total:0};const wrap=$('pagination');wrap.hidden=Number(p.total_pages)<=1;$('prevPage').disabled=Number(p.page)<=1;$('nextPage').disabled=Number(p.page)>=Number(p.total_pages);$('pageInfo').textContent='Страница '+p.page+' из '+p.total_pages+' · задач: '+p.total;}
 function render(){
@@ -60,11 +60,11 @@ function render(){
   const card=node('article','task'+(t.is_overdue?' overdue':''));const head=node('div','task-head'),left=node('div');left.append(node('h2','',t.title));
   const badges=node('div','badges');badges.append(node('span','tag '+t.status,t.status==='done'?statusLabels.done:statusLabels[t.status]));badges.append(node('span','tag '+t.priority,t.priority==='high'?'Высокий':t.priority==='low'?'Низкий':'Обычный'));if(t.is_overdue)badges.append(node('span','tag overdue','Просрочена'));left.append(badges);head.append(left);card.append(head);
   if(t.description)card.append(node('p','desc',t.description));
-  const meta=node('div','meta');[['Объект',t.object_name],['Исполнитель',t.assignee_name],['Поставил',t.creator_name],['Срок',date(t.due_date)],['Создана',time(t.created_at)],['Обновлена',time(t.updated_at)]].forEach(([k,v])=>{const x=node('div');x.append(node('b','',k+': '),document.createTextNode(v||'—'));meta.append(x);});card.append(meta);
+  const meta=node('div','meta');[['Объект',t.object_names||t.object_name],['Исполнители',t.assignee_names||t.assignee_name],['Поставил',t.creator_name],['Срок',date(t.due_date)],['Создана',time(t.created_at)],['Обновлена',time(t.updated_at)]].forEach(([k,v])=>{const x=node('div');x.append(node('b','',k+': '),document.createTextNode(v||'—'));meta.append(x);});card.append(meta);
   const actions=node('div','task-actions');
   if(t.can_update){
    if(t.status==='new'||t.status==='review'){const b=node('button','btn',t.status==='review'?'Вернуть в работу':'Взять в работу');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'in_progress'}));actions.append(b);}
-   if(t.status==='in_progress'&&Number(t.assignee_id)===Number(state.user.id)){const b=node('button','btn primary','На проверку');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'review'}));actions.append(b);}
+   if(t.status==='in_progress'&&t.is_recipient){const b=node('button','btn primary','На проверку');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'review'}));actions.append(b);}
    if(t.status==='review'&&t.can_manage){const b=node('button','btn primary','Принять выполнение');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'done'}));actions.append(b);}
    if(t.status==='done'&&t.can_manage){const b=node('button','btn','Вернуть в работу');b.type='button';b.addEventListener('click',()=>change(t.id,{status:'in_progress'}));actions.append(b);}
   }
@@ -97,8 +97,8 @@ async function load(page){const token=++loadToken;clearError();try{
  if(selectedObject&&state.objects.some(o=>String(o.id)===selectedObject))$('object').value=selectedObject;
  fillAssignees();render();
  }catch(e){if(token!==loadToken)return;showError(e.message);tasksEl.replaceChildren(node('div','empty','Не удалось загрузить задачи.'));}}
-$('object').addEventListener('change',fillAssignees);
-$('createForm').addEventListener('submit',async e=>{e.preventDefault();clearError();const b=$('createBtn');b.disabled=true;try{await api('task_create',{title:$('title').value.trim(),description:$('description').value.trim(),object_id:Number($('object').value),assignee_id:Number($('assignee').value),priority:$('priority').value,due_date:$('due').value});$('createForm').reset();fillAssignees();await load(1);}catch(err){showError(err.message);}finally{b.disabled=false;}});
+fillAssignees();
+$('createForm').addEventListener('submit',async e=>{e.preventDefault();clearError();const b=$('createBtn');b.disabled=true;try{const object_ids=Array.from($('object').selectedOptions).map(o=>Number(o.value));const assignee_ids=Array.from($('assignee').selectedOptions).map(o=>Number(o.value));await api('task_create',{title:$('title').value.trim(),description:$('description').value.trim(),object_ids,assignee_ids,priority:$('priority').value,due_date:$('due').value});$('createForm').reset();fillAssignees();await load(1);}catch(err){showError(err.message);}finally{b.disabled=false;}});
 $('search').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>load(1),300);});
 $('statusFilter').addEventListener('change',()=>load(1));$('objectFilter').addEventListener('change',()=>load(1));
 $('prevPage').addEventListener('click',()=>load(Math.max(1,Number(state.pagination.page)-1)));
