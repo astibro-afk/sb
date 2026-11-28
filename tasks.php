@@ -154,7 +154,7 @@ function openTaskView(task){
   if(task.status==='review'&&task.can_manage){const b=node('button','btn primary','Принять выполнение');b.type='button';b.addEventListener('click',runAction(()=>change(task.id,{status:'done'})));actions.append(b);}
   if(task.status==='done'&&task.can_manage){const b=node('button','btn','Вернуть в работу');b.type='button';b.addEventListener('click',runAction(()=>change(task.id,{status:'in_progress'})));actions.append(b);const archive=node('button','btn primary','В архив');archive.type='button';archive.addEventListener('click',runAction(()=>archiveTask(task.id)));actions.append(archive);}
  }
- if(actions.childNodes.length){actions.prepend(node('h3','task-view-actions-title','Действия с задачей'));info.insertBefore(actions,meta);}
+ if(actions.childNodes.length){actions.prepend(node('h3','task-view-actions-title','Действия с задачей'));info.insertBefore(actions,info.querySelector('.task-view-description')||meta);}
  const comments=node('details','comments task-view-comments');comments.open=true;const summary=node('summary','','Обсуждение ('+(task.comment_count||0)+')');comments.append(summary);
  const commentItems=node('div','comments-list');comments.append(commentItems);
  comments.addEventListener('toggle',async()=>{
