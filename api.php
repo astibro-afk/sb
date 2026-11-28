@@ -1409,9 +1409,9 @@ if ($action === 'document_upload' && $method === 'POST') {
             } else {
                 $recipients = $pdo->query("SELECT id FROM sb_users WHERE is_active=1 AND role='user'");
             }
+            [$ackTitle,$ackBody]=render_message_template($pdo,'document_ack',['title'=>$title]);
             foreach ($recipients->fetchAll(PDO::FETCH_COLUMN) as $recipientId) {
-                notification_add($pdo, (int)$recipientId, 'document_ack_required', 'Требуется ознакомление',
-                    'Необходимо ознакомиться с документом: ' . $title, 'documents.php');
+                notification_add($pdo, (int)$recipientId, 'document_ack_required', $ackTitle, $ackBody, 'documents.php');
             }
         }
         reply(200, ['ok'=>true,'id'=>$id]);
