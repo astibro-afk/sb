@@ -160,7 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $checkRole = $pdo->prepare('SELECT is_system FROM sb_roles WHERE role_key=:key');
             $checkRole->execute([':key'=>$roleKey]);
             $roleSystem = $checkRole->fetchColumn();
-            $knownPermissions = ['tasks.view','tasks.create','tasks.update_status','tasks.manage','tasks.comment','employees.view','employees.manage','documents.view','documents.acknowledge','documents.manage','reports.view','reports.create','reports.manage','incidents.view','incidents.create','incidents.manage','damage.view','damage.manage','settings.manage'];
+            $knownPermissions = ['tasks.view','tasks.create','tasks.update_status','tasks.manage','tasks.comment','employees.view','employees.manage','documents.view','documents.acknowledge','documents.manage','reports.view','reports.create','reports.manage','incidents.view','incidents.create','damage.view','damage.manage','settings.manage'];
             if ($roleSystem === false) $err = 'Роль не найдена.';
             elseif ($roleKey === 'admin') $err = 'Права администратора нельзя ограничить.';
             else {
@@ -411,8 +411,8 @@ $permissionCatalog = [
     'tasks.view'=>'Просмотр задач','tasks.create'=>'Создание задач','tasks.update_status'=>'Изменение статуса задач','tasks.manage'=>'Изменение и удаление задач','tasks.comment'=>'Комментарии к задачам',
     'employees.view'=>'Просмотр сотрудников','employees.manage'=>'Управление сотрудниками',
     'documents.view'=>'Просмотр базы документов','documents.acknowledge'=>'Подтверждение ознакомления','documents.manage'=>'Загрузка и удаление документов',
-    'reports.view'=>'Просмотр отчётов','reports.create'=>'Создание и изменение своих отчётов','reports.manage'=>'Управление отчётами в зоне доступа','incidents.view'=>'Просмотр инцидентов','incidents.create'=>'Создание инцидентов','incidents.manage'=>'Управление инцидентами',
-    'damage.view'=>'Просмотр ущерба','damage.manage'=>'Изменение возмещения ущерба','settings.manage'=>'Настройки системы','roles.manage'=>'Управление ролями'
+    'reports.view'=>'Просмотр отчётов','reports.create'=>'Создание и изменение своих отчётов','reports.manage'=>'Управление отчётами в зоне доступа','incidents.view'=>'Просмотр инцидентов','incidents.create'=>'Создание инцидентов',
+    'damage.view'=>'Просмотр ущерба','damage.manage'=>'Изменение возмещения ущерба','settings.manage'=>'Настройки системы'=>'Управление ролями'
 ];
 $permissionRows = $pdo->query('SELECT role_key,permission_key FROM sb_role_permissions WHERE is_allowed=1')->fetchAll();
 $roleAllowed = [];
