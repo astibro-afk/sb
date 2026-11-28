@@ -25,7 +25,7 @@
 </style></head>
 <body>
 <header class="topbar"><div class="top-inner">
-<a class="brand" href="index.html"><div class="logo">СБ</div><div><h1>Служба безопасности</h1><p>Группа БФ Волгоград 1</p></div></a>
+<a class="brand" href="index.html"><div class="logo" id="brandLogo">СБ</div><div><h1 id="brandName">Служба безопасности</h1><p id="brandSubtitle">Группа БФ Волгоград 1</p></div></a>
 <div class="header-right"><div class="user-chip" id="userChip" hidden><span class="user-name" id="userName"></span><span class="user-meta" id="userMeta"></span></div><a class="btn" id="sbHeaderAddUser" href="add-user.php" hidden>Добавить пользователя</a><a class="btn" id="adminManageLink" href="users.php" hidden>Управление</a><a class="btn" href="notifications.php">Уведомления <span class="tag" id="notificationBadge" hidden>0</span></a><button class="btn" id="logout" type="button">Выход</button></div>
 </div><nav class="nav" aria-label="Основная навигация"><div class="nav-inner"><a class="active" href="index.html">Главная</a><a href="reports.php">Отчёты</a><a href="tasks.php">Задачи</a><a href="employees.php">Сотрудники</a><a href="notifications.php">Уведомления</a></div></nav></header>
 <main class="page">
@@ -61,12 +61,14 @@ function renderObjects(objects){const box=$('objectList');box.replaceChildren();
 function renderKpis(summary,recordsCount,employeesCount,objects){const active=Number(summary.active)||0,overdue=Number(summary.overdue)||0,review=Number(summary.review)||0,box=$('kpis');box.replaceChildren();if(user.role==='user'){box.append(kpi('Мои активные задачи',active,'Не завершены'),kpi('Просроченные задачи',overdue,'Требуют внимания'),kpi('Мои отчёты за месяц',recordsCount,'С начала месяца'),kpi('Последний отчёт',summary.last_report?date(summary.last_report,true):'—','По данным архива'));$('welcomeText').textContent='Ваши задачи, сроки и последние отчёты.';$('tasksHeading').textContent='Мои задачи';$('reportsHeading').textContent='Мои последние отчёты';}else{box.append(kpi(user.role==='admin'?'Объекты':'Объекты в зоне ответственности',objects.length,'Доступные объекты'),kpi('Отчёты за месяц',recordsCount,'С начала месяца'),kpi('Активные задачи',active,'Не завершены'),kpi('Сотрудники',employeesCount,'В пределах доступа'));$('welcomeText').textContent=user.role==='admin'?'Сводная информация по всем объектам.':'Сводная информация по закреплённым объектам.';}if(user.role!=='user'&&(review||overdue)){const n=el('div','notice');n.append(el('strong','',review+' задач на проверке · '+overdue+' просрочено'),el('p','','Показатели рассчитаны по задачам, доступным вашей роли.'));$('taskList').prepend(n);}}
 async function dashboard(){
  $('greeting').textContent='Здравствуйте, '+(user.full_name||user.username)+'!';
- $('roleLabel').textContent=roleNames[user.role]||'Персональная панель';
+ $('roleLabel').textContent=user.role_name||roleNames[user.role]||'Персональная панель';
  $('userChip').hidden=false;$('userName').textContent=user.full_name||user.username;
- $('userMeta').textContent=(roleNames[user.role]||user.role)+((user.object_names||[]).length?' · '+user.object_names.join(', '):'');
+ $('userMeta').textContent=(user.role_name||roleNames[user.role]||user.role)+((user.object_names||[]).length?' · '+user.object_names.join(', '):'');
  $('adminManageLink').hidden=user.role!=='admin';$('settingsQuick').hidden=user.role!=='admin';
  const data=await get('dashboard_data');
  user=data.user||user;
+ if(data.settings&&data.settings.organization_name)$('brandName').textContent=data.settings.organization_name;
+ if(data.settings&&data.settings.logo_url){$('brandLogo').textContent='';$('brandLogo').style.background='transparent';$('brandLogo').style.padding='0';const img=document.createElement('img');img.src=data.settings.logo_url;img.alt='Логотип';img.style.width='100%';img.style.height='100%';img.style.objectFit='contain';$('brandLogo').appendChild(img);}
  renderTasks(data.tasks||[]);
  renderReports(data.reports||[]);
  renderNotices(data.notifications||[]);
