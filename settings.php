@@ -41,7 +41,7 @@ async function load(){
  fillTemplates(d.templates);
  const p=await get('permissions_data');catalog=p.catalog||{};roles=p.roles||{};defaults=p.defaults||{};renderPermissions();
 }
-async function saveSettings(form,button){button.disabled=true;const old=button.textContent;button.textContent='Сохраняем…';try{const fd=new FormData(form);fd.append('csrf',csrf);const d=await read(await fetch('api.php?action=settings_save',{method:'POST',credentials:'same-origin',body:fd}));show('Настройки сохранены.','success');await load();}catch(e){show(e.message,'error');}finally{button.disabled=false;button.textContent=old;}}
+async function saveSettings(form,button){button.disabled=true;const old=button.textContent;button.textContent='Сохраняем…';try{const fd=new FormData(form);fd.append('csrf',csrf);if(form.id==='notificationForm'){fd.set('notifications_enabled',$('notificationsEnabled').checked?'1':'0');fd.set('push_enabled',$('pushEnabled').checked?'1':'0');}const d=await read(await fetch('api.php?action=settings_save',{method:'POST',credentials:'same-origin',body:fd}));show('Настройки сохранены.','success');await load();}catch(e){show(e.message,'error');}finally{button.disabled=false;button.textContent=old;}}
 $('generalForm').addEventListener('submit',e=>{e.preventDefault();saveSettings(e.currentTarget,$('saveGeneral'));});
 $('notificationForm').addEventListener('submit',e=>{e.preventDefault();saveSettings(e.currentTarget,e.currentTarget.querySelector('button[type=submit]'));});
 $('templatesForm').addEventListener('submit',e=>{e.preventDefault();saveSettings(e.currentTarget,e.currentTarget.querySelector('button[type=submit]'));});
