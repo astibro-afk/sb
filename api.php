@@ -173,21 +173,15 @@ function ensure_roles_schema(PDO $pdo): void {
     }
     $pdo->exec("UPDATE sb_roles SET display_name='Разработчик', is_system=1, base_role='admin' WHERE role_key='admin'");
     $pdo->exec("UPDATE sb_roles SET display_name='Пользователь', is_system=0, base_role='user' WHERE role_key='user'");
-    // Preserve former moderator access and employee assignments in a regular configurable role.
-    $pdo->exec("INSERT IGNORE INTO sb_roles (role_key,display_name,base_role,is_system) VALUES ('custom_object_lead','Руководитель объектов','moderator',0)");
-    $pdo->exec("UPDATE sb_roles SET base_role='moderator', is_system=0 WHERE role_key='custom_object_lead'");
-    $copyLegacyPermissions = $pdo->prepare("INSERT IGNORE INTO sb_role_permissions (role_key,permission_key,is_allowed) SELECT 'custom_object_lead',permission_key,is_allowed FROM sb_role_permissions WHERE role_key='moderator'");
-    $copyLegacyPermissions->execute();
+    // Seed default permissions only for the built-in configurable "Пользователь" role.
+    // Custom roles must remain deleted when the developer removes them.
     $defaults = [
-        'custom_object_lead'=>['tasks.view','tasks.create','tasks.manage','tasks.update_status','tasks.comment','employees.view','employees.manage','documents.view','documents.manage','documents.acknowledge','reports.view','reports.create','reports.manage'],
         'user'=>['tasks.view','tasks.update_status','tasks.comment','employees.view','documents.view','documents.acknowledge','reports.view','reports.create']
     ];
     $permissionInsert = $pdo->prepare('INSERT IGNORE INTO sb_role_permissions (role_key,permission_key,is_allowed) VALUES (:role,:permission,1)');
     foreach ($defaults as $roleKey=>$permissions) foreach ($permissions as $permission) {
         $permissionInsert->execute([':role'=>$roleKey,':permission'=>$permission]);
     }
-    $pdo->exec("UPDATE sb_users SET role='custom_object_lead' WHERE role='moderator'");
-    $pdo->exec("DELETE FROM sb_roles WHERE role_key='moderator'");
 }
 
 function role_can(PDO $pdo, array $ctx, string $permission): bool {
