@@ -75,7 +75,7 @@ async function dashboard(){
  hideWithout('a[href="documents.php"]','documents.view');
  renderTasks(data.tasks||[]);
  renderReports(data.reports||[]);
- renderNotices(data.notifications||[]);
+
  renderObjects(data.objects||[]);
  const count=Number(data.unread)||0;
  $('notificationBadge').textContent=count>99?'99+':String(count);
