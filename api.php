@@ -1141,6 +1141,15 @@ if ($action === 'document_upload' && $method === 'POST') {
     if (!is_dir($storage) && !@mkdir($storage, 0750, true) && !is_dir($storage)) {
         reply(500, ['ok'=>false,'error'=>'Не удалось подготовить хранилище документов на сервере.']);
     }
+    $denyFile = $storage . '/.htaccess';
+    if (!is_file($denyFile)) {
+        $denyRules = "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Deny from all\n</IfModule>\n";
+        if (@file_put_contents($denyFile, $denyRules, LOCK_EX) === false) {
+            reply(500, ['ok'=>false,'error'=>'Не удалось закрыть прямой доступ к хранилищу документов.']);
+        }
+    }
+    $indexFile = $storage . '/index.html';
+    if (!is_file($indexFile)) @file_put_contents($indexFile, '<!doctype html><title></title>', LOCK_EX);
     $storedName = bin2hex(random_bytes(24)) . '.' . $extension;
     $destination = $storage . '/' . $storedName;
     if (!move_uploaded_file($tmpName, $destination)) {
