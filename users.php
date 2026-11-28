@@ -160,7 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $checkRole = $pdo->prepare('SELECT is_system FROM sb_roles WHERE role_key=:key');
             $checkRole->execute([':key'=>$roleKey]);
             $roleSystem = $checkRole->fetchColumn();
-            $knownPermissions = ['tasks.view','tasks.create','tasks.manage','employees.view','employees.manage','documents.view','documents.manage','reports.view','incidents.view','incidents.create','incidents.manage','damage.view','damage.manage','settings.manage','roles.manage'];
+            $knownPermissions = ['tasks.view','tasks.create','tasks.update_status','tasks.manage','tasks.comment','employees.view','employees.manage','documents.view','documents.acknowledge','documents.manage','reports.view','reports.create','reports.manage','incidents.view','incidents.create','incidents.manage','damage.view','damage.manage','settings.manage','roles.manage'];
             if ($roleSystem === false) $err = 'Роль не найдена.';
             elseif ($roleKey === 'admin') $err = 'Права администратора нельзя ограничить.';
             else {
