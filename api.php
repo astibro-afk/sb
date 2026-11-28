@@ -967,7 +967,11 @@ if ($action === 'incident_create' && $method === 'POST') {
     }
     try{$st=$pdo->prepare('INSERT INTO sb_incidents (object_id,created_by,event_at,phone,description,photo_name,photo_mime) VALUES (:object,:user,:event,:phone,:description,:photo,:mime)');
         $st->execute([':object'=>$objectId,':user'=>(int)$ctx['id'],':event'=>$dt->format('Y-m-d H:i:s'),':phone'=>$phone,':description'=>$description,':photo'=>$photoName,':mime'=>$photoMime]);
-        $id=(int)$pdo->lastInsertId();audit_log($pdo,$ctx,'incident_created','incident',$id,$description,['object_id'=>$objectId]);reply(200,['ok'=>true,'id'=>$id]);
+        $id=(int)$pdo->lastInsertId();audit_log($pdo,$ctx,'incident_created','incident',$id,$description,['object_id'=>$objectId]);
+        $recipients=$pdo->prepare("SELECT DISTINCT u.id FROM sb_users u JOIN sb_roles r ON r.role_key=u.role LEFT JOIN sb_user_objects uo ON uo.user_id=u.id AND uo.object_id=:object WHERE u.is_active=1 AND u.id<>:creator AND (r.base_role='admin' OR (r.base_role='moderator' AND uo.user_id IS NOT NULL))");
+        $recipients->execute([':object'=>$objectId,':creator'=>(int)$ctx['id']]);
+        foreach($recipients->fetchAll(PDO::FETCH_COLUMN) as $recipientId) notification_add($pdo,(int)$recipientId,'incident_created','Новый инцидент','Зарегистрирован инцидент на объекте.','incidents.php');
+        reply(200,['ok'=>true,'id'=>$id]);
     }catch(Throwable $e){if($photoName)@unlink(__DIR__.'/incident-storage/'.$photoName);error_log('SB incident create: '.$e->getMessage());reply(500,['ok'=>false,'error'=>'Не удалось сохранить инцидент.']);}
 }
 if ($action === 'incident_photo' && $method === 'GET') {
