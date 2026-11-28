@@ -98,7 +98,8 @@ try {
         INDEX idx_notifications_user_read (user_id, is_read, created_at),
         CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    $pdo->exec("ALTER TABLE sb_users MODIFY role VARCHAR(64) NOT NULL DEFAULT 'user'");
+    $roleType = $pdo->query("SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='sb_users' AND COLUMN_NAME='role'")->fetchColumn();
+    if (stripos((string)$roleType,'varchar(64)') === false) $pdo->exec("ALTER TABLE sb_users MODIFY role VARCHAR(64) NOT NULL DEFAULT 'user'");
     $pdo->exec("CREATE TABLE IF NOT EXISTS sb_roles (
         role_key VARCHAR(64) NOT NULL PRIMARY KEY,
         display_name VARCHAR(80) NOT NULL,
@@ -401,10 +402,10 @@ $unassignedUsers = array_values(array_filter($users, function($u) use ($userObje
 $auditRows = $pdo->query('SELECT actor_name, action, target_label, created_at FROM sb_audit_log ORDER BY id DESC LIMIT 50')->fetchAll();
 $roleRows = $pdo->query('SELECT role_key,display_name,base_role,is_system FROM sb_roles ORDER BY is_system DESC,display_name')->fetchAll();
 $permissionCatalog = [
-    'tasks.view'=>'Просмотр задач','tasks.create'=>'Создание задач','tasks.manage'=>'Изменение и удаление задач',
+    'tasks.view'=>'Просмотр задач','tasks.create'=>'Создание задач','tasks.update_status'=>'Изменение статуса задач','tasks.manage'=>'Изменение и удаление задач','tasks.comment'=>'Комментарии к задачам',
     'employees.view'=>'Просмотр сотрудников','employees.manage'=>'Управление сотрудниками',
-    'documents.view'=>'Просмотр базы документов','documents.manage'=>'Загрузка и удаление документов',
-    'reports.view'=>'Просмотр отчётов','incidents.view'=>'Просмотр инцидентов','incidents.create'=>'Создание инцидентов','incidents.manage'=>'Управление инцидентами',
+    'documents.view'=>'Просмотр базы документов','documents.acknowledge'=>'Подтверждение ознакомления','documents.manage'=>'Загрузка и удаление документов',
+    'reports.view'=>'Просмотр отчётов','reports.create'=>'Создание и изменение своих отчётов','reports.manage'=>'Управление отчётами в зоне доступа','incidents.view'=>'Просмотр инцидентов','incidents.create'=>'Создание инцидентов','incidents.manage'=>'Управление инцидентами',
     'damage.view'=>'Просмотр ущерба','damage.manage'=>'Изменение возмещения ущерба','settings.manage'=>'Настройки системы','roles.manage'=>'Управление ролями'
 ];
 $permissionRows = $pdo->query('SELECT role_key,permission_key FROM sb_role_permissions WHERE is_allowed=1')->fetchAll();
