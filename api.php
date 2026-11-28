@@ -1886,7 +1886,9 @@ if ($action === 'task_comment_add' && $method === 'POST') {
         if($pdo->inTransaction())$pdo->rollBack();
         foreach($moved as $path) if(is_file($path)) @unlink($path);
         error_log('SB task comment add error at '.$saveStage.': '.$e->getMessage());
-        reply(500,['ok'=>false,'error'=>'Не удалось сохранить комментарий и вложения. Попробуйте ещё раз.']);
+        $stageLabels=['подготовке файлов'=>'подготовке файлов','сохранении записи комментария'=>'сохранении самого комментария','сохранении метаданных вложений'=>'сохранении сведений о прикреплённых файлах','сохранении упоминаний и уведомлений'=>'сохранении упоминаний или уведомлений','завершении транзакции'=>'завершении сохранения'];
+        $safeStage=$stageLabels[$saveStage]??'сохранении комментария';
+        reply(500,['ok'=>false,'error'=>'Не удалось сохранить комментарий: ошибка при '.$safeStage.'. Попробуйте ещё раз.']);
     }
     reply(200,['ok'=>true,'comment_id'=>$commentId]);
 }
