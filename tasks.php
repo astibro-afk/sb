@@ -43,6 +43,8 @@ if(empty($_SESSION['sb_user_id'])){header('Location: index.html');exit;}
 .task-row-main{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:7px;min-width:0}
 .task-row-title{display:block;width:100%;font-size:14px;line-height:1.35;font-weight:700;color:#203e42;white-space:normal;overflow-wrap:anywhere}
 .task-row-main .badges{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.task-row-main .task-unread-badge{background:#fff0ed;color:#b44335;border:1px solid #f1c7c0;font-weight:800;box-shadow:0 1px 3px rgba(180,67,53,.08)}
+.task-row-main .task-unread-badge::before{content:'●';font-size:8px;margin-right:5px;vertical-align:1px}
 .task-row-main .tag{padding:3px 8px;font-size:10px;line-height:1.35}
 .task-row-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:center;justify-content:stretch;gap:8px 14px;min-width:0;color:#526e70;font-size:12px}
 .task-row-meta>span{display:flex;flex-direction:column;gap:2px;min-width:0;max-width:none;white-space:normal;line-height:1.3}
@@ -172,6 +174,7 @@ function openTaskView(task){
   try{
    const data=await get('task_comments',{id:task.id});comments._mentionable=data.mentionable_users||[];const mentionSelect=discussion.querySelector('.comment-form select');if(mentionSelect)(data.mentionable_users||[]).forEach(u=>mentionSelect.add(new Option(u.full_name,u.id)));commentItems.replaceChildren();
    (data.comments||[]).forEach(appendComment);
+   task.unread_comment_count=0;updateTaskUnreadBadge(task.id,0);
    summary.textContent='Обсуждение ('+(data.comments||[]).length+')';if(!(data.comments||[]).length)commentItems.append(node('div','comment','Комментариев пока нет.'));
    requestAnimationFrame(()=>{commentItems.scrollTop=commentItems.scrollHeight;});
    if(commentPollTimer)clearInterval(commentPollTimer);
@@ -206,13 +209,34 @@ function openTaskView(task){
  comments.dispatchEvent(new Event('toggle'));
  requestAnimationFrame(()=>close.focus());
 }
+function updateTaskUnreadBadge(taskId,count){
+ const card=tasksEl.querySelector('.task-row-card[data-task-id="'+String(taskId)+'"]');
+ if(!card)return;
+ const badges=card.querySelector('.task-row-main .badges');
+ if(!badges)return;
+ let badge=badges.querySelector('.task-unread-badge');
+ if(Number(count)>0){
+  if(!badge){badge=node('span','tag task-unread-badge');badges.append(badge);}
+  badge.textContent='Новые сообщения: '+Number(count);
+  badge.title='Непрочитанные комментарии';
+ }else if(badge){badge.remove();}
+}
+async function refreshTaskUnreadCounts(){
+ if(document.visibilityState==='hidden'||activeTaskModal||state.archiveView||!state.tasks.length)return;
+ try{
+  const params={page:state.pagination.page||1,search:$('search').value.trim(),status:$('statusFilter').value,object_id:$('objectFilter').value,archive:'0'};
+  const data=await get('tasks_data',params);
+  const counts=new Map((data.tasks||[]).map(task=>[String(task.id),Number(task.unread_comment_count||0)]));
+  state.tasks.forEach(task=>{task.unread_comment_count=counts.get(String(task.id))||0;updateTaskUnreadBadge(task.id,task.unread_comment_count);});
+ }catch(_err){/* Повторим обновление при следующем цикле. */}
+}
 function render(){
  const rows=state.tasks;stats();renderPagination();tasksEl.replaceChildren();
  if(!rows.length){tasksEl.append(node('div','empty',Number(state.stats.total||0)>0?'По заданным фильтрам задач нет.':'Пока задач нет. Новые поручения появятся здесь.'));return;}
  rows.forEach(t=>{
-  const card=node('article','task-row-card'+(t.is_overdue?' overdue':''));const open=node('button','task-row-open');open.type='button';open.setAttribute('aria-label','Открыть задачу: '+(t.title||''));
+  const card=node('article','task-row-card'+(t.is_overdue?' overdue':''));card.dataset.taskId=String(t.id);const open=node('button','task-row-open');open.type='button';open.setAttribute('aria-label','Открыть задачу: '+(t.title||''));
   const main=node('div','task-row-main'),title=node('strong','task-row-title',t.title||'Без названия');main.append(title);
-  const badges=node('div','badges');badges.append(node('span','tag '+t.status,statusLabels[t.status]||t.status));badges.append(node('span','tag '+t.priority,t.priority==='high'?'Высокий':t.priority==='low'?'Низкий':'Обычный'));if(t.is_overdue)badges.append(node('span','tag overdue','Просрочена'));if(state.archiveView)badges.append(node('span','tag done','В архиве'));main.append(badges);open.append(main);
+  const badges=node('div','badges');badges.append(node('span','tag '+t.status,statusLabels[t.status]||t.status));badges.append(node('span','tag '+t.priority,t.priority==='high'?'Высокий':t.priority==='low'?'Низкий':'Обычный'));if(t.is_overdue)badges.append(node('span','tag overdue','Просрочена'));if(state.archiveView)badges.append(node('span','tag done','В архиве'));if(Number(t.unread_comment_count||0)>0)badges.append(node('span','tag task-unread-badge','Новые сообщения: '+Number(t.unread_comment_count)));main.append(badges);open.append(main);
   const meta=node('div','task-row-meta');[['Исполнитель',t.assignee_names||t.assignee_name],['Срок',date(t.due_date)],['Объект',t.object_names||t.object_name]].forEach(([label,value])=>{if(value){const item=node('span','');item.append(node('b','',label+': '),document.createTextNode(value));meta.append(item);}});open.append(meta);
   const controls=node('div','task-row-controls');
   if(state.user&&state.user.role==='admin'){
@@ -278,7 +302,7 @@ $('statusFilter').addEventListener('change',()=>load(1));$('objectFilter').addEv
 $('prevPage').addEventListener('click',()=>load(Math.max(1,Number(state.pagination.page)-1)));
 $('nextPage').addEventListener('click',()=>load(Math.min(Number(state.pagination.total_pages),Number(state.pagination.page)+1)));
 $('archiveToggle').addEventListener('click',()=>{state.archiveView=!state.archiveView;$('archiveToggle').textContent=state.archiveView?'Текущие задачи':'Архив задач';$('tasksHeading').textContent=state.archiveView?'Архив задач':'Задачи и поручения';$('statusFilter').value='';$('search').value='';$('objectFilter').value='';load(1);});
-$('reload').addEventListener('click',()=>load(state.pagination.page||1));load(1);
+$('reload').addEventListener('click',()=>load(state.pagination.page||1));load(1);setInterval(refreshTaskUnreadCounts,12000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshTaskUnreadCounts();});
 })();
 </script>
 <script>(function(){'use strict';function ping(){if(document.visibilityState==='hidden')return;fetch('api.php?action=presence_ping',{credentials:'same-origin',cache:'no-store'}).catch(function(){});}ping();setInterval(ping,60000);document.addEventListener('visibilitychange',ping);})();</script>
