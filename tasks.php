@@ -150,7 +150,7 @@ function editTask(task){
  fillAssignees(false);const availableIds=state.assignees.filter(u=>(!state.user||Number(u.id)!==Number(state.user.id))&&(!objectIds.length||(u.object_ids||[]).some(id=>objectIds.includes(Number(id))))).map(u=>Number(u.id));const allAssigneesSelected=availableIds.length>0&&availableIds.every(id=>assigneeIds.includes(id));
  Array.from($('assignee').options).forEach(o=>o.selected=o.value==='__all__'?allAssigneesSelected:assigneeIds.includes(Number(o.value)));
  refreshMultiDropdown('object');refreshMultiDropdown('assignee');
- $('createPanel').scrollIntoView({behavior:'smooth',block:'start'});$('title').focus();
+ requestAnimationFrame(()=>{const panel=$('createPanel');const header=document.querySelector('.sb-site-header');const headerHeight=header?header.getBoundingClientRect().height:0;const top=panel.getBoundingClientRect().top+window.scrollY-headerHeight-12;window.scrollTo({top:Math.max(0,top),behavior:'smooth'});$('title').focus({preventScroll:true});});
 }
 async function deleteComment(commentId,task, item, summary, commentItems){
  if(!confirm('Удалить этот комментарий?'))return;
