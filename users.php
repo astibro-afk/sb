@@ -195,6 +195,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $newKey = 'custom_' . bin2hex(random_bytes(8));
                     $st = $pdo->prepare('INSERT INTO sb_roles (role_key,display_name,base_role,is_system) VALUES (:key,:name,:base,0)');
                     $st->execute([':key'=>$newKey,':name'=>$displayName,':base'=>$baseRole]);
+                    $copyPermissions = $pdo->prepare('INSERT INTO sb_role_permissions (role_key,permission_key,is_allowed) SELECT :new_key,permission_key,is_allowed FROM sb_role_permissions WHERE role_key=:base_key');
+                    $copyPermissions->execute([':new_key'=>$newKey,':base_key'=>$baseRole]);
                     users_audit_log($pdo,$me,'role_created','role',null,$displayName,['role_key'=>$newKey,'base_role'=>$baseRole]);
                 }
             }
