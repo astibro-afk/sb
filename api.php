@@ -172,8 +172,8 @@ function ensure_roles_schema(PDO $pdo): void {
         $seed->execute([':key'=>$role[0],':name'=>$role[1],':base'=>$role[2]]);
     }
     $defaults = [
-        'moderator'=>['tasks.view','tasks.create','tasks.manage','employees.view','documents.view','documents.manage','reports.view','incidents.view','incidents.create','incidents.manage','damage.view','damage.manage'],
-        'user'=>['tasks.view','documents.view','reports.view','incidents.view','incidents.create','damage.view']
+        'moderator'=>['tasks.view','tasks.create','tasks.manage','tasks.update_status','tasks.comment','employees.view','employees.manage','documents.view','documents.manage','documents.acknowledge','reports.view','reports.create','reports.manage','incidents.view','incidents.create','incidents.manage','damage.view','damage.manage'],
+        'user'=>['tasks.view','tasks.update_status','tasks.comment','documents.view','documents.acknowledge','reports.view','reports.create','incidents.view','incidents.create','damage.view']
     ];
     $permissionInsert = $pdo->prepare('INSERT IGNORE INTO sb_role_permissions (role_key,permission_key,is_allowed) VALUES (:role,:permission,1)');
     foreach ($defaults as $roleKey=>$permissions) foreach ($permissions as $permission) {
@@ -564,6 +564,9 @@ function user_ctx(PDO $pdo, array $u): array {
     $roleStmt = $pdo->prepare('SELECT display_name,base_role FROM sb_roles WHERE role_key=:key LIMIT 1');
     $roleStmt->execute([':key'=>$roleKey]);
     $roleInfo = $roleStmt->fetch() ?: ['display_name'=>$roleKey,'base_role'=>in_array($roleKey,['admin','moderator','user'],true)?$roleKey:'user'];
+    $permissionStmt = $pdo->prepare('SELECT permission_key FROM sb_role_permissions WHERE role_key=:key AND is_allowed=1');
+    $permissionStmt->execute([':key'=>$roleKey]);
+    $permissions = $permissionStmt->fetchAll(PDO::FETCH_COLUMN);
     return [
         'id' => (int)$u['id'],
         'username' => (string)$u['username'],
@@ -571,6 +574,7 @@ function user_ctx(PDO $pdo, array $u): array {
         'role' => (string)$roleInfo['base_role'],
         'role_key' => $roleKey,
         'role_name' => (string)$roleInfo['display_name'],
+        'permissions' => $permissions,
         'object_id' => $objectIds ? $objectIds[0] : ($u['object_id'] !== null ? (int)$u['object_id'] : null),
         'object_name' => $objectNames ? $objectNames[0] : '',
         'object_ids' => $objectIds,
@@ -1207,6 +1211,7 @@ if ($action === 'notifications_read' && $method === 'POST') {
 
 
 if ($action === 'documents_data' && $method === 'GET') {
+    if (!role_can($pdo,$ctx,'documents.view')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $search = trim((string)($_GET['search'] ?? ''));
     $category = trim((string)($_GET['category'] ?? ''));
     $search = mb_substr($search, 0, 100);
@@ -1290,6 +1295,7 @@ if ($action === 'documents_data' && $method === 'GET') {
 }
 
 if ($action === 'document_upload' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'documents.manage')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     if (!in_array($ctx['role'], ['admin','moderator'], true)) {
         reply(403, ['ok'=>false,'error'=>'Загружать документы могут только администратор и модератор.']);
     }
@@ -1416,6 +1422,7 @@ if ($action === 'document_upload' && $method === 'POST') {
 }
 
 if ($action === 'document_acknowledge' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'documents.acknowledge')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $body = input_json();
     check_csrf($body);
     if ($ctx['role'] !== 'user') reply(403, ['ok'=>false,'error'=>'Подтверждать ознакомление должен сотрудник.']);
@@ -1439,6 +1446,7 @@ if ($action === 'document_acknowledge' && $method === 'POST') {
 }
 
 if ($action === 'document_ack_status' && $method === 'GET') {
+    if (!role_can($pdo,$ctx,'documents.manage')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     if (!in_array($ctx['role'], ['admin','moderator'], true)) {
         reply(403, ['ok'=>false,'error'=>'Просматривать список ознакомления могут только руководители.']);
     }
@@ -1491,6 +1499,7 @@ if ($action === 'document_ack_status' && $method === 'GET') {
 }
 
 if ($action === 'document_delete' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'documents.manage')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $body = input_json();
     check_csrf($body);
     $id = (int)($body['id'] ?? 0);
@@ -1515,6 +1524,7 @@ if ($action === 'document_delete' && $method === 'POST') {
 }
 
 if ($action === 'document_download' && $method === 'GET') {
+    if (!role_can($pdo,$ctx,'documents.view')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $id = (int)($_GET['id'] ?? 0);
     if ($id < 1) reply(400, ['ok'=>false,'error'=>'Не выбран документ.']);
     $st = $pdo->prepare('SELECT id,title,original_name,stored_name,mime_type,file_size,object_id FROM sb_documents WHERE id=:id AND is_active=1 LIMIT 1');
@@ -1670,6 +1680,7 @@ if ($action === 'push_pair_claim' && $method === 'POST') {
 }
 
 if ($action === 'tasks_data' && $method === 'GET') {
+    if (!role_can($pdo,$ctx,'tasks.view')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $page = max(1, (int)($_GET['page'] ?? 1));
     $perPage = 50;
     $search = trim((string)($_GET['search'] ?? ''));
@@ -1817,6 +1828,7 @@ if ($action === 'tasks_data' && $method === 'GET') {
     ]);
 }
 if ($action === 'task_delete' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'tasks.manage')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     if (($ctx['role'] ?? '') !== 'admin') reply(403,['ok'=>false,'error'=>'Удалять задачи может только администратор.']);
     $body=input_json(); check_csrf($body); $id=(int)($body['id']??0);
     if($id<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
@@ -1842,6 +1854,7 @@ if ($action === 'task_delete' && $method === 'POST') {
     reply(200,['ok'=>true]);
 }
 if ($action === 'task_archive' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'tasks.manage')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $body=input_json(); check_csrf($body); $id=(int)($body['id']??0);
     if($id<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
     $st=$pdo->prepare("SELECT t.id,t.title,t.status,t.created_by,t.is_archived,EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:viewer) AS has_object FROM sb_tasks t WHERE t.id=:id LIMIT 1");
@@ -1859,6 +1872,7 @@ if ($action === 'task_archive' && $method === 'POST') {
     reply(200,['ok'=>true]);
 }
 if ($action === 'task_restore' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'tasks.manage')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $body=input_json(); check_csrf($body); $id=(int)($body['id']??0);
     if($id<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
     $st=$pdo->prepare("SELECT t.id,t.title,t.status,t.created_by,t.is_archived,EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:viewer) AS has_object FROM sb_tasks t WHERE t.id=:id LIMIT 1");
@@ -1877,6 +1891,7 @@ if ($action === 'task_restore' && $method === 'POST') {
     reply(200,['ok'=>true]);
 }
 if ($action === 'task_comments' && $method === 'GET') {
+    if (!role_can($pdo,$ctx,'tasks.view')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $taskId=(int)($_GET['id']??0); if($taskId<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
     $st=$pdo->prepare("SELECT t.id, EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:uid) AS recipient, EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:mid) AS object_access FROM sb_tasks t WHERE t.id=:id LIMIT 1");
     $st->execute([':uid'=>(int)$ctx['id'],':mid'=>(int)$ctx['id'],':id'=>$taskId]); $task=$st->fetch();
@@ -1903,6 +1918,7 @@ if ($action === 'task_comments' && $method === 'GET') {
     reply(200,['ok'=>true,'comments'=>$cs->fetchAll()]);
 }
 if ($action === 'task_comment_delete' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'tasks.comment')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $body=input_json(); check_csrf($body);
     $commentId=(int)($body['comment_id']??0);
     if($commentId<1) reply(400,['ok'=>false,'error'=>'Не выбран комментарий.']);
@@ -1947,6 +1963,7 @@ if ($action === 'task_comment_delete' && $method === 'POST') {
     reply(200,['ok'=>true]);
 }
 if ($action === 'task_create' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'tasks.create')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     if(!in_array($ctx['role'],['admin','moderator'],true)) reply(403,['ok'=>false,'error'=>'Создавать задачи могут только руководитель и модератор.']);
     $body=input_json(); check_csrf($body);
     $objectIds=array_values(array_unique(array_filter(array_map('intval',is_array($body['object_ids']??null)?$body['object_ids']:[]),function($v){return $v>0;})));
@@ -1979,6 +1996,7 @@ if ($action === 'task_create' && $method === 'POST') {
     audit_log($pdo,$ctx,'task_created','task',$id,$title,['object_ids'=>$targetIds,'assignee_ids'=>$recipientIds]); reply(200,['ok'=>true,'id'=>$id]);
 }
 if ($action === 'task_update' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'tasks.update_status')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $body=input_json(); check_csrf($body); $id=(int)($body['id']??0);
     $st=$pdo->prepare("SELECT t.*, EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:uid) AS is_recipient, EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:mid) AS has_object FROM sb_tasks t WHERE t.id=:id LIMIT 1");
     $st->execute([':uid'=>(int)$ctx['id'],':mid'=>(int)$ctx['id'],':id'=>$id]); $task=$st->fetch(); if(!$task)reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
@@ -2007,6 +2025,7 @@ if ($action === 'task_update' && $method === 'POST') {
     reply(200,['ok'=>true]);
 }
 if ($action === 'employees_data' && $method === 'GET') {
+    if (!role_can($pdo,$ctx,'employees.view')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $targetId = (int)($_GET['user_id'] ?? 0);
     $sql = "SELECT u.id,u.username,u.full_name,u.role,u.is_active,u.created_at,
         (SELECT MAX(a.created_at) FROM sb_audit_log a WHERE a.actor_user_id=u.id AND a.action='login') AS last_login,
@@ -2054,6 +2073,7 @@ if ($action === 'employees_data' && $method === 'GET') {
     reply(200,['ok'=>true,'employees'=>$users,'user'=>$ctx,'csrf'=>csrf_token()]);
 }
 if ($action === 'employees_presence' && $method === 'GET') {
+    if (!role_can($pdo,$ctx,'employees.view')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     // Лёгкий endpoint для обновления статусов без повторной загрузки карточек и статистики.
     $sql = "SELECT u.id,u.is_active,
         CASE WHEN p.last_seen >= DATE_SUB(NOW(), INTERVAL 90 SECOND) THEN 1 ELSE 0 END AS is_online
@@ -2087,6 +2107,7 @@ if ($action === 'employees_presence' && $method === 'GET') {
 }
 
 if ($action === 'employee_history' && $method === 'GET') {
+    if (!role_can($pdo,$ctx,'employees.view')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $targetId=(int)($_GET['user_id'] ?? 0);
     if ($targetId < 1) reply(400,['ok'=>false,'error'=>'Не выбран сотрудник.']);
     if ($ctx['role']==='user' && $targetId!==(int)$ctx['id']) reply(403,['ok'=>false,'error'=>'Недостаточно прав.']);
@@ -2123,6 +2144,7 @@ if ($action === 'admin_password_reset' && $method === 'POST') {
 }
 
 if ($action === 'report_comment' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'reports.view')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $body = input_json();
     check_csrf($body);
     if ($ctx['role'] !== 'admin') {
@@ -2155,6 +2177,7 @@ if ($action === 'report_comment' && $method === 'POST') {
 }
 
 if ($action === 'reports_data' && $method === 'GET') {
+    if (!role_can($pdo,$ctx,'reports.view')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $from = (string)($_GET['from'] ?? date('Y-m-01'));
     $to = (string)($_GET['to'] ?? date('Y-m-d'));
     $objectIds = array_values(array_unique(array_filter(array_map('intval', explode(',', (string)($_GET['object_ids'] ?? ''))), function($id) { return $id > 0; })));
@@ -2341,6 +2364,7 @@ if ($action === 'reports_data' && $method === 'GET') {
 }
 
 if ($action === 'report_detail' && $method === 'GET') {
+    if (!role_can($pdo,$ctx,'reports.view')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $recordKey = trim((string)($_GET['record_key'] ?? ''));
     if (!preg_match('/^[rd]:[a-f0-9]{64}$/i', $recordKey)) {
         reply(400, ['ok' => false, 'error' => 'Некорректный идентификатор отчёта.']);
@@ -2381,6 +2405,7 @@ if ($action === 'report_detail' && $method === 'GET') {
 }
 
 if ($action === 'load' && $method === 'GET') {
+    if (!role_can($pdo,$ctx,'reports.view')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $logicalKeys = [KEY_REPORT, KEY_DYN, KEY_LISTS];
     $physicalKeys = array_map('physical_key', $logicalKeys);
     $placeholders = implode(',', array_fill(0, count($physicalKeys), '?'));
@@ -2453,6 +2478,7 @@ if ($action === 'load' && $method === 'GET') {
 }
 
 if ($action === 'save' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'reports.create')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $body = input_json();
     check_csrf($body);
     $key = (string)($body['key'] ?? '');
@@ -2494,6 +2520,7 @@ if ($action === 'save' && $method === 'POST') {
 }
 
 if ($action === 'delete' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'reports.manage')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $body = input_json();
     check_csrf($body);
     $key = (string)($body['key'] ?? '');
@@ -2506,6 +2533,7 @@ if ($action === 'delete' && $method === 'POST') {
 }
 
 if ($action === 'reports_delete' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'reports.manage')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $body = input_json();
     check_csrf($body);
     $recordKey = trim((string)($body['record_key'] ?? ''));
@@ -2564,6 +2592,7 @@ if ($action === 'reports_delete' && $method === 'POST') {
 }
 
 if ($action === 'archive_delete' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'reports.manage')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $body = input_json();
     check_csrf($body);
     $date = (string)($body['date'] ?? '');
