@@ -171,6 +171,7 @@ function openTaskView(task){
     commentItems.append(item);
    });
    summary.textContent='Обсуждение ('+(data.comments||[]).length+')';if(!(data.comments||[]).length)commentItems.append(node('div','comment','Комментариев пока нет.'));
+   requestAnimationFrame(()=>{commentItems.scrollTop=commentItems.scrollHeight;});
   }catch(err){comments.dataset.loaded='0';commentItems.replaceChildren(node('div','comment',err.message));}
  });
  if(!state.archiveView){

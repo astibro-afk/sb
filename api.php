@@ -1934,7 +1934,7 @@ if ($action === 'task_comments' && $method === 'GET') {
                 JOIN sb_user_objects author_scope ON author_scope.object_id=txo.object_id AND author_scope.user_id=c.user_id
                 WHERE txo.task_id=c.task_id
              ) THEN 1 ELSE 0 END AS can_delete
-        FROM sb_task_comments c WHERE c.task_id=:id ORDER BY c.id DESC");
+        FROM sb_task_comments c WHERE c.task_id=:id ORDER BY c.id ASC");
     $cs->execute([
         ':comment_admin'=>$ctx['role']==='admin'?1:0,
         ':comment_owner'=>(int)$ctx['id'],
