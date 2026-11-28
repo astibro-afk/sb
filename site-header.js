@@ -33,7 +33,22 @@ function moduleNavSetup(user){
   let link=nav.querySelector('a[href="'+item.href+'"],a[href="/'+item.href+'"]');
   if(!link){link=document.createElement('a');link.href=nav.classList.contains('nav-inner')?item.href:'/'+item.href;link.textContent=item.label;const notices=nav.querySelector('a[href$="notifications.php"]');if(notices)nav.insertBefore(link,notices);else nav.append(link);}
   link.hidden=item.admin?!(user&&user.role==='admin'):!permissions[item.permission];
-  if(new RegExp('(?:^|/)'+item.href.replace('.','\\.')+'
+  if(location.pathname.endsWith('/'+item.href)||location.pathname===item.href){nav.querySelectorAll('a').forEach(a=>a.classList.remove('active'));link.classList.add('active');}
+ });
+ const docs=nav.querySelector('a[href="documents.php"],a[href="/documents.php"]');
+ if(docs)docs.hidden=!!user&&!permissions['documents.view'];
+}
+async function applySystemBrand(){
+ try{
+  const d=await request('system_info');
+  document.querySelectorAll('.sb-site-brand-text strong,.brand h1,.brand-text h1').forEach(n=>{n.textContent=d.org_name||'Служба безопасности';});
+  document.querySelectorAll('.sb-site-brand-text small,.brand p,.brand-text span').forEach(n=>{n.textContent=d.org_subtitle||'';});
+  document.querySelectorAll('.sb-site-logo,.brand .logo,.brand-logo').forEach(n=>{
+   if(d.has_logo){const img=document.createElement('img');img.src='/api.php?action=system_logo';img.alt='Логотип';img.style.cssText='width:100%;height:100%;object-fit:contain;border-radius:inherit';n.replaceChildren(img);}
+   else n.textContent='СБ';
+  });
+ }catch(e){}
+}
 function localLink(value){return typeof value==='string'&&/^\/?[a-z0-9_/-]+\.php(?:\?[a-z0-9_=&%-]*)?$/i.test(value)&&!value.includes('..')?value:'/notifications.php';}
 function noticeSetup(){
  const trigger=document.querySelector('.sb-site-actions > a[href="/notifications.php"],.header-right > a[href="notifications.php"],.header-right > a[href="/notifications.php"],.header-actions > a[href*="notifications.php"]');
