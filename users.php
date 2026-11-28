@@ -98,6 +98,25 @@ try {
         INDEX idx_notifications_user_read (user_id, is_read, created_at),
         CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("ALTER TABLE sb_users MODIFY role VARCHAR(64) NOT NULL DEFAULT 'user'");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_roles (
+        role_key VARCHAR(64) NOT NULL PRIMARY KEY,
+        display_name VARCHAR(80) NOT NULL,
+        base_role VARCHAR(16) NOT NULL,
+        is_system TINYINT(1) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_sb_roles_display_name (display_name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_role_permissions (
+        role_key VARCHAR(64) NOT NULL,
+        permission_key VARCHAR(100) NOT NULL,
+        is_allowed TINYINT(1) NOT NULL DEFAULT 0,
+        PRIMARY KEY (role_key,permission_key),
+        CONSTRAINT fk_sb_role_permission_role FOREIGN KEY (role_key) REFERENCES sb_roles(role_key) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $seedRole = $pdo->prepare("INSERT IGNORE INTO sb_roles (role_key,display_name,base_role,is_system) VALUES (:k,:n,:b,1)");
+    foreach ([['admin','Администратор','admin'],['moderator','Модератор','moderator'],['user','Пользователь','user']] as $rr) $seedRole->execute([':k'=>$rr[0],':n'=>$rr[1],':b'=>$rr[2]]);
 } catch (Throwable $e) {
     error_log('SB users page database error: ' . $e->getMessage());
     http_response_code(500);
@@ -127,7 +146,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $act = (string)($_POST['act'] ?? '');
         $id = (int)($_POST['id'] ?? 0);
 
-        if ($act === 'object_delete') {
+        if ($act === 'role_save') {
+            $roleKey = trim((string)($_POST['role_key'] ?? ''));
+            $displayName = trim((string)($_POST['display_name'] ?? ''));
+            $baseRole = (string)($_POST['base_role'] ?? 'user');
+            if ($displayName === '' || mb_strlen($displayName) > 80) {
+                $err = 'Название роли должно содержать от 1 до 80 символов.';
+            } elseif (!in_array($baseRole, ['user','moderator'], true)) {
+                $err = 'Для новой роли выберите основу «Пользователь» или «Модератор».';
+            } elseif ($roleKey !== '' && !preg_match('/^[a-z][a-z0-9_]{1,63}$/', $roleKey)) {
+                $err = 'Некорректный идентификатор роли.';
+            } else {
+                $dup = $pdo->prepare('SELECT COUNT(*) FROM sb_roles WHERE display_name=:name AND role_key<>:key');
+                $dup->execute([':name'=>$displayName, ':key'=>$roleKey]);
+                if ((int)$dup->fetchColumn() > 0) $err = 'Роль с таким названием уже существует.';
+                elseif ($roleKey !== '') {
+                    $exists = $pdo->prepare('SELECT is_system FROM sb_roles WHERE role_key=:key');
+                    $exists->execute([':key'=>$roleKey]);
+                    $system = $exists->fetchColumn();
+                    if ($system === false) $err = 'Роль не найдена.';
+                    else {
+                        $st = $pdo->prepare('UPDATE sb_roles SET display_name=:name WHERE role_key=:key');
+                        $st->execute([':name'=>$displayName, ':key'=>$roleKey]);
+                        users_audit_log($pdo,$me,'role_renamed','role',null,$displayName,['role_key'=>$roleKey]);
+                    }
+                } else {
+                    $newKey = 'custom_' . bin2hex(random_bytes(8));
+                    $st = $pdo->prepare('INSERT INTO sb_roles (role_key,display_name,base_role,is_system) VALUES (:key,:name,:base,0)');
+                    $st->execute([':key'=>$newKey,':name'=>$displayName,':base'=>$baseRole]);
+                    users_audit_log($pdo,$me,'role_created','role',null,$displayName,['role_key'=>$newKey,'base_role'=>$baseRole]);
+                }
+            }
+        } elseif ($act === 'role_delete') {
+            $roleKey = trim((string)($_POST['role_key'] ?? ''));
+            $st = $pdo->prepare('SELECT display_name,is_system FROM sb_roles WHERE role_key=:key');
+            $st->execute([':key'=>$roleKey]);
+            $role = $st->fetch();
+            if (!$role) $err = 'Роль не найдена.';
+            elseif ((int)$role['is_system'] === 1) $err = 'Системные роли нельзя удалять.';
+            else {
+                $used = $pdo->prepare('SELECT COUNT(*) FROM sb_users WHERE role=:key');
+                $used->execute([':key'=>$roleKey]);
+                if ((int)$used->fetchColumn() > 0) $err = 'Нельзя удалить роль, пока она назначена сотрудникам.';
+                else {
+                    $pdo->prepare('DELETE FROM sb_roles WHERE role_key=:key')->execute([':key'=>$roleKey]);
+                    users_audit_log($pdo,$me,'role_deleted','role',null,(string)$role['display_name'],['role_key'=>$roleKey]);
+                }
+            }
+        } elseif ($act === 'object_delete') {
             $nameStmt = $pdo->prepare('SELECT name FROM sb_objects WHERE id = :id');
             $nameStmt->execute([':id' => $id]);
             $objectLabel = (string)($nameStmt->fetchColumn() ?: 'Объект #'.$id);
@@ -206,7 +272,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $err = 'Логин: 3–64 символа (латиница, цифры, . _ -).';
             } elseif ($fullName === '') {
                 $err = 'Укажите ФИО.';
-            } elseif (!in_array($role, ['admin', 'moderator', 'user'], true)) {
+            } elseif (!(function() use ($pdo,$role) { $q=$pdo->prepare('SELECT COUNT(*) FROM sb_roles WHERE role_key=:key'); $q->execute([':key'=>$role]); return (int)$q->fetchColumn()===1; })()) {
                 $err = 'Недопустимая роль.';
             } elseif ($id === (int)$me['id'] && (!$isActive || $role !== 'admin')) {
                 $err = 'Нельзя отключить себя или снять с себя роль администратора.';
@@ -310,7 +376,9 @@ $unassignedUsers = array_values(array_filter($users, function($u) use ($userObje
     return true;
 }));
 $auditRows = $pdo->query('SELECT actor_name, action, target_label, created_at FROM sb_audit_log ORDER BY id DESC LIMIT 50')->fetchAll();
-$roleNames = ['admin' => 'Администратор', 'moderator' => 'Модератор', 'user' => 'Пользователь'];
+$roleRows = $pdo->query('SELECT role_key,display_name,base_role,is_system FROM sb_roles ORDER BY is_system DESC,display_name')->fetchAll();
+$roleNames = [];
+foreach ($roleRows as $roleRow) $roleNames[(string)$roleRow['role_key']] = (string)$roleRow['display_name'];
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -480,6 +548,27 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
 <?php if ($unassignedUsers): ?><div class="alert"><strong>Требуют назначения объектов:</strong> <?= h(implode(', ', array_map(function($u){ return $u['full_name'].' ('.$u['username'].')'; }, $unassignedUsers))) ?>. Эти сотрудники не смогут работать с отчётами, пока им не назначат активный объект.</div><?php endif; ?>
 
 <section class="panel">
+  <div class="panel-head"><div class="panel-heading"><div class="section-icon">♙</div><div><h2 class="panel-title">Роли и права доступа</h2><div class="panel-subtitle">Переименование системных ролей и создание дополнительных ролей</div></div></div><span class="counter"><?= count($roleRows) ?> ролей</span></div>
+  <form method="post" class="add-object" style="grid-template-columns:minmax(180px,1fr) minmax(150px,.8fr) auto">
+    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="role_save">
+    <div class="field"><label>Название новой роли</label><input name="display_name" maxlength="80" placeholder="Например, Старший специалист" required></div>
+    <div class="field"><label>Основа доступа</label><select name="base_role"><option value="user">Пользователь</option><option value="moderator">Модератор</option></select></div>
+    <div class="submit-field"><button class="btn" type="submit">Создать роль</button></div>
+  </form>
+  <div class="user-list" style="margin-top:12px">
+    <?php foreach ($roleRows as $roleRow): ?><div class="user-card">
+      <form method="post" class="user-edit-form" style="grid-template-columns:minmax(180px,1fr) 150px auto">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="role_save"><input type="hidden" name="role_key" value="<?= h($roleRow['role_key']) ?>">
+        <div class="field"><label><?= (int)$roleRow['is_system'] ? 'Системная роль' : 'Пользовательская роль' ?></label><input name="display_name" maxlength="80" value="<?= h($roleRow['display_name']) ?>" required></div>
+        <div class="field"><label>Базовая модель</label><input value="<?= h($roleRow['base_role']==='moderator'?'Объектная зона':($roleRow['base_role']==='admin'?'Полный доступ':'Личные данные')) ?>" disabled></div>
+        <div class="save-field"><button class="btn secondary" type="submit">Сохранить название</button></div>
+      </form>
+      <?php if (!(int)$roleRow['is_system']): ?><form method="post" onsubmit="return confirm('Удалить роль?');"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="role_delete"><input type="hidden" name="role_key" value="<?= h($roleRow['role_key']) ?>"><button class="btn danger small" type="submit">Удалить</button></form><?php else: ?><span class="status active">Системная</span><?php endif; ?>
+    </div><?php endforeach; ?>
+  </div>
+</section>
+
+<section class="panel">
   <div class="panel-head">
     <div class="panel-heading"><div class="section-icon">⌖</div><div><h2 class="panel-title">Торговые объекты</h2><div class="panel-subtitle">Создание, переименование и включение объектов</div></div></div>
     <span class="counter"><?= count($objects) ?> объектов</span>
@@ -513,7 +602,7 @@ $roleNames = ['admin' => 'Администратор', 'moderator' => 'Моде�
     <div class="field"><label>Логин</label><input name="username" placeholder="Логин" required></div>
     <div class="field"><label>ФИО</label><input name="full_name" placeholder="Фамилия Имя Отчество" required></div>
     <div class="field"><label>Пароль</label><input name="password" type="password" minlength="8" placeholder="От 8 символов" required></div>
-    <div class="field"><label>Роль</label><select name="role"><option value="user">Пользователь</option><option value="moderator">Модератор</option><option value="admin">Администратор</option></select></div>
+    <div class="field"><label>Роль</label><select name="role"><?php foreach ($roleNames as $rk => $rn): ?><option value="<?= h($rk) ?>" <?= $rk === 'user' ? 'selected' : '' ?>><?= h($rn) ?></option><?php endforeach; ?></select></div>
     <div class="field picker-field"><label>Закрепить объекты</label>
       <details class="object-picker"><summary><span class="picker-value">Выбрать объекты</span></summary><div class="picker-menu">
       <?php foreach ($objects as $o): ?><label class="picker-option"><input type="checkbox" name="object_ids[]" value="<?= (int)$o['id'] ?>"><span><?= h($o['name']) ?></span></label><?php endforeach; ?>
