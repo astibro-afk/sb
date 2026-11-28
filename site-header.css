@@ -201,13 +201,14 @@
 @media(max-width:700px){.sb-notification-dropdown{right:-6px;width:min(360px,calc(100vw - 18px));max-height:calc(100vh - 85px)}}
 
 
-/* На телефонах список уведомлений прокручивается отдельно от закреплённой нижней панели */
+/* Список уведомлений ограничивается высотой первых трёх карточек скриптом */
 .sb-notification-dropdown{
-  height:min(570px,calc(100vh - 100px));
-  min-height:180px;
+  height:auto;
+  min-height:0;
+  max-height:min(570px,calc(100vh - 100px));
 }
 .sb-notice-list{
-  flex:1 1 auto;
+  flex:0 1 auto;
   min-height:0;
   overflow-y:auto;
   overscroll-behavior:contain;
@@ -228,7 +229,6 @@
   }
   .sb-notice-list{
     flex:0 1 auto;
-    max-height:250px;
     min-height:0;
     overflow-y:auto;
     overscroll-behavior:contain;
@@ -243,5 +243,4 @@
     width:calc(100vw - 18px);
     max-height:min(390px,calc(100dvh - env(safe-area-inset-top,0px) - 132px));
   }
-  .sb-notice-list{max-height:250px}
 }
