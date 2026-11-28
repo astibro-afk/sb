@@ -185,7 +185,7 @@ function ensure_operations_schema(PDO $pdo): void {
     $pdo->exec("CREATE TABLE IF NOT EXISTS sb_incidents (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         object_id INT UNSIGNED NOT NULL,
-        created_by INT UNSIGNED NOT NULL,
+        created_by INT UNSIGNED NULL DEFAULT NULL,
         event_at DATETIME NOT NULL,
         phone VARCHAR(40) NOT NULL DEFAULT '',
         description TEXT NOT NULL,
@@ -195,7 +195,7 @@ function ensure_operations_schema(PDO $pdo): void {
         INDEX idx_incident_object_date (object_id,event_at),
         INDEX idx_incident_creator (created_by,created_at),
         CONSTRAINT fk_incident_object FOREIGN KEY (object_id) REFERENCES sb_objects(id) ON DELETE RESTRICT,
-        CONSTRAINT fk_incident_creator FOREIGN KEY (created_by) REFERENCES sb_users(id) ON DELETE RESTRICT
+        CONSTRAINT fk_incident_creator FOREIGN KEY (created_by) REFERENCES sb_users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $pdo->exec("CREATE TABLE IF NOT EXISTS sb_damage_cases (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -206,16 +206,16 @@ function ensure_operations_schema(PDO $pdo): void {
         claimed_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
         reimbursed_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
         notes TEXT NULL,
-        created_by INT UNSIGNED NOT NULL,
-        updated_by INT UNSIGNED NOT NULL,
+        created_by INT UNSIGNED NULL DEFAULT NULL,
+        updated_by INT UNSIGNED NULL DEFAULT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_damage_object (object_id,updated_at),
         INDEX idx_damage_incident (incident_id),
         CONSTRAINT fk_damage_object FOREIGN KEY (object_id) REFERENCES sb_objects(id) ON DELETE RESTRICT,
         CONSTRAINT fk_damage_incident FOREIGN KEY (incident_id) REFERENCES sb_incidents(id) ON DELETE SET NULL,
-        CONSTRAINT fk_damage_creator FOREIGN KEY (created_by) REFERENCES sb_users(id) ON DELETE RESTRICT,
-        CONSTRAINT fk_damage_updater FOREIGN KEY (updated_by) REFERENCES sb_users(id) ON DELETE RESTRICT
+        CONSTRAINT fk_damage_creator FOREIGN KEY (created_by) REFERENCES sb_users(id) ON DELETE SET NULL,
+        CONSTRAINT fk_damage_updater FOREIGN KEY (updated_by) REFERENCES sb_users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $pdo->exec("CREATE TABLE IF NOT EXISTS sb_system_settings (
         setting_key VARCHAR(80) NOT NULL PRIMARY KEY,
@@ -935,8 +935,8 @@ if ($action === 'incidents_data' && $method === 'GET') {
         if (!$ids) $where[]='1=0';
         else { $marks=[]; foreach($ids as $i=>$oid){$k=':obj'.$i;$marks[]=$k;$params[$k]=$oid;} $where[]='i.object_id IN ('.implode(',',$marks).')'; }
     }
-    $st=$pdo->prepare("SELECT i.id,i.object_id,o.name AS object_name,i.event_at,i.phone,i.description,i.photo_name,i.created_at,u.full_name AS creator_name
-        FROM sb_incidents i JOIN sb_objects o ON o.id=i.object_id JOIN sb_users u ON u.id=i.created_by
+    $st=$pdo->prepare("SELECT i.id,i.object_id,o.name AS object_name,i.event_at,i.phone,i.description,i.photo_name,i.created_at,COALESCE(u.full_name,'Удалённый пользователь') AS creator_name
+        FROM sb_incidents i JOIN sb_objects o ON o.id=i.object_id LEFT JOIN sb_users u ON u.id=i.created_by
         WHERE ".implode(' AND ',$where)." ORDER BY i.event_at DESC,i.id DESC LIMIT 200");
     $st->execute($params); $rows=$st->fetchAll();
     foreach($rows as &$row){$row['id']=(int)$row['id'];$row['object_id']=(int)$row['object_id'];$row['photo_url']=$row['photo_name']?'api.php?action=incident_photo&id='.$row['id']:'';} unset($row);
@@ -982,7 +982,7 @@ if ($action === 'damage_data' && $method === 'GET') {
     if(!role_can($pdo,$ctx,'damage.view'))reply(403,['ok'=>false,'error'=>'Нет разрешения на просмотр ущерба.']);
     $where=['1=1'];$params=[];if($ctx['role']==='user'){$where[]='d.object_id IN (SELECT object_id FROM sb_user_objects WHERE user_id=:uid)';$params[':uid']=(int)$ctx['id'];}
     elseif($ctx['role']==='moderator'){$ids=user_object_ids($pdo,(int)$ctx['id']);if(!$ids)$where[]='1=0';else{$marks=[];foreach($ids as $i=>$oid){$k=':obj'.$i;$marks[]=$k;$params[$k]=$oid;}$where[]='d.object_id IN ('.implode(',',$marks).')';}}
-    $st=$pdo->prepare("SELECT d.id,d.object_id,o.name AS object_name,d.incident_id,d.title,d.established_amount,d.claimed_amount,d.reimbursed_amount,(d.claimed_amount-d.reimbursed_amount) AS balance,d.notes,d.updated_at,u.full_name AS updater_name FROM sb_damage_cases d JOIN sb_objects o ON o.id=d.object_id JOIN sb_users u ON u.id=d.updated_by WHERE ".implode(' AND ',$where)." ORDER BY d.updated_at DESC LIMIT 300");
+    $st=$pdo->prepare("SELECT d.id,d.object_id,o.name AS object_name,d.incident_id,d.title,d.established_amount,d.claimed_amount,d.reimbursed_amount,(d.claimed_amount-d.reimbursed_amount) AS balance,d.notes,d.updated_at,COALESCE(u.full_name,'Удалённый пользователь') AS updater_name FROM sb_damage_cases d JOIN sb_objects o ON o.id=d.object_id LEFT JOIN sb_users u ON u.id=d.updated_by WHERE ".implode(' AND ',$where)." ORDER BY d.updated_at DESC LIMIT 300");
     $st->execute($params);$rows=$st->fetchAll();foreach($rows as &$row){$row['id']=(int)$row['id'];$row['object_id']=(int)$row['object_id'];}unset($row);
     reply(200,['ok'=>true,'damage_cases'=>$rows,'can_manage'=>role_can($pdo,$ctx,'damage.manage'),'csrf'=>csrf_token()]);
 }
