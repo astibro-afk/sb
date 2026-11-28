@@ -57,15 +57,15 @@ if(empty($_SESSION['sb_user_id'])){header('Location: index.html');exit;}
 (function(){
 'use strict';
 const $=id=>document.getElementById(id),tasksEl=$('tasks');
-let state={tasks:[],objects:[],assignees:[],user:null,csrf:'',stats:{},archiveView:false,pagination:{page:1,total_pages:1,total:0}};let loadToken=0,searchTimer=null,editingTaskId=0;
+let state={tasks:[],objects:[],assignees:[],user:null,csrf:'',stats:{},archiveView:false,pagination:{page:1,total_pages:1,total:0}};let loadToken=0,searchTimer=null,editingTaskId=0,errorTimer=null;
 const statusLabels={new:'Новая',in_progress:'В работе',review:'На проверке',done:'Выполнена'};
 const priorityLabels={high:'Высокий приоритет',normal:'Обычный приоритет',low:'Низкий приоритет'};
 function node(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n;}
 async function json(response){const raw=await response.text();if(!raw.trim())throw new Error('Сервер вернул пустой ответ. Обновите страницу.');try{return JSON.parse(raw);}catch(e){throw new Error('Сервер вернул некорректный ответ.');}}
 async function api(action,body){const r=await fetch('api.php?action='+encodeURIComponent(action),{method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify({...body,csrf:state.csrf}):undefined});const d=await json(r);if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось выполнить запрос.');return d;}
 async function get(action,params){const query=new URLSearchParams(params||{});const r=await fetch('api.php?action='+encodeURIComponent(action)+'&'+query.toString(),{credentials:'same-origin',cache:'no-store'});const d=await json(r);if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось выполнить запрос.');return d;}
-function showError(message){const notice=$('error');notice.textContent=message||'Произошла ошибка. Попробуйте ещё раз.';notice.classList.remove('hidden');notice.setAttribute('role','alert');}
-function clearError(){const notice=$('error');notice.textContent='';notice.classList.add('hidden');}
+function showError(message){const notice=$('error');clearTimeout(errorTimer);notice.textContent=message||'Произошла ошибка. Попробуйте ещё раз.';notice.classList.remove('hidden');notice.setAttribute('role','alert');errorTimer=setTimeout(clearError,5000);}
+function clearError(){clearTimeout(errorTimer);errorTimer=null;const notice=$('error');notice.textContent='';notice.classList.add('hidden');}
 $('error').addEventListener('click',clearError);
 function date(v){if(!v)return 'Без срока';const d=new Date(v+'T00:00:00');return isNaN(d)?v:d.toLocaleDateString('ru-RU',{day:'2-digit',month:'long',year:'numeric'});}
 function time(v){if(!v)return '';const raw=String(v).trim();const iso=/Z$|[+-]\\d{2}:?\\d{2}$/.test(raw)?raw:raw.replace(' ','T')+'Z';const d=new Date(iso);return isNaN(d)?v:d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
