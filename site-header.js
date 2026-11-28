@@ -54,7 +54,7 @@ function renderNotices(data){
  const panel=$('sbNotificationDropdown');if(!panel)return;
  const count=Number(data.unread)||0;setNoticeCount(count);
  const countNode=panel.querySelector('.sb-notice-count');if(countNode)countNode.textContent='Непрочитанных: '+count;
- const list=panel.querySelector('.sb-notice-list');list.replaceChildren();
+ const list=panel.querySelector('.sb-notice-list');list.style.maxHeight='';list.replaceChildren();
  // В выпадающем списке показываем только непрочитанные сообщения.
  const items=Array.isArray(data.notifications)?data.notifications.filter(item=>!Number(item.is_read)).slice(0,8):[];
  if(!items.length){const empty=document.createElement('div');empty.className='sb-notice-empty';empty.textContent='Новых уведомлений пока нет.';list.append(empty);return;}
@@ -69,6 +69,9 @@ function renderNotices(data){
   if(!Number(item.is_read)){const read=document.createElement('button');read.type='button';read.className='sb-notice-mark';read.textContent='Прочитано';read.setAttribute('aria-label','Отметить прочитанным');read.addEventListener('click',()=>markNotice(Number(item.id),false).catch(()=>{}));row.append(read);}
   list.append(row);
  });
+ // Ограничиваем видимую область ровно высотой первых трёх уведомлений.
+ const third=list.querySelector('.sb-notice-item:nth-child(3)');
+ if(third){const listTop=list.getBoundingClientRect().top;const thirdBottom=third.getBoundingClientRect().bottom;list.style.maxHeight=Math.ceil(thirdBottom-listTop)+'px';}
 }
 async function refreshNotices(){if(noticeBusy||document.visibilityState==='hidden')return;noticeBusy=true;try{const d=await request('notifications_data');renderNotices(d);}catch(e){}finally{noticeBusy=false;}}
 async function markNotice(id,all){await request('notifications_read',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({csrf,id,all})});await refreshNotices();}
