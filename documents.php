@@ -105,7 +105,7 @@ textarea{min-height:70px;resize:vertical}
 'use strict';
 const $=id=>document.getElementById(id);
 const state={csrf:'',user:null,documents:[],objects:[],categories:[]};
-let searchTimer=null,loading=false;
+let searchTimer=null,loading=false,pendingLoad=false;
 const fixedCategories=['Инструкции','Регламенты','Приказы и распоряжения','Памятки','Формы и шаблоны','Прочее'];
 function node(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;}
 function showError(message){$('error').textContent=message;$('error').style.display='block';$('success').style.display='none';}
@@ -145,7 +145,7 @@ function render(){
  });
 }
 async function load(){
- if(loading)return;loading=true;clearMessages();
+ if(loading){pendingLoad=true;return;}loading=true;clearMessages();
  try{
   const params=new URLSearchParams({action:'documents_data',search:$('search').value.trim(),category:$('categoryFilter').value});
   const data=await read(await fetch('api.php?'+params.toString(),{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}}));
@@ -153,13 +153,13 @@ async function load(){
   $('uploadPanel').hidden=!(state.user.role==='admin'||state.user.role==='moderator');
   fillObjects();fillCategories();render();
  }catch(e){showError(e.message);$('documents').replaceChildren(node('div','empty','Не удалось загрузить список документов.'));}
- finally{loading=false;}
+ finally{loading=false;if(pendingLoad){pendingLoad=false;load();}}
 }
 async function removeDocument(doc){
  if(!confirm('Удалить документ «'+doc.title+'»? Сотрудники больше не смогут его скачать.'))return;
  try{
   const response=await fetch('api.php?action=document_delete',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({csrf:state.csrf,id:Number(doc.id)})});
-  await read(response);showSuccess('Документ удалён.');await load();
+  await read(response);await load();showSuccess('Документ удалён.');
  }catch(e){showError(e.message);}
 }
 $('uploadForm').addEventListener('submit',async e=>{
@@ -170,7 +170,7 @@ $('uploadForm').addEventListener('submit',async e=>{
  try{
   const form=new FormData();form.append('csrf',state.csrf);form.append('title',$('title').value.trim());form.append('category',$('category').value);form.append('description',$('description').value.trim());form.append('object_id',$('object').value);form.append('file',file);
   const response=await fetch('api.php?action=document_upload',{method:'POST',credentials:'same-origin',body:form});
-  await read(response);$('uploadForm').reset();fillObjects();showSuccess('Документ добавлен в базу.');await load();
+  await read(response);$('uploadForm').reset();fillObjects();await load();showSuccess('Документ добавлен в базу.');
  }catch(err){showError(err.message);}
  finally{button.disabled=false;button.textContent='Загрузить документ';}
 });
