@@ -63,3 +63,24 @@ body>main.card .result{background:#17243a!important;color:#e8eef9!important;bord
 body>main.card .ok{color:#6ee7b7!important}
 body>main.card .err{color:#fda4af!important}
 @media(max-width:900px){body>main.card{margin:24px auto!important;padding:24px!important}}
+
+
+/* Documents: cards, file markers and acknowledgement details */
+:where(.doc,.ack-state,.ack-panel,.ack-person,.success,.form-panel,.filter-panel,.toolbar,.summary,.task-list,.task-card,.comment,.comments){
+  background:var(--sb-surface)!important;color:var(--sb-ink)!important;border-color:var(--sb-line)!important
+}
+:where(.doc){border-radius:16px!important;box-shadow:var(--sb-shadow)!important}
+:where(.doc h3,.ack-summary,.ack-person-name,.ack-state-text){color:var(--sb-ink)!important}
+:where(.doc-desc,.filename,.doc-meta,.ack-person-meta,.hint,.check-hint){color:var(--sb-muted)!important}
+:where(.file-icon){background:rgba(59,130,246,.16)!important;color:#93c5fd!important}
+:where(.doc-actions,.ack-person){border-color:var(--sb-line)!important}
+:where(.ack-state,.ack-panel){border-radius:12px!important;background:var(--sb-surface-2)!important}
+:where(.ack-state-text.done,.ack-person-status.done,.success){color:#6ee7b7!important}
+:where(.ack-person-status.pending){color:#fcd34d!important}
+:where(.success){background:rgba(52,211,153,.10)!important;border-color:rgba(52,211,153,.28)!important}
+:where(.check-field){color:var(--sb-ink)!important}
+:where(.form-panel,.filter-panel){border:1px solid var(--sb-line)!important;border-radius:16px!important;box-shadow:var(--sb-shadow)!important}
+:where(.page h1,.page h2,.page h3,.sb-page-title h1){color:var(--sb-ink)!important}
+:where(.subtitle,.page p){color:var(--sb-muted)}
+:where(.toolbar){border-radius:14px!important}
+:where(.pagination){color:var(--sb-muted)!important}
