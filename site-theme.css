@@ -162,3 +162,55 @@ body>main.card .err{color:#fda4af!important}
 :where(.preview-dialog-head p){color:#93a4bd!important}
 :where(.preview-frame){background:#0b1120!important}
 @media(max-width:760px){:where(.page){padding-top:20px!important}:where(.page .toolbar){gap:9px!important}}
+
+
+/* Tasks workspace */
+:where(.page){color:var(--sb-ink)!important}
+:where(.page .top,.page .sb-page-title){margin-bottom:22px!important}
+:where(.page .sb-page-title h1,.page .heading h1){color:#f0f5ff!important;letter-spacing:-.6px!important}
+:where(.page .sb-page-title p,.page .heading p){color:#93a4bd!important}
+:where(.page .summary){gap:13px!important;margin-bottom:18px!important}
+:where(.page .stat){position:relative!important;overflow:hidden!important;padding:17px 18px!important;background:linear-gradient(145deg,#14223a,#111b2e)!important;border-color:#2b3d58!important}
+:where(.page .stat)::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:linear-gradient(180deg,#60a5fa,#2563eb)}
+:where(.page .stat strong){color:#f0f5ff!important;font-size:27px!important;font-weight:800!important;letter-spacing:-.5px!important}
+:where(.page .stat span){color:#93a4bd!important}
+:where(.page .toolbar){gap:10px!important;margin-bottom:17px!important}
+:where(.page .toolbar input,.page .toolbar select,.page .form input,.page .form select,.page .form textarea,.page .comment-form textarea,.page .comment-form select,.page .comment-form input[type=file]){background:#0d1729!important;color:#e8eef9!important;border-color:#30415c!important}
+:where(.page .toolbar input:focus,.page .toolbar select:focus,.page .form input:focus,.page .form select:focus,.page .form textarea:focus,.page .comment-form textarea:focus){outline:none!important;border-color:#5795f5!important;box-shadow:0 0 0 3px rgba(59,130,246,.15)!important}
+:where(.page .task-list){gap:15px!important}
+:where(.page .task){background:linear-gradient(145deg,#14223a,#111b2e)!important;border-color:#2b3d58!important;box-shadow:0 12px 28px rgba(0,0,0,.14)!important;padding:18px!important;transition:border-color .18s ease,transform .18s ease,box-shadow .18s ease!important}
+:where(.page .task:hover){border-color:#4773ad!important;box-shadow:0 16px 34px rgba(0,0,0,.22)!important;transform:translateY(-2px)!important}
+:where(.page .task.overdue){border-color:rgba(251,113,133,.55)!important}
+:where(.page .task h2){color:#edf4ff!important;font-size:16px!important;letter-spacing:-.2px!important}
+:where(.page .desc){color:#b4c3d8!important;line-height:1.6!important}
+:where(.page .meta){color:#93a4bd!important}
+:where(.page .meta b){color:#dce8fa!important}
+:where(.page .tag){background:rgba(148,163,184,.13)!important;color:#c5d2e5!important;border:1px solid rgba(148,163,184,.13)!important}
+:where(.page .tag.high,.page .tag.overdue){background:rgba(251,113,133,.13)!important;color:#fda4af!important;border-color:rgba(251,113,133,.2)!important}
+:where(.page .tag.low){background:rgba(96,165,250,.13)!important;color:#9cc5ff!important}
+:where(.page .tag.done){background:rgba(52,211,153,.13)!important;color:#6ee7b7!important}
+:where(.page .tag.review){background:rgba(251,191,36,.13)!important;color:#fcd34d!important}
+:where(.page .task-actions){gap:8px!important}
+:where(.page .task-actions .btn){min-height:34px!important}
+:where(.page .comments){border-color:#2b3d58!important}
+:where(.page .comments summary){color:#a8c9f5!important;padding:5px 0!important}
+:where(.page .comment){border-color:#263650!important;padding:10px 0!important}
+:where(.page .comment b){color:#e8eef9!important}
+:where(.page .comment small){color:#8296b4!important}
+:where(.page .comment p){color:#c1cee0!important;line-height:1.55!important}
+:where(.page .comment a){color:#8bbaff!important}
+:where(.page .comment-delete:hover,.page .task-delete-x:hover){background:rgba(251,113,133,.13)!important;color:#fda4af!important}
+:where(.page .comment-form){gap:8px!important}
+:where(.page .form-panel){background:#111b2e!important;border-color:#30415c!important;padding:19px!important}
+:where(.page .form-panel h2){color:#f0f5ff!important}
+:where(.page .field label){color:#a8bad4!important}
+:where(.page .form-footer){padding-top:4px!important}
+:where(.page .error){background:rgba(244,63,94,.12)!important;color:#fda4af!important;border-color:rgba(251,113,133,.28)!important}
+:where(.page .empty){background:#111b2e!important;border-color:#30415c!important;color:#93a4bd!important}
+:where(.page .pagination span){color:#93a4bd!important}
+:where(.page .btn:not(.primary)){background:#1b2a42!important;border-color:#30435f!important;color:#dce8fa!important}
+:where(.page .btn:not(.primary):hover){background:#263957!important;border-color:#4773ad!important}
+:where(.page .btn.primary){background:linear-gradient(135deg,#2563eb,#3b82f6)!important;border-color:#3b82f6!important;color:#fff!important}
+:where(.page .task-delete-x){color:#91a4bf!important}
+@media(max-width:780px){:where(.page .summary){gap:10px!important}:where(.page .task-list){gap:12px!important}}
+@media(max-width:520px){:where(.page .summary){gap:9px!important}:where(.page .stat){padding:13px!important}:where(.page .stat strong){font-size:23px!important}:where(.page .task){padding:15px!important}}
