@@ -31,6 +31,7 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check service-worker.js
+          node --check site-header.js
           node --check third_party/qrcodejs/qrcode.min.js
           python3 - <<'PY'
           import pathlib, re, subprocess, tempfile
