@@ -145,6 +145,23 @@ function ensure_archive_columns(PDO $pdo): void {
     }
 }
 
+function ensure_document_ack_schema(PDO $pdo): void {
+    $columns = $pdo->query("SELECT COLUMN_NAME FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sb_documents'")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('requires_ack', $columns, true)) {
+        $pdo->exec("ALTER TABLE sb_documents ADD COLUMN requires_ack TINYINT(1) NOT NULL DEFAULT 0 AFTER uploaded_by");
+    }
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_document_acknowledgements (
+        document_id BIGINT UNSIGNED NOT NULL,
+        user_id INT UNSIGNED NOT NULL,
+        acknowledged_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (document_id,user_id),
+        INDEX idx_document_ack_user (user_id,acknowledged_at),
+        CONSTRAINT fk_document_ack_document FOREIGN KEY (document_id) REFERENCES sb_documents(id) ON DELETE CASCADE,
+        CONSTRAINT fk_document_ack_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+}
+
 function db(array $cfg): PDO {
     static $pdo = null;
     if ($pdo instanceof PDO) return $pdo;
@@ -164,7 +181,7 @@ function db(array $cfg): PDO {
         ]);
         // Инициализация схемы один раз на PHP-сессию, а не при каждом AJAX-запросе.
         // Версию можно повысить при добавлении новых миграций.
-        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-28-2') {
+        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-28-3') {
             $pdo->exec(
                 "CREATE TABLE IF NOT EXISTS sb_app_data (
                     data_key VARCHAR(100) NOT NULL PRIMARY KEY,
@@ -354,7 +371,8 @@ function db(array $cfg): PDO {
                 INDEX idx_documents_category (category),
                 INDEX idx_documents_uploader (uploaded_by)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-            $_SESSION['sb_schema_version'] = '2026-11-28-2';
+            ensure_document_ack_schema($pdo);
+            $_SESSION['sb_schema_version'] = '2026-11-28-3';
         }
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
@@ -1024,12 +1042,25 @@ if ($action === 'documents_data' && $method === 'GET') {
         $params[':filename'] = $needle;
     }
     $sql = "SELECT d.id,d.title,d.description,d.category,d.original_name,d.mime_type,d.file_size,
-        d.object_id,d.uploaded_by,d.created_at,u.full_name AS uploader_name,o.name AS object_name
+        d.object_id,d.uploaded_by,d.requires_ack,d.created_at,u.full_name AS uploader_name,o.name AS object_name,
+        (SELECT COUNT(*) FROM sb_users au WHERE au.is_active=1 AND au.role='user'
+            AND (d.object_id IS NULL OR EXISTS (
+                SELECT 1 FROM sb_user_objects auo WHERE auo.user_id=au.id AND auo.object_id=d.object_id
+            ))) AS ack_total,
+        (SELECT COUNT(*) FROM sb_document_acknowledgements aa
+            JOIN sb_users au ON au.id=aa.user_id
+            WHERE aa.document_id=d.id AND au.is_active=1 AND au.role='user'
+            AND (d.object_id IS NULL OR EXISTS (
+                SELECT 1 FROM sb_user_objects auo WHERE auo.user_id=au.id AND auo.object_id=d.object_id
+            ))) AS ack_done,
+        EXISTS(SELECT 1 FROM sb_document_acknowledgements mine
+            WHERE mine.document_id=d.id AND mine.user_id=:ack_viewer) AS acknowledged
         FROM sb_documents d
         LEFT JOIN sb_users u ON u.id=d.uploaded_by
         LEFT JOIN sb_objects o ON o.id=d.object_id
         WHERE " . implode(' AND ', $where) . "
         ORDER BY d.created_at DESC,d.id DESC LIMIT 250";
+    $params[':ack_viewer'] = (int)$ctx['id'];
     $st = $pdo->prepare($sql);
     $st->execute($params);
     $documents = $st->fetchAll();
@@ -1038,6 +1069,10 @@ if ($action === 'documents_data' && $method === 'GET') {
         $document['id'] = (int)$document['id'];
         $document['file_size'] = (int)$document['file_size'];
         $document['object_id'] = $document['object_id'] === null ? null : (int)$document['object_id'];
+        $document['requires_ack'] = (int)$document['requires_ack'];
+        $document['ack_total'] = (int)$document['ack_total'];
+        $document['ack_done'] = (int)$document['ack_done'];
+        $document['acknowledged'] = (bool)$document['acknowledged'];
         $document['can_delete'] = $ctx['role'] === 'admin'
             || ($ctx['role'] === 'moderator'
                 && $document['object_id'] !== null
@@ -1074,6 +1109,7 @@ if ($action === 'document_upload' && $method === 'POST') {
     $description = trim((string)($_POST['description'] ?? ''));
     $category = trim((string)($_POST['category'] ?? 'Прочее'));
     $objectId = (int)($_POST['object_id'] ?? 0);
+    $requiresAck = !empty($_POST['requires_ack']) ? 1 : 0;
     if ($title === '' || mb_strlen($title) > 180) reply(400, ['ok'=>false,'error'=>'Укажите название документа (не более 180 символов).']);
     if (mb_strlen($description) > 3000) reply(400, ['ok'=>false,'error'=>'Описание не должно превышать 3000 символов.']);
     if ($category === '' || mb_strlen($category) > 80) reply(400, ['ok'=>false,'error'=>'Укажите корректную категорию документа.']);
@@ -1158,22 +1194,113 @@ if ($action === 'document_upload' && $method === 'POST') {
     $originalName = mb_substr(preg_replace('/[\x00-\x1F\x7F]/u', '', $originalName) ?: 'document.' . $extension, 0, 255);
     try {
         $st = $pdo->prepare("INSERT INTO sb_documents
-            (title,description,category,original_name,stored_name,mime_type,file_size,object_id,uploaded_by)
-            VALUES (:title,:description,:category,:original,:stored,:mime,:size,:object,:uploader)");
+            (title,description,category,original_name,stored_name,mime_type,file_size,object_id,uploaded_by,requires_ack)
+            VALUES (:title,:description,:category,:original,:stored,:mime,:size,:object,:uploader,:requires_ack)");
         $st->execute([
             ':title'=>$title, ':description'=>$description, ':category'=>$category,
             ':original'=>$originalName, ':stored'=>$storedName, ':mime'=>$mime,
             ':size'=>$fileSize, ':object'=>$objectId > 0 ? $objectId : null,
-            ':uploader'=>(int)$ctx['id']
+            ':uploader'=>(int)$ctx['id'], ':requires_ack'=>$requiresAck
         ]);
         $id = (int)$pdo->lastInsertId();
-        audit_log($pdo, $ctx, 'document_uploaded', 'document', $id, $title, ['category'=>$category,'object_id'=>$objectId ?: null,'file_size'=>$fileSize]);
+        audit_log($pdo, $ctx, 'document_uploaded', 'document', $id, $title, ['category'=>$category,'object_id'=>$objectId ?: null,'file_size'=>$fileSize,'requires_ack'=>(bool)$requiresAck]);
+        if ($requiresAck === 1) {
+            if ($objectId > 0) {
+                $recipients = $pdo->prepare("SELECT DISTINCT u.id FROM sb_users u
+                    JOIN sb_user_objects uo ON uo.user_id=u.id AND uo.object_id=:object
+                    WHERE u.is_active=1 AND u.role='user'");
+                $recipients->execute([':object'=>$objectId]);
+            } else {
+                $recipients = $pdo->query("SELECT id FROM sb_users WHERE is_active=1 AND role='user'");
+            }
+            foreach ($recipients->fetchAll(PDO::FETCH_COLUMN) as $recipientId) {
+                notification_add($pdo, (int)$recipientId, 'document_ack_required', 'Требуется ознакомление',
+                    'Необходимо ознакомиться с документом: ' . $title, 'documents.php');
+            }
+        }
         reply(200, ['ok'=>true,'id'=>$id]);
     } catch (Throwable $e) {
         @unlink($destination);
         error_log('SB document upload error: '.$e->getMessage());
         reply(500, ['ok'=>false,'error'=>'Не удалось зарегистрировать документ в базе данных.']);
     }
+}
+
+if ($action === 'document_acknowledge' && $method === 'POST') {
+    $body = input_json();
+    check_csrf($body);
+    if ($ctx['role'] !== 'user') reply(403, ['ok'=>false,'error'=>'Подтверждать ознакомление должен сотрудник.']);
+    $id = (int)($body['id'] ?? 0);
+    if ($id < 1) reply(400, ['ok'=>false,'error'=>'Не выбран документ.']);
+    $st = $pdo->prepare('SELECT id,title,object_id,requires_ack FROM sb_documents WHERE id=:id AND is_active=1 LIMIT 1');
+    $st->execute([':id'=>$id]);
+    $document = $st->fetch();
+    if (!$document) reply(404, ['ok'=>false,'error'=>'Документ не найден.']);
+    if (!(int)$document['requires_ack']) reply(409, ['ok'=>false,'error'=>'Для этого документа подтверждение не требуется.']);
+    if ($document['object_id'] !== null && !in_array((int)$document['object_id'], user_object_ids($pdo, (int)$ctx['id']), true)) {
+        reply(403, ['ok'=>false,'error'=>'Нет доступа к этому документу.']);
+    }
+    $ack = $pdo->prepare('INSERT IGNORE INTO sb_document_acknowledgements (document_id,user_id) VALUES (:doc,:user)');
+    $ack->execute([':doc'=>$id, ':user'=>(int)$ctx['id']]);
+    $date = $pdo->prepare('SELECT acknowledged_at FROM sb_document_acknowledgements WHERE document_id=:doc AND user_id=:user');
+    $date->execute([':doc'=>$id, ':user'=>(int)$ctx['id']]);
+    audit_log($pdo, $ctx, 'document_acknowledged', 'document', $id, (string)$document['title']);
+    reply(200, ['ok'=>true,'acknowledged_at'=>$date->fetchColumn()]);
+}
+
+if ($action === 'document_ack_status' && $method === 'GET') {
+    if (!in_array($ctx['role'], ['admin','moderator'], true)) {
+        reply(403, ['ok'=>false,'error'=>'Просматривать список ознакомления могут только руководители.']);
+    }
+    $id = (int)($_GET['id'] ?? 0);
+    if ($id < 1) reply(400, ['ok'=>false,'error'=>'Не выбран документ.']);
+    $st = $pdo->prepare('SELECT id,title,object_id,requires_ack FROM sb_documents WHERE id=:id AND is_active=1 LIMIT 1');
+    $st->execute([':id'=>$id]);
+    $document = $st->fetch();
+    if (!$document) reply(404, ['ok'=>false,'error'=>'Документ не найден.']);
+    if (!(int)$document['requires_ack']) reply(409, ['ok'=>false,'error'=>'Для этого документа подтверждение не требуется.']);
+    $where = ["u.is_active=1","u.role='user'"];
+    $params = [':doc'=>$id];
+    if ($document['object_id'] !== null) {
+        $where[] = 'EXISTS (SELECT 1 FROM sb_user_objects target_obj WHERE target_obj.user_id=u.id AND target_obj.object_id=:doc_object)';
+        $params[':doc_object'] = (int)$document['object_id'];
+    }
+    if ($ctx['role'] === 'moderator') {
+        $scopeIds = user_object_ids($pdo, (int)$ctx['id']);
+        if (!$scopeIds) reply(403, ['ok'=>false,'error'=>'В вашей зоне ответственности нет объектов.']);
+        if ($document['object_id'] !== null && !in_array((int)$document['object_id'], $scopeIds, true)) {
+            reply(403, ['ok'=>false,'error'=>'Документ находится вне вашей зоны ответственности.']);
+        }
+        if ($document['object_id'] === null) {
+            $marks = [];
+            foreach ($scopeIds as $i=>$objectId) {
+                $key = ':scope_'.$i;
+                $marks[] = $key;
+                $params[$key] = $objectId;
+            }
+            $where[] = 'EXISTS (SELECT 1 FROM sb_user_objects scoped_obj WHERE scoped_obj.user_id=u.id AND scoped_obj.object_id IN ('.implode(',', $marks).'))';
+        }
+    }
+    $sql = "SELECT u.id,u.full_name,a.acknowledged_at,
+        (SELECT GROUP_CONCAT(DISTINCT ob.name ORDER BY ob.name SEPARATOR ', ')
+         FROM sb_user_objects uo JOIN sb_objects ob ON ob.id=uo.object_id
+         WHERE uo.user_id=u.id) AS object_names
+        FROM sb_users u
+        LEFT JOIN sb_document_acknowledgements a ON a.document_id=:doc AND a.user_id=u.id
+        WHERE ".implode(' AND ',$where)."
+        ORDER BY (a.acknowledged_at IS NULL) DESC,u.full_name";
+    $rows = $pdo->prepare($sql);
+    $rows->execute($params);
+    $employees = $rows->fetchAll();
+    $done = 0;
+    foreach ($employees as &$employee) {
+        $employee['id'] = (int)$employee['id'];
+        $employee['acknowledged'] = $employee['acknowledged_at'] !== null;
+        if ($employee['acknowledged']) $done++;
+    }
+    unset($employee);
+    reply(200, ['ok'=>true,'document'=>['id'=>(int)$document['id'],'title'=>$document['title']],
+        'employees'=>$employees,'total'=>count($employees),'done'=>$done,'pending'=>count($employees)-$done]);
 }
 
 if ($action === 'document_delete' && $method === 'POST') {
