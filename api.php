@@ -232,7 +232,7 @@ function db(array $cfg): PDO {
         ]);
         // Инициализация схемы один раз на PHP-сессию, а не при каждом AJAX-запросе.
         // Версию можно повысить при добавлении новых миграций.
-        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-28-4') {
+        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-28-6') {
             $pdo->exec(
                 "CREATE TABLE IF NOT EXISTS sb_app_data (
                     data_key VARCHAR(100) NOT NULL PRIMARY KEY,
@@ -424,7 +424,27 @@ function db(array $cfg): PDO {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
             ensure_document_ack_schema($pdo);
             ensure_roles_schema($pdo);
-            $_SESSION['sb_schema_version'] = '2026-11-28-5';
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_task_comment_attachments (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                comment_id BIGINT UNSIGNED NOT NULL,
+                original_name VARCHAR(255) NOT NULL,
+                stored_name VARCHAR(80) NOT NULL UNIQUE,
+                mime_type VARCHAR(127) NOT NULL,
+                file_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_task_comment_attachment_comment (comment_id),
+                CONSTRAINT fk_task_comment_attachment_comment FOREIGN KEY (comment_id) REFERENCES sb_task_comments(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_task_comment_mentions (
+                comment_id BIGINT UNSIGNED NOT NULL,
+                user_id INT UNSIGNED NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (comment_id,user_id),
+                INDEX idx_task_comment_mentions_user (user_id,created_at),
+                CONSTRAINT fk_task_comment_mention_comment FOREIGN KEY (comment_id) REFERENCES sb_task_comments(id) ON DELETE CASCADE,
+                CONSTRAINT fk_task_comment_mention_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $_SESSION['sb_schema_version'] = '2026-11-28-6';
         }
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
@@ -1760,6 +1780,120 @@ if ($action === 'task_restore' && $method === 'POST') {
     if((int)$task['created_by']!==(int)$ctx['id']) notification_add($pdo,(int)$task['created_by'],'task','Задача восстановлена','Задача «'.$task['title'].'» возвращена из архива в работу.','tasks.php');
     reply(200,['ok'=>true]);
 }
+if ($action === 'task_comment_add' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'tasks.comment') || !role_can($pdo,$ctx,'tasks.view')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для комментариев.']);
+    check_csrf($_POST);
+    $taskId=(int)($_POST['task_id']??0);
+    if($taskId<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
+    $st=$pdo->prepare("SELECT t.id,t.title,t.is_archived,
+        EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:uid) AS recipient,
+        EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:mid) AS object_access
+        FROM sb_tasks t WHERE t.id=:id LIMIT 1");
+    $st->execute([':uid'=>(int)$ctx['id'],':mid'=>(int)$ctx['id'],':id'=>$taskId]);
+    $task=$st->fetch();
+    if(!$task) reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
+    if((int)$task['is_archived']===1) reply(409,['ok'=>false,'error'=>'В архивной задаче нельзя добавлять комментарии.']);
+    $allowed=$ctx['role']==='admin'||($ctx['role']==='user'&&(int)$task['recipient']===1)||($ctx['role']==='moderator'&&(int)$task['object_access']===1);
+    if(!$allowed) reply(403,['ok'=>false,'error'=>'Нет доступа к этой задаче.']);
+    $comment=trim((string)($_POST['comment']??''));
+    if(mb_strlen($comment)>3000) reply(400,['ok'=>false,'error'=>'Комментарий не должен превышать 3000 символов.']);
+    $mentionIds=json_decode((string)($_POST['mentions']??'[]'),true);
+    if(!is_array($mentionIds)) $mentionIds=[];
+    $mentionIds=array_values(array_unique(array_filter(array_map('intval',$mentionIds),fn($v)=>$v>0&&$v!==(int)$ctx['id'])));
+    $participant=$pdo->prepare("SELECT user_id FROM sb_task_assignees WHERE task_id=? UNION SELECT created_by FROM sb_tasks WHERE id=?");
+    $participant->execute([$taskId,$taskId]);
+    $allowedMentionIds=array_map('intval',$participant->fetchAll(PDO::FETCH_COLUMN));
+    foreach($mentionIds as $uid) if(!in_array($uid,$allowedMentionIds,true)) reply(400,['ok'=>false,'error'=>'Можно упоминать только участников этой задачи.']);
+    $files=[];
+    if(isset($_FILES['attachments']) && is_array($_FILES['attachments']['name']??null)){
+        $names=$_FILES['attachments']['name'];$tmp=$_FILES['attachments']['tmp_name'];$sizes=$_FILES['attachments']['size'];$errors=$_FILES['attachments']['error'];
+        if(count($names)>5) reply(400,['ok'=>false,'error'=>'К одному комментарию можно прикрепить не более 5 файлов.']);
+        $allowedTypes=[
+            'pdf'=>['application/pdf'],
+            'txt'=>['text/plain'],
+            'csv'=>['text/plain','text/csv','application/vnd.ms-excel'],
+            'jpg'=>['image/jpeg'],
+            'jpeg'=>['image/jpeg'],
+            'png'=>['image/png'],
+            'doc'=>['application/msword','application/x-ole-storage'],
+            'docx'=>['application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/zip'],
+            'xls'=>['application/vnd.ms-excel','application/x-ole-storage'],
+            'xlsx'=>['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/zip']
+        ];
+        $finfo=function_exists('finfo_open')?finfo_open(FILEINFO_MIME_TYPE):false;
+        foreach($names as $i=>$name){
+            $err=(int)($errors[$i]??UPLOAD_ERR_NO_FILE);
+            if($err===UPLOAD_ERR_NO_FILE) continue;
+            if($err!==UPLOAD_ERR_OK) reply(400,['ok'=>false,'error'=>'Ошибка загрузки файла «'.mb_substr((string)$name,0,100).'».']);
+            $size=(int)($sizes[$i]??0);$tmpName=(string)($tmp[$i]??'');
+            if($size<1||$size>10*1024*1024||!is_uploaded_file($tmpName)) reply(413,['ok'=>false,'error'=>'Размер каждого файла не должен превышать 10 МБ.']);
+            $original=basename(str_replace('\\','/',(string)$name));
+            $extension=strtolower(pathinfo($original,PATHINFO_EXTENSION));
+            if(!isset($allowedTypes[$extension])) reply(400,['ok'=>false,'error'=>'Недопустимый формат файла: '.$extension.'.']);
+            $mime='application/octet-stream';
+            if($finfo){$detected=finfo_file($finfo,$tmpName);if(is_string($detected)&&$detected!=='')$mime=$detected;}
+            if(!in_array($mime,$allowedTypes[$extension],true)) reply(400,['ok'=>false,'error'=>'Тип файла «'.$original.'» не соответствует расширению.']);
+            $files[]=['tmp'=>$tmpName,'name'=>mb_substr($original,0,255),'extension'=>$extension,'mime'=>$mime,'size'=>$size,'stored'=>bin2hex(random_bytes(24)).'.'.$extension];
+        }
+        if($finfo) finfo_close($finfo);
+    }
+    if($comment===''&&!$files) reply(400,['ok'=>false,'error'=>'Напишите комментарий или прикрепите файл.']);
+    $storage=__DIR__.'/task-attachments-storage';
+    if(!is_dir($storage)&&!mkdir($storage,0750,true)&&!is_dir($storage)) reply(500,['ok'=>false,'error'=>'Не удалось создать защищённое хранилище вложений.']);
+    $deny=$storage.'/.htaccess';
+    if(!is_file($deny)) @file_put_contents($deny,"Require all denied\nDeny from all\n");
+    $moved=[];
+    try {
+        foreach($files as $index=>$file){
+            $destination=$storage.'/'.$file['stored'];
+            if(!move_uploaded_file($file['tmp'],$destination)) throw new RuntimeException('Не удалось сохранить вложение.');
+            $moved[]=$destination;
+        }
+        $pdo->beginTransaction();
+        $ins=$pdo->prepare('INSERT INTO sb_task_comments(task_id,user_id,user_name,comment) VALUES(?,?,?,?)');
+        $ins->execute([$taskId,(int)$ctx['id'],(string)$ctx['full_name'],$comment]);
+        $commentId=(int)$pdo->lastInsertId();
+        $attach=$pdo->prepare('INSERT INTO sb_task_comment_attachments(comment_id,original_name,stored_name,mime_type,file_size) VALUES(?,?,?,?,?)');
+        foreach($files as $file)$attach->execute([$commentId,$file['name'],$file['stored'],$file['mime'],$file['size']]);
+        $mentionInsert=$pdo->prepare('INSERT INTO sb_task_comment_mentions(comment_id,user_id) VALUES(?,?)');
+        foreach($mentionIds as $uid){$mentionInsert->execute([$commentId,$uid]);notification_add($pdo,$uid,'task_mention','Вас упомянули в задаче',''.(string)$ctx['full_name'].' упомянул(а) вас в комментарии к задаче «'.$task['title'].'».','tasks.php');}
+        $recipients=array_unique(array_map('intval',$allowedMentionIds));
+        foreach($recipients as $uid) if($uid!==(int)$ctx['id']&&!in_array($uid,$mentionIds,true)) notification_add($pdo,$uid,'task','Комментарий к задаче','Новый комментарий к задаче «'.$task['title'].'».','tasks.php');
+        audit_log($pdo,$ctx,'task_comment_added','task',$taskId,(string)$task['title'],['comment_id'=>$commentId,'attachments'=>count($files),'mentions'=>$mentionIds]);
+        $pdo->commit();
+    } catch(Throwable $e) {
+        if($pdo->inTransaction())$pdo->rollBack();
+        foreach($moved as $path) if(is_file($path)) @unlink($path);
+        error_log('SB task comment add error: '.$e->getMessage());
+        reply(500,['ok'=>false,'error'=>'Не удалось сохранить комментарий и вложения.']);
+    }
+    reply(200,['ok'=>true,'comment_id'=>$commentId]);
+}
+
+if ($action === 'task_comment_attachment_download' && $method === 'GET') {
+    if (!role_can($pdo,$ctx,'tasks.view')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
+    $attachmentId=(int)($_GET['id']??0);
+    if($attachmentId<1) reply(400,['ok'=>false,'error'=>'Не выбрано вложение.']);
+    $st=$pdo->prepare("SELECT a.id,a.original_name,a.stored_name,a.mime_type,a.file_size,t.id AS task_id,
+        EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:uid) AS recipient,
+        EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:mid) AS object_access
+        FROM sb_task_comment_attachments a JOIN sb_task_comments c ON c.id=a.comment_id JOIN sb_tasks t ON t.id=c.task_id
+        WHERE a.id=:id LIMIT 1");
+    $st->execute([':uid'=>(int)$ctx['id'],':mid'=>(int)$ctx['id'],':id'=>$attachmentId]);
+    $file=$st->fetch();
+    if(!$file) reply(404,['ok'=>false,'error'=>'Вложение не найдено.']);
+    $allowed=$ctx['role']==='admin'||($ctx['role']==='user'&&(int)$file['recipient']===1)||($ctx['role']==='moderator'&&(int)$file['object_access']===1);
+    if(!$allowed) reply(403,['ok'=>false,'error'=>'Нет доступа к этому вложению.']);
+    $path=__DIR__.'/task-attachments-storage/'.basename((string)$file['stored_name']);
+    if(!is_file($path)) reply(404,['ok'=>false,'error'=>'Файл вложения отсутствует на сервере.']);
+    header('Content-Type: '.(string)$file['mime_type']);
+    header('Content-Length: '.(string)$file['file_size']);
+    header('Content-Disposition: attachment; filename="attachment"; filename*=UTF-8\'\''.rawurlencode((string)$file['original_name']));
+    header('X-Content-Type-Options: nosniff');
+    readfile($path);
+    exit;
+}
+
 if ($action === 'task_comments' && $method === 'GET') {
     if (!role_can($pdo,$ctx,'tasks.view')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
     $taskId=(int)($_GET['id']??0); if($taskId<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
@@ -1788,7 +1922,26 @@ if ($action === 'task_comments' && $method === 'GET') {
     $comments=$cs->fetchAll();
     if(!role_can($pdo,$ctx,'tasks.comment')) foreach($comments as &$commentRow) $commentRow['can_delete']=0;
     unset($commentRow);
-    reply(200,['ok'=>true,'comments'=>$comments]);
+    $commentIds=array_map(fn($row)=>(int)$row['id'],$comments);
+    $attachmentsByComment=[];$mentionsByComment=[];
+    if($commentIds){
+        $marks=implode(',',array_fill(0,count($commentIds),'?'));
+        $as=$pdo->prepare("SELECT id,comment_id,original_name,mime_type,file_size FROM sb_task_comment_attachments WHERE comment_id IN ($marks) ORDER BY id");
+        $as->execute($commentIds);
+        foreach($as->fetchAll() as $attachment){$attachment['id']=(int)$attachment['id'];$attachment['file_size']=(int)$attachment['file_size'];$attachmentsByComment[(int)$attachment['comment_id']][]=$attachment;}
+        $ms=$pdo->prepare("SELECT m.comment_id,m.user_id,u.full_name FROM sb_task_comment_mentions m JOIN sb_users u ON u.id=m.user_id WHERE m.comment_id IN ($marks) ORDER BY u.full_name");
+        $ms->execute($commentIds);
+        foreach($ms->fetchAll() as $mention){$mentionsByComment[(int)$mention['comment_id']][]=['id'=>(int)$mention['user_id'],'full_name'=>(string)$mention['full_name']];}
+    }
+    foreach($comments as &$commentRow){$cid=(int)$commentRow['id'];$commentRow['attachments']=$attachmentsByComment[$cid]??[];$commentRow['mentions']=$mentionsByComment[$cid]??[];}
+    unset($commentRow);
+    $mentionUsers=$pdo->prepare("SELECT u.id,u.full_name FROM sb_users u
+        WHERE u.is_active=1 AND (EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=:task_assignees AND ta.user_id=u.id)
+        OR EXISTS(SELECT 1 FROM sb_tasks t WHERE t.id=:task_creator AND t.created_by=u.id))
+        AND u.id<>:viewer ORDER BY u.full_name");
+    $mentionUsers->execute([':task_assignees'=>$taskId,':task_creator'=>$taskId,':viewer'=>(int)$ctx['id']]);
+    $mentionable=[];foreach($mentionUsers->fetchAll() as $person)$mentionable[]=['id'=>(int)$person['id'],'full_name'=>(string)$person['full_name']];
+    reply(200,['ok'=>true,'comments'=>$comments,'mentionable_users'=>$mentionable]);
 }
 if ($action === 'task_comment_delete' && $method === 'POST') {
     if (!role_can($pdo,$ctx,'tasks.comment')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
