@@ -173,7 +173,7 @@ function ensure_roles_schema(PDO $pdo): void {
     }
     $defaults = [
         'moderator'=>['tasks.view','tasks.create','tasks.manage','tasks.update_status','tasks.comment','employees.view','employees.manage','documents.view','documents.manage','documents.acknowledge','reports.view','reports.create','reports.manage','incidents.view','incidents.create','incidents.manage','damage.view','damage.manage'],
-        'user'=>['tasks.view','tasks.update_status','tasks.comment','documents.view','documents.acknowledge','reports.view','reports.create','incidents.view','incidents.create','damage.view']
+        'user'=>['tasks.view','tasks.update_status','tasks.comment','employees.view','documents.view','documents.acknowledge','reports.view','reports.create','incidents.view','incidents.create','damage.view']
     ];
     $permissionInsert = $pdo->prepare('INSERT IGNORE INTO sb_role_permissions (role_key,permission_key,is_allowed) VALUES (:role,:permission,1)');
     foreach ($defaults as $roleKey=>$permissions) foreach ($permissions as $permission) {
@@ -231,7 +231,13 @@ function role_can(PDO $pdo, array $ctx, string $permission): bool {
     $st = $pdo->prepare('SELECT is_allowed FROM sb_role_permissions WHERE role_key=:role AND permission_key=:permission LIMIT 1');
     $st->execute([':role'=>$roleKey,':permission'=>$permission]);
     $value = $st->fetchColumn();
-    return $value !== false && (int)$value === 1;
+    if ($value !== false && (int)$value === 1) return true;
+    if ($permission === 'tasks.update_status') {
+        $fallback = $pdo->prepare("SELECT is_allowed FROM sb_role_permissions WHERE role_key=:role AND permission_key='tasks.manage' LIMIT 1");
+        $fallback->execute([':role'=>$roleKey]);
+        return (int)$fallback->fetchColumn() === 1;
+    }
+    return false;
 }
 
 function ensure_document_ack_schema(PDO $pdo): void {
