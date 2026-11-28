@@ -2634,6 +2634,7 @@ if ($action === 'archive_delete' && $method === 'POST') {
 }
 
 if ($action === 'moderator_user_create' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'employees.manage')) reply(403,['ok'=>false,'error'=>'Нет разрешения на создание сотрудников.']);
     $body = input_json();
     check_csrf($body);
     if (!in_array($ctx['role'], ['admin', 'moderator'], true)) reply(403, ['ok' => false, 'error' => 'Недостаточно прав.']);
