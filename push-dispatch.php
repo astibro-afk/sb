@@ -11,6 +11,7 @@ function sb_push_base64url_encode(string $value): string {
 
 function sb_push_dispatch_pending(PDO $pdo, int $limit = 4): void {
     if ($pdo->inTransaction()) return;
+    if (function_exists('system_setting') && system_setting($pdo, 'push_enabled', '1') !== '1') return;
 
     try {
         $due = $pdo->query(
@@ -133,8 +134,10 @@ function sb_push_dispatch_pending(PDO $pdo, int $limit = 4): void {
             if (!$notice) continue;
 
             $target = (string)($notice['link'] ?? '');
-            if (!preg_match('~^(?:/[a-z0-9_/-]+\\.php(?:\\?[a-z0-9_=&%-]*)?|/index\\.html)$~i', $target) || strpos($target, '..') !== false) {
+            if (!preg_match('~^/?(?:[a-z0-9_/-]+\\.php(?:\\?[a-z0-9_=&%-]*)?|index\\.html)$~i', $target) || strpos($target, '..') !== false) {
                 $target = '/notifications.php';
+            } else {
+                $target = '/' . ltrim($target, '/');
             }
 
             $payload = json_encode([

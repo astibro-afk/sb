@@ -162,6 +162,81 @@ function ensure_document_ack_schema(PDO $pdo): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 }
 
+function ensure_extended_schema(PDO $pdo): void {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_incidents (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        object_id INT UNSIGNED NOT NULL,
+        title VARCHAR(180) NOT NULL,
+        incident_type VARCHAR(80) NOT NULL DEFAULT 'Прочее',
+        occurred_at DATETIME NOT NULL,
+        description TEXT NULL,
+        persons TEXT NULL,
+        damage_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+        claimed_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+        status VARCHAR(24) NOT NULL DEFAULT 'new',
+        created_by INT UNSIGNED NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_incidents_object_date (object_id,occurred_at),
+        INDEX idx_incidents_creator_date (created_by,occurred_at),
+        CONSTRAINT fk_incidents_object FOREIGN KEY (object_id) REFERENCES sb_objects(id) ON DELETE RESTRICT,
+        CONSTRAINT fk_incidents_creator FOREIGN KEY (created_by) REFERENCES sb_users(id) ON DELETE RESTRICT
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_incident_files (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        incident_id BIGINT UNSIGNED NOT NULL,
+        stored_name VARCHAR(80) NOT NULL UNIQUE,
+        original_name VARCHAR(255) NOT NULL,
+        mime_type VARCHAR(80) NOT NULL,
+        file_size INT UNSIGNED NOT NULL DEFAULT 0,
+        uploaded_by INT UNSIGNED NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_incident_files_incident (incident_id),
+        CONSTRAINT fk_incident_file_incident FOREIGN KEY (incident_id) REFERENCES sb_incidents(id) ON DELETE CASCADE,
+        CONSTRAINT fk_incident_file_user FOREIGN KEY (uploaded_by) REFERENCES sb_users(id) ON DELETE RESTRICT
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_damage_payments (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        incident_id BIGINT UNSIGNED NOT NULL,
+        amount DECIMAL(12,2) NOT NULL,
+        paid_at DATE NOT NULL,
+        note VARCHAR(500) NOT NULL DEFAULT '',
+        created_by INT UNSIGNED NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_damage_payments_incident (incident_id,paid_at),
+        CONSTRAINT fk_damage_payment_incident FOREIGN KEY (incident_id) REFERENCES sb_incidents(id) ON DELETE CASCADE,
+        CONSTRAINT fk_damage_payment_user FOREIGN KEY (created_by) REFERENCES sb_users(id) ON DELETE RESTRICT
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_role_permissions (
+        role VARCHAR(16) NOT NULL,
+        permission_key VARCHAR(64) NOT NULL,
+        is_enabled TINYINT(1) NOT NULL DEFAULT 0,
+        updated_by INT UNSIGNED NULL DEFAULT NULL,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (role,permission_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_system_settings (
+        setting_key VARCHAR(80) NOT NULL PRIMARY KEY,
+        setting_value LONGTEXT NOT NULL,
+        updated_by INT UNSIGNED NULL DEFAULT NULL,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_message_templates (
+        template_key VARCHAR(64) NOT NULL PRIMARY KEY,
+        title VARCHAR(180) NOT NULL,
+        body TEXT NOT NULL,
+        updated_by INT UNSIGNED NULL DEFAULT NULL,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $templates = [
+        ['incident_created','Новое происшествие','Зарегистрировано происшествие №{incident_id} на объекте «{object}»: {title}.'],
+        ['damage_payment','Обновлено возмещение ущерба','По происшествию №{incident_id} зарегистрировано возмещение {amount}. Остаток: {balance}.'],
+        ['document_ack','Требуется ознакомление','Необходимо ознакомиться с документом «{title}».']
+    ];
+    $st = $pdo->prepare('INSERT IGNORE INTO sb_message_templates (template_key,title,body) VALUES (:k,:t,:b)');
+    foreach ($templates as $template) $st->execute([':k'=>$template[0],':t'=>$template[1],':b'=>$template[2]]);
+}
+
 function db(array $cfg): PDO {
     static $pdo = null;
     if ($pdo instanceof PDO) return $pdo;
@@ -372,7 +447,8 @@ function db(array $cfg): PDO {
                 INDEX idx_documents_uploader (uploaded_by)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
             ensure_document_ack_schema($pdo);
-            $_SESSION['sb_schema_version'] = '2026-11-28-3';
+            ensure_extended_schema($pdo);
+            $_SESSION['sb_schema_version'] = '2026-11-28-4';
         }
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
@@ -434,14 +510,15 @@ function audit_log(PDO $pdo, ?array $actor, string $action, string $targetType =
 }
 
 function notification_add(PDO $pdo, int $userId, string $type, string $title, string $message, string $link = ''): void {
-    if ($userId < 1) return;
+    if ($userId < 1 || system_setting($pdo, 'notifications_enabled', '1') !== '1') return;
     try {
         $st = $pdo->prepare('INSERT INTO sb_notifications (user_id, type, title, message, link) VALUES (:uid, :type, :title, :message, :link)');
         $st->execute([':uid'=>$userId, ':type'=>mb_substr($type,0,48), ':title'=>mb_substr($title,0,180), ':message'=>$message, ':link'=>mb_substr($link,0,255)]);
         $notificationId = (int)$pdo->lastInsertId();
-        // Transactional outbox: no network requests are made inside business transactions.
-        $queue = $pdo->prepare("INSERT INTO sb_push_queue (notification_id,user_id) SELECT :nid,:uid WHERE EXISTS (SELECT 1 FROM sb_push_subscriptions WHERE user_id=:sub_uid AND is_active=1)");
-        $queue->execute([':nid'=>$notificationId, ':uid'=>$userId, ':sub_uid'=>$userId]);
+        if (system_setting($pdo, 'push_enabled', '1') === '1') {
+            $queue = $pdo->prepare("INSERT INTO sb_push_queue (notification_id,user_id) SELECT :nid,:uid WHERE EXISTS (SELECT 1 FROM sb_push_subscriptions WHERE user_id=:sub_uid AND is_active=1)");
+            $queue->execute([':nid'=>$notificationId, ':uid'=>$userId, ':sub_uid'=>$userId]);
+        }
     } catch (Throwable $e) { error_log('SB notification error: '.$e->getMessage()); }
 }
 
@@ -478,7 +555,108 @@ function user_ctx(PDO $pdo, array $u): array {
         'object_name' => $objectNames ? $objectNames[0] : '',
         'object_ids' => $objectIds,
         'object_names' => $objectNames,
+        'permissions' => role_permissions($pdo, (string)$u['role']),
     ];
+}
+
+function permission_catalog(): array {
+    return [
+        'reports.view'=>'Просмотр отчётов',
+        'reports.create'=>'Создание и сохранение отчётов',
+        'reports.comment'=>'Комментарии к отчётам',
+        'reports.delete'=>'Удаление отчётов',
+        'tasks.view'=>'Просмотр задач',
+        'tasks.create'=>'Создание задач',
+        'tasks.update'=>'Изменение статуса задач по правилам роли',
+        'tasks.manage'=>'Управление задачами в зоне доступа',
+        'tasks.delete'=>'Удаление задач',
+        'tasks.comment_delete'=>'Удаление комментариев по правилам роли',
+        'employees.view'=>'Просмотр сотрудников',
+        'employees.manage'=>'Создание сотрудников в зоне доступа',
+        'documents.view'=>'Просмотр и скачивание документов',
+        'documents.manage'=>'Загрузка и удаление документов в зоне доступа',
+        'documents.acknowledge'=>'Подтверждение ознакомления с документами',
+        'incidents.view'=>'Просмотр происшествий',
+        'incidents.create'=>'Регистрация происшествий',
+        'damage.view'=>'Просмотр данных о возмещении ущерба',
+        'damage.manage'=>'Изменение требований и регистрация возмещений',
+        'settings.manage'=>'Изменение настроек системы',
+        'permissions.manage'=>'Настройка прав доступа по ролям'
+    ];
+}
+
+function role_permission_defaults(string $role): array {
+    $catalog = permission_catalog();
+    $values = array_fill_keys(array_keys($catalog), false);
+    if ($role === 'admin') return array_fill_keys(array_keys($catalog), true);
+    if ($role === 'moderator') {
+        foreach (array_keys($catalog) as $key) $values[$key] = !in_array($key, ['settings.manage','permissions.manage','documents.acknowledge'], true);
+        return $values;
+    }
+    $enabled = [
+        'reports.view','reports.create','reports.comment','reports.delete',
+        'tasks.view','tasks.create','tasks.update','tasks.comment_delete',
+        'employees.view','documents.view','documents.acknowledge',
+        'incidents.view','incidents.create','damage.view'
+    ];
+    foreach ($enabled as $key) $values[$key] = true;
+    return $values;
+}
+
+function role_permissions(PDO $pdo, string $role): array {
+    $values = role_permission_defaults($role);
+    if ($role === 'admin') return $values;
+    $allowed = $values;
+    try {
+        $st = $pdo->prepare('SELECT permission_key,is_enabled FROM sb_role_permissions WHERE role=:role');
+        $st->execute([':role'=>$role]);
+        foreach ($st->fetchAll() as $row) {
+            $key = (string)$row['permission_key'];
+            if (array_key_exists($key, $values) && !empty($allowed[$key])) $values[$key] = (bool)$row['is_enabled'];
+        }
+    } catch (Throwable $e) { error_log('SB role permissions read error: '.$e->getMessage()); }
+    return $values;
+}
+
+function has_permission(PDO $pdo, array $ctx, string $key): bool {
+    if (($ctx['role'] ?? '') === 'admin') return true;
+    $permissions = role_permissions($pdo, (string)($ctx['role'] ?? 'user'));
+    return !empty($permissions[$key]);
+}
+
+function require_permission(PDO $pdo, array $ctx, string $key): void {
+    if (!has_permission($pdo, $ctx, $key)) {
+        reply(403, ['ok'=>false,'error'=>'Это действие запрещено настройками прав доступа вашей роли.']);
+    }
+}
+
+function system_setting(PDO $pdo, string $key, string $default = ''): string {
+    try {
+        $st=$pdo->prepare('SELECT setting_value FROM sb_system_settings WHERE setting_key=:k LIMIT 1');
+        $st->execute([':k'=>$key]);
+        $value=$st->fetchColumn();
+        return $value === false ? $default : (string)$value;
+    } catch (Throwable $e) { return $default; }
+}
+
+function save_system_setting(PDO $pdo, string $key, string $value, int $userId): void {
+    $st=$pdo->prepare('INSERT INTO sb_system_settings (setting_key,setting_value,updated_by) VALUES (:k,:v,:u) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),updated_by=VALUES(updated_by)');
+    $st->execute([':k'=>$key,':v'=>$value,':u'=>$userId]);
+}
+
+function render_message_template(PDO $pdo, string $key, array $vars): array {
+    $defaults = [
+        'incident_created'=>['Новое происшествие','Зарегистрировано происшествие №{incident_id} на объекте «{object}»: {title}.'],
+        'damage_payment'=>['Обновлено возмещение ущерба','По происшествию №{incident_id} зарегистрировано возмещение {amount}. Остаток: {balance}.'],
+        'document_ack'=>['Требуется ознакомление','Необходимо ознакомиться с документом «{title}».']
+    ];
+    $st=$pdo->prepare('SELECT title,body FROM sb_message_templates WHERE template_key=:k LIMIT 1');
+    $st->execute([':k'=>$key]);
+    $row=$st->fetch();
+    $title=(string)($row['title']??$defaults[$key][0]??'Уведомление');
+    $body=(string)($row['body']??$defaults[$key][1]??'');
+    foreach($vars as $name=>$value){$body=str_replace('{'.$name.'}',(string)$value,$body);$title=str_replace('{'.$name.'}',(string)$value,$title);}
+    return [$title,$body];
 }
 
 function push_base64url_encode(string $value): string {
@@ -804,6 +982,24 @@ if (!$user) {
 }
 $ctx = user_ctx($pdo, $user);
 
+$permissionByAction = [
+    'tasks_data'=>'tasks.view','task_comments'=>'tasks.view','task_create'=>'tasks.create',
+    'task_update'=>'tasks.update','task_delete'=>'tasks.delete','task_archive'=>'tasks.manage',
+    'task_restore'=>'tasks.manage','task_comment_delete'=>'tasks.comment_delete',
+    'employees_data'=>'employees.view','employees_presence'=>'employees.view','employee_history'=>'employees.view',
+    'moderator_user_create'=>'employees.manage',
+    'documents_data'=>'documents.view','document_download'=>'documents.view',
+    'document_upload'=>'documents.manage','document_delete'=>'documents.manage',
+    'document_acknowledge'=>'documents.acknowledge','document_ack_status'=>'documents.manage',
+    'reports_data'=>'reports.view','report_detail'=>'reports.view','load'=>'reports.view',
+    'save'=>'reports.create','report_comment'=>'reports.comment','reports_delete'=>'reports.delete','archive_delete'=>'reports.delete',
+    'incidents_data'=>'incidents.view','incident_create'=>'incidents.create','incident_file'=>'incidents.view',
+    'damage_data'=>'damage.view','damage_update'=>'damage.manage',
+    'settings_data'=>'settings.manage','settings_save'=>'settings.manage',
+    'permissions_data'=>'permissions.manage','permissions_save'=>'permissions.manage'
+];
+if (isset($permissionByAction[$action])) require_permission($pdo, $ctx, $permissionByAction[$action]);
+
 // Dispatch only after the API response and only when no business transaction is open.
 // On PHP-FPM this lets the client receive the response before outbound push requests run.
 require_once __DIR__ . '/push-dispatch.php';
@@ -973,6 +1169,15 @@ if ($action === 'dashboard_data' && $method === 'GET') {
     unset($notification);
     $unreadStmt = $pdo->prepare('SELECT COUNT(*) FROM sb_notifications WHERE user_id=:unread_uid AND is_read=0');
     $unreadStmt->execute([':unread_uid'=>$uid]);
+
+    if (!has_permission($pdo,$ctx,'tasks.view')) {
+        $tasks=[];
+        $taskSummary=['total'=>0,'active_count'=>0,'review_count'=>0,'overdue_count'=>0];
+    }
+    if (!has_permission($pdo,$ctx,'reports.view')) {
+        $reports=[];$reportCount=0;$lastReport=null;
+    }
+    if (!has_permission($pdo,$ctx,'employees.view')) $employeeCount=0;
 
     reply(200, [
         'ok'=>true, 'user'=>$ctx, 'csrf'=>csrf_token(),
@@ -1213,9 +1418,9 @@ if ($action === 'document_upload' && $method === 'POST') {
             } else {
                 $recipients = $pdo->query("SELECT id FROM sb_users WHERE is_active=1 AND role='user'");
             }
+            [$ackTitle,$ackBody]=render_message_template($pdo,'document_ack',['title'=>$title]);
             foreach ($recipients->fetchAll(PDO::FETCH_COLUMN) as $recipientId) {
-                notification_add($pdo, (int)$recipientId, 'document_ack_required', 'Требуется ознакомление',
-                    'Необходимо ознакомиться с документом: ' . $title, 'documents.php');
+                notification_add($pdo, (int)$recipientId, 'document_ack_required', $ackTitle, $ackBody, 'documents.php');
             }
         }
         reply(200, ['ok'=>true,'id'=>$id]);
@@ -2401,6 +2606,223 @@ if ($action === 'archive_delete' && $method === 'POST') {
     $stmt = $pdo->prepare('DELETE FROM sb_archive_records WHERE record_key = :k');
     $stmt->execute([':k' => $key]);
     reply(200, ['ok' => true]);
+}
+
+
+// Регистрация происшествий, фото и контроль возмещения ущерба.
+if ($action === 'system_info' && $method === 'GET') {
+    reply(200, ['ok'=>true,'org_name'=>system_setting($pdo,'org_name','Служба безопасности'),
+        'org_subtitle'=>system_setting($pdo,'org_subtitle','Группа БФ Волгоград 1'),
+        'has_logo'=>system_setting($pdo,'logo_file','')!=='']);
+}
+if ($action === 'system_logo' && $method === 'GET') {
+    $name=system_setting($pdo,'logo_file','');
+    if ($name==='' || !preg_match('/^[a-f0-9]{32}\.(png|jpe?g|webp)$/i',$name)) { http_response_code(404); exit; }
+    $path=__DIR__.'/system-storage/'.$name;
+    if (!is_file($path)) { http_response_code(404); exit; }
+    $ext=strtolower((string)pathinfo($path,PATHINFO_EXTENSION));
+    header('Content-Type: '.($ext==='png'?'image/png':($ext==='webp'?'image/webp':'image/jpeg')));
+    header('Content-Length: '.(string)filesize($path));
+    header('Cache-Control: private, max-age=300');
+    readfile($path); exit;
+}
+if ($action === 'settings_data' && $method === 'GET') {
+    require_role($ctx,'admin');
+    $settings=[];
+    foreach(['org_name'=>'Служба безопасности','org_subtitle'=>'Группа БФ Волгоград 1','notifications_enabled'=>'1','push_enabled'=>'1','logo_file'=>''] as $key=>$default) $settings[$key]=system_setting($pdo,$key,$default);
+    $templates=$pdo->query('SELECT template_key,title,body FROM sb_message_templates ORDER BY template_key')->fetchAll();
+    reply(200,['ok'=>true,'settings'=>$settings,'templates'=>$templates,'csrf'=>csrf_token()]);
+}
+if ($action === 'settings_save' && $method === 'POST') {
+    require_role($ctx,'admin'); check_csrf($_POST);
+    $orgName=trim((string)($_POST['org_name']??system_setting($pdo,'org_name','Служба безопасности')));
+    $orgSubtitle=trim((string)($_POST['org_subtitle']??system_setting($pdo,'org_subtitle','Группа БФ Волгоград 1')));
+    if($orgName===''||mb_strlen($orgName)>120||mb_strlen($orgSubtitle)>160) reply(400,['ok'=>false,'error'=>'Проверьте название организации и подпись.']);
+    $logoFile=system_setting($pdo,'logo_file','');
+    if(!empty($_POST['remove_logo'])) $logoFile='';
+    if(isset($_FILES['logo'])&&is_array($_FILES['logo'])&&(int)($_FILES['logo']['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_NO_FILE){
+        $file=$_FILES['logo'];$err=(int)($file['error']??UPLOAD_ERR_NO_FILE);
+        if($err!==UPLOAD_ERR_OK||(int)($file['size']??0)<1||(int)$file['size']>2*1024*1024||!is_uploaded_file((string)($file['tmp_name']??''))) reply(400,['ok'=>false,'error'=>'Логотип должен быть изображением размером до 2 МБ.']);
+        $mime='';if(function_exists('finfo_open')){$fi=finfo_open(FILEINFO_MIME_TYPE);if($fi){$mime=(string)finfo_file($fi,(string)$file['tmp_name']);finfo_close($fi);}}
+        $extMap=['image/png'=>'png','image/jpeg'=>'jpg','image/webp'=>'webp'];
+        if(!isset($extMap[$mime])) reply(415,['ok'=>false,'error'=>'Для логотипа разрешены PNG, JPG и WEBP.']);
+        $dir=__DIR__.'/system-storage';if(!is_dir($dir)&&!@mkdir($dir,0750,true)&&!is_dir($dir)) reply(500,['ok'=>false,'error'=>'Не удалось создать хранилище логотипа.']);
+        $logoFile=bin2hex(random_bytes(16)).'.'.$extMap[$mime];
+        if(!move_uploaded_file((string)$file['tmp_name'],$dir.'/'.$logoFile)) reply(500,['ok'=>false,'error'=>'Не удалось сохранить логотип.']);
+    }
+    $pdo->beginTransaction();
+    try{
+        save_system_setting($pdo,'org_name',$orgName,(int)$ctx['id']);
+        save_system_setting($pdo,'org_subtitle',$orgSubtitle,(int)$ctx['id']);
+        if(array_key_exists('notifications_enabled',$_POST)) save_system_setting($pdo,'notifications_enabled',!empty($_POST['notifications_enabled'])?'1':'0',(int)$ctx['id']);
+        if(array_key_exists('push_enabled',$_POST)) save_system_setting($pdo,'push_enabled',!empty($_POST['push_enabled'])?'1':'0',(int)$ctx['id']);
+        save_system_setting($pdo,'logo_file',$logoFile,(int)$ctx['id']);
+        $keys=['incident_created','damage_payment','document_ack'];
+        foreach($keys as $key){
+            $titleKey='template_'.$key.'_title';$bodyKey='template_'.$key.'_body';
+            if(!array_key_exists($titleKey,$_POST)&&!array_key_exists($bodyKey,$_POST)) continue;
+            $title=trim((string)($_POST[$titleKey]??''));$body=trim((string)($_POST[$bodyKey]??''));
+            if($title===''||mb_strlen($title)>180||$body===''||mb_strlen($body)>1000) throw new InvalidArgumentException('Проверьте заголовки и тексты шаблонов уведомлений.');
+            $st=$pdo->prepare('INSERT INTO sb_message_templates (template_key,title,body,updated_by) VALUES (:k,:t,:b,:u) ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_by=VALUES(updated_by)');
+            $st->execute([':k'=>$key,':t'=>$title,':b'=>$body,':u'=>(int)$ctx['id']]);
+        }
+        $pdo->commit();
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();reply(400,['ok'=>false,'error'=>$e instanceof InvalidArgumentException?$e->getMessage():'Не удалось сохранить настройки.']);}
+    audit_log($pdo,$ctx,'system_settings_updated','settings',null,'Настройки системы');
+    reply(200,['ok'=>true]);
+}
+if ($action === 'permissions_data' && $method === 'GET') {
+    require_role($ctx,'admin');
+    reply(200,['ok'=>true,'catalog'=>permission_catalog(),'roles'=>[
+        'moderator'=>role_permissions($pdo,'moderator'),'user'=>role_permissions($pdo,'user')
+    ],'defaults'=>['moderator'=>role_permission_defaults('moderator'),'user'=>role_permission_defaults('user')],'csrf'=>csrf_token()]);
+}
+if ($action === 'permissions_save' && $method === 'POST') {
+    require_role($ctx,'admin');$body=input_json();check_csrf($body);
+    $roles=is_array($body['roles']??null)?$body['roles']:[];
+    $catalog=permission_catalog();
+    $st=$pdo->prepare('INSERT INTO sb_role_permissions (role,permission_key,is_enabled,updated_by) VALUES (:r,:k,:v,:u) ON DUPLICATE KEY UPDATE is_enabled=VALUES(is_enabled),updated_by=VALUES(updated_by)');
+    $pdo->beginTransaction();
+    try{
+        foreach(['moderator','user'] as $role){
+            $values=is_array($roles[$role]??null)?$roles[$role]:[];
+            foreach($catalog as $key=>$label){
+                $allowed=role_permission_defaults($role);
+                $st->execute([':r'=>$role,':k'=>$key,':v'=>(!empty($allowed[$key])&&!empty($values[$key]))?1:0,':u'=>(int)$ctx['id']]);
+            }
+        }
+        $pdo->commit();
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();reply(500,['ok'=>false,'error'=>'Не удалось сохранить права доступа.']);}
+    audit_log($pdo,$ctx,'role_permissions_updated','permissions',null,'Права ролей',['roles'=>['moderator','user']]);
+    reply(200,['ok'=>true]);
+}
+if ($action === 'incidents_data' && $method === 'GET') {
+    $where=[];$params=[];
+    if($ctx['role']==='moderator'){
+        $ids=array_values(array_filter(array_map('intval',$ctx['object_ids'])));
+        if(!$ids) $where[]='1=0'; else {$where[]='i.object_id IN ('.implode(',',array_fill(0,count($ids),'?')).')';$params=$ids;}
+    }elseif($ctx['role']==='user'){$where[]='i.created_by=?';$params[]=(int)$ctx['id'];}
+    $sql='SELECT i.id,i.object_id,o.name AS object_name,i.title,i.incident_type,i.occurred_at,i.description,i.persons,i.damage_amount,i.claimed_amount,i.status,i.created_by,u.full_name AS creator_name,i.created_at,
+        COALESCE((SELECT SUM(p.amount) FROM sb_damage_payments p WHERE p.incident_id=i.id),0) AS reimbursed_amount
+        FROM sb_incidents i JOIN sb_objects o ON o.id=i.object_id JOIN sb_users u ON u.id=i.created_by'.
+        ($where?' WHERE '.implode(' AND ',$where):'').' ORDER BY i.occurred_at DESC,i.id DESC LIMIT 200';
+    $st=$pdo->prepare($sql);$st->execute($params);$rows=$st->fetchAll();
+    $ids=array_map(function($r){return (int)$r['id'];},$rows);$files=[];
+    if($ids){$q=$pdo->prepare('SELECT id,incident_id,original_name,mime_type,file_size FROM sb_incident_files WHERE incident_id IN ('.implode(',',array_fill(0,count($ids),'?')).') ORDER BY id');$q->execute($ids);foreach($q->fetchAll() as $file){$file['id']=(int)$file['id'];$file['file_size']=(int)$file['file_size'];$files[(int)$file['incident_id']][]=$file;}}
+    foreach($rows as &$row){$row['id']=(int)$row['id'];$row['object_id']=(int)$row['object_id'];$row['damage_amount']=(float)$row['damage_amount'];$row['claimed_amount']=(float)$row['claimed_amount'];$row['reimbursed_amount']=(float)$row['reimbursed_amount'];$row['balance_amount']=max(0,$row['claimed_amount']-$row['reimbursed_amount']);$row['files']=$files[$row['id']]??[];}
+    unset($row);
+    reply(200,['ok'=>true,'incidents'=>$rows,'csrf'=>csrf_token()]);
+}
+if ($action === 'incident_create' && $method === 'POST') {
+    check_csrf($_POST);
+    $objectId=(int)($_POST['object_id']??0);$title=trim((string)($_POST['title']??''));$type=trim((string)($_POST['incident_type']??'Прочее'));
+    $occurred=trim((string)($_POST['occurred_at']??''));$description=trim((string)($_POST['description']??''));$persons=trim((string)($_POST['persons']??''));
+    $damageRaw=str_replace(',','.',trim((string)($_POST['damage_amount']??'0')));
+    if($objectId<1||$title===''||mb_strlen($title)>180||$type===''||mb_strlen($type)>80||mb_strlen($description)>10000||mb_strlen($persons)>3000) reply(400,['ok'=>false,'error'=>'Заполните объект, название и корректные сведения о происшествии.']);
+    $date=DateTime::createFromFormat('Y-m-d\TH:i',$occurred);
+    if(!$date||$date->format('Y-m-d\TH:i')!==$occurred) reply(400,['ok'=>false,'error'=>'Укажите дату и время происшествия.']);
+    if(!is_numeric($damageRaw)||(float)$damageRaw<0||(float)$damageRaw>9999999999) reply(400,['ok'=>false,'error'=>'Некорректная сумма ущерба.']);
+    $allowed=user_object_ids($pdo,(int)$ctx['id']);
+    if($ctx['role']!=='admin'&&!in_array($objectId,$allowed,true)) reply(403,['ok'=>false,'error'=>'Нет доступа к выбранному объекту.']);
+    $obj=$pdo->prepare('SELECT name FROM sb_objects WHERE id=:id AND is_active=1');$obj->execute([':id'=>$objectId]);$objectName=$obj->fetchColumn();
+    if(!$objectName) reply(400,['ok'=>false,'error'=>'Объект не найден или отключён.']);
+    $uploads=[];$photo=$_FILES['photos']??null;
+    if(is_array($photo)&&isset($photo['name'])&&is_array($photo['name'])){
+        $count=count($photo['name']);if($count>5)reply(400,['ok'=>false,'error'=>'Можно приложить не более 5 фотографий.']);
+        $totalPhotoBytes=0;foreach(($photo['size']??[]) as $photoSize)$totalPhotoBytes+=(int)$photoSize;
+        if($totalPhotoBytes>15*1024*1024)reply(400,['ok'=>false,'error'=>'Общий размер фотографий не должен превышать 15 МБ.']);
+        for($n=0;$n<$count;$n++){
+            if((int)($photo['error'][$n]??UPLOAD_ERR_NO_FILE)===UPLOAD_ERR_NO_FILE)continue;
+            if((int)($photo['error'][$n]??0)!==UPLOAD_ERR_OK||(int)($photo['size'][$n]??0)<1||(int)$photo['size'][$n]>5*1024*1024)reply(400,['ok'=>false,'error'=>'Каждая фотография должна быть размером до 5 МБ.']);
+            $tmp=(string)($photo['tmp_name'][$n]??'');if(!is_uploaded_file($tmp))reply(400,['ok'=>false,'error'=>'Некорректная загрузка фотографии.']);
+            $mime='';$fi=finfo_open(FILEINFO_MIME_TYPE);if($fi){$mime=(string)finfo_file($fi,$tmp);finfo_close($fi);}
+            $ext=['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'][$mime]??null;
+            if(!$ext)reply(415,['ok'=>false,'error'=>'Разрешены только JPG, PNG и WEBP.']);
+            $original=basename(str_replace('\\','/',(string)$photo['name'][$n]));
+            $stored=bin2hex(random_bytes(16)).'.'.$ext;
+            $dir=__DIR__.'/incidents-storage';if(!is_dir($dir)&&!@mkdir($dir,0750,true)&&!is_dir($dir))reply(500,['ok'=>false,'error'=>'Не удалось подготовить хранилище фотографий.']);
+            if(!is_file($dir.'/.htaccess'))@file_put_contents($dir.'/.htaccess',"Require all denied\n");
+            if(!move_uploaded_file($tmp,$dir.'/'.$stored))reply(500,['ok'=>false,'error'=>'Не удалось сохранить фотографию.']);
+            $uploads[]=['stored'=>$stored,'original'=>$original,'mime'=>$mime,'size'=>(int)$photo['size'][$n]];
+        }
+    }
+    $pdo->beginTransaction();
+    try{
+        $st=$pdo->prepare('INSERT INTO sb_incidents (object_id,title,incident_type,occurred_at,description,persons,damage_amount,claimed_amount,created_by) VALUES (:o,:t,:ty,:d,:de,:p,:da,0,:u)');
+        $st->execute([':o'=>$objectId,':t'=>$title,':ty'=>$type,':d'=>$date->format('Y-m-d H:i:s'),':de'=>$description,':p'=>$persons,':da'=>number_format((float)$damageRaw,2,'.',''),':u'=>(int)$ctx['id']]);
+        $incidentId=(int)$pdo->lastInsertId();
+        $fileSt=$pdo->prepare('INSERT INTO sb_incident_files (incident_id,stored_name,original_name,mime_type,file_size,uploaded_by) VALUES (:i,:s,:o,:m,:z,:u)');
+        foreach($uploads as $file)$fileSt->execute([':i'=>$incidentId,':s'=>$file['stored'],':o'=>mb_substr($file['original'],0,255),':m'=>$file['mime'],':z'=>$file['size'],':u'=>(int)$ctx['id']]);
+        $pdo->commit();
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();foreach($uploads as $file)@unlink(__DIR__.'/incidents-storage/'.$file['stored']);error_log('SB incident create error: '.$e->getMessage());reply(500,['ok'=>false,'error'=>'Не удалось сохранить происшествие.']);}
+    audit_log($pdo,$ctx,'incident_created','incident',$incidentId,$title,['object_id'=>$objectId,'damage_amount'=>(float)$damageRaw]);
+    [$nt,$nb]=render_message_template($pdo,'incident_created',['incident_id'=>$incidentId,'object'=>$objectName,'title'=>$title,'date'=>$date->format('d.m.Y H:i')]);
+    $recipients=$pdo->prepare("SELECT id,role FROM sb_users WHERE is_active=1 AND role IN ('admin','moderator') AND id<>:creator");$recipients->execute([':creator'=>(int)$ctx['id']]);
+    foreach($recipients->fetchAll() as $recipient){if($recipient['role']==='moderator'&&!in_array($objectId,user_object_ids($pdo,(int)$recipient['id']),true))continue;notification_add($pdo,(int)$recipient['id'],'incident',$nt,$nb,'incidents.php?id='.$incidentId);}
+    reply(200,['ok'=>true,'id'=>$incidentId]);
+}
+if ($action === 'incident_file' && $method === 'GET') {
+    $id=(int)($_GET['id']??0);
+    $st=$pdo->prepare('SELECT f.stored_name,f.mime_type,f.original_name,i.object_id,i.created_by FROM sb_incident_files f JOIN sb_incidents i ON i.id=f.incident_id WHERE f.id=:id LIMIT 1');$st->execute([':id'=>$id]);$file=$st->fetch();
+    if(!$file)reply(404,['ok'=>false,'error'=>'Фотография не найдена.']);
+    $allowed=$ctx['role']==='admin'||($ctx['role']==='moderator'&&in_array((int)$file['object_id'],user_object_ids($pdo,(int)$ctx['id']),true))||($ctx['role']==='user'&&(int)$file['created_by']===(int)$ctx['id']);
+    if(!$allowed)reply(403,['ok'=>false,'error'=>'Нет доступа к фотографии.']);
+    $path=__DIR__.'/incidents-storage/'.basename((string)$file['stored_name']);if(!is_file($path))reply(404,['ok'=>false,'error'=>'Файл не найден на сервере.']);
+    header('Content-Type: '.(string)$file['mime_type']);header('Content-Length: '.(string)filesize($path));header('Content-Disposition: inline; filename="photo"');header('X-Content-Type-Options: nosniff');readfile($path);exit;
+}
+if ($action === 'damage_data' && $method === 'GET') {
+    $where=['(i.damage_amount>0 OR i.claimed_amount>0 OR EXISTS(SELECT 1 FROM sb_damage_payments p WHERE p.incident_id=i.id))'];$params=[];
+    if($ctx['role']==='moderator'){$ids=array_values(array_filter(array_map('intval',$ctx['object_ids'])));$where[]=$ids?'i.object_id IN ('.implode(',',array_fill(0,count($ids),'?')).')':'1=0';$params=array_merge($params,$ids);}
+    elseif($ctx['role']==='user'){$where[]='i.created_by=?';$params[]=(int)$ctx['id'];}
+    $st=$pdo->prepare('SELECT i.id,i.title,i.object_id,o.name AS object_name,i.occurred_at,i.damage_amount,i.claimed_amount,u.full_name AS creator_name,
+        COALESCE((SELECT SUM(p.amount) FROM sb_damage_payments p WHERE p.incident_id=i.id),0) AS reimbursed_amount
+        FROM sb_incidents i JOIN sb_objects o ON o.id=i.object_id JOIN sb_users u ON u.id=i.created_by WHERE '.implode(' AND ',$where).' ORDER BY i.occurred_at DESC LIMIT 250');
+    $st->execute($params);$rows=$st->fetchAll();
+    foreach($rows as &$row){$row['id']=(int)$row['id'];$row['damage_amount']=(float)$row['damage_amount'];$row['claimed_amount']=(float)$row['claimed_amount'];$row['reimbursed_amount']=(float)$row['reimbursed_amount'];$row['balance_amount']=max(0,$row['claimed_amount']-$row['reimbursed_amount']);}
+    unset($row);
+    $ids=array_map(function($r){return (int)$r['id'];},$rows);$payments=[];
+    if($ids){$q=$pdo->prepare('SELECT p.id,p.incident_id,p.amount,p.paid_at,p.note,p.created_at,u.full_name AS author_name FROM sb_damage_payments p JOIN sb_users u ON u.id=p.created_by WHERE p.incident_id IN ('.implode(',',array_fill(0,count($ids),'?')).') ORDER BY p.paid_at DESC,p.id DESC');$q->execute($ids);foreach($q->fetchAll() as $p){$p['id']=(int)$p['id'];$p['incident_id']=(int)$p['incident_id'];$p['amount']=(float)$p['amount'];$payments[$p['incident_id']][]=$p;}}
+    foreach($rows as &$row)$row['payments']=$payments[$row['id']]??[];
+    unset($row);
+    reply(200,['ok'=>true,'items'=>$rows,'csrf'=>csrf_token()]);
+}
+if ($action === 'damage_update' && $method === 'POST') {
+    $body=input_json();check_csrf($body);$id=(int)($body['id']??0);
+    $incident=$pdo->prepare('SELECT id,title,object_id,created_by,damage_amount FROM sb_incidents WHERE id=:id LIMIT 1');$incident->execute([':id'=>$id]);$row=$incident->fetch();
+    if(!$row)reply(404,['ok'=>false,'error'=>'Происшествие не найдено.']);
+    if($ctx['role']==='moderator'&&!in_array((int)$row['object_id'],user_object_ids($pdo,(int)$ctx['id']),true))reply(403,['ok'=>false,'error'=>'Нет доступа к этому объекту.']);
+    if($ctx['role']==='user')reply(403,['ok'=>false,'error'=>'Изменять сведения о возмещении могут только руководители.']);
+    $claimedRaw=str_replace(',','.',trim((string)($body['claimed_amount']??'')));
+    $paymentRaw=str_replace(',','.',trim((string)($body['payment_amount']??'')));
+    if($claimedRaw!==''&&(!is_numeric($claimedRaw)||(float)$claimedRaw<0||(float)$claimedRaw>(float)$row['damage_amount']))reply(400,['ok'=>false,'error'=>'Предъявленная сумма должна быть от 0 до установленной суммы ущерба.']);
+    if($claimedRaw!==''){
+        $paidCheck=$pdo->prepare('SELECT COALESCE(SUM(amount),0) FROM sb_damage_payments WHERE incident_id=:id');$paidCheck->execute([':id'=>$id]);
+        if((float)$paidCheck->fetchColumn()>(float)$claimedRaw+0.001)reply(400,['ok'=>false,'error'=>'Нельзя уменьшить предъявленную сумму ниже уже возмещённой.']);
+    }
+    if($paymentRaw!==''&&(!is_numeric($paymentRaw)||(float)$paymentRaw<=0))reply(400,['ok'=>false,'error'=>'Укажите положительную сумму возмещения.']);
+    $paidAt=(string)($body['paid_at']??date('Y-m-d'));$date=DateTime::createFromFormat('!Y-m-d',$paidAt);
+    if(!$date||$date->format('Y-m-d')!==$paidAt)reply(400,['ok'=>false,'error'=>'Некорректная дата возмещения.']);
+    $pdo->beginTransaction();
+    try{
+        if($claimedRaw!==''){$st=$pdo->prepare('UPDATE sb_incidents SET claimed_amount=:a WHERE id=:id');$st->execute([':a'=>number_format((float)$claimedRaw,2,'.',''),':id'=>$id]);}
+        if($paymentRaw!==''){
+            $sum=$pdo->prepare('SELECT COALESCE(SUM(amount),0) FROM sb_damage_payments WHERE incident_id=:id');$sum->execute([':id'=>$id]);
+            $claimed=$claimedRaw!==''?(float)$claimedRaw:(float)$row['damage_amount'];
+            if($claimedRaw==='' ){$q=$pdo->prepare('SELECT claimed_amount FROM sb_incidents WHERE id=:id');$q->execute([':id'=>$id]);$claimed=(float)$q->fetchColumn();}
+            if((float)$sum->fetchColumn()+(float)$paymentRaw>$claimed+0.001)throw new InvalidArgumentException('Сумма возмещений не может превышать предъявленную сумму.');
+            $st=$pdo->prepare('INSERT INTO sb_damage_payments (incident_id,amount,paid_at,note,created_by) VALUES (:i,:a,:d,:n,:u)');
+            $st->execute([':i'=>$id,':a'=>number_format((float)$paymentRaw,2,'.',''),':d'=>$paidAt,':n'=>mb_substr(trim((string)($body['note']??'')),0,500),':u'=>(int)$ctx['id']]);
+        }
+        $pdo->commit();
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();reply(400,['ok'=>false,'error'=>$e instanceof InvalidArgumentException?$e->getMessage():'Не удалось обновить сведения о возмещении.']);}
+    $sum=$pdo->prepare('SELECT COALESCE(SUM(amount),0) FROM sb_damage_payments WHERE incident_id=:id');$sum->execute([':id'=>$id]);$reimbursed=(float)$sum->fetchColumn();
+    $claimed=$claimedRaw!==''?(float)$claimedRaw:(float)$row['damage_amount'];if($claimedRaw===''){$q=$pdo->prepare('SELECT claimed_amount FROM sb_incidents WHERE id=:id');$q->execute([':id'=>$id]);$claimed=(float)$q->fetchColumn();}
+    audit_log($pdo,$ctx,'damage_updated','incident',$id,(string)$row['title'],['claimed_amount'=>$claimed,'reimbursed_amount'=>$reimbursed]);
+    if($paymentRaw!==''&&(int)$row['created_by']!==(int)$ctx['id']){
+        [$nt,$nb]=render_message_template($pdo,'damage_payment',['incident_id'=>$id,'amount'=>number_format((float)$paymentRaw,2,'.',''),'balance'=>number_format(max(0,$claimed-$reimbursed),2,'.','')]);
+        notification_add($pdo,(int)$row['created_by'],'damage',$nt,$nb,'damage.php');
+    }
+    reply(200,['ok'=>true]);
 }
 
 if ($action === 'moderator_user_create' && $method === 'POST') {

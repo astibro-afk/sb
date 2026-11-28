@@ -20,7 +20,37 @@ function documentsNavSetup(){
   link.classList.add('active');
  }
 }
-function roleName(role){return ({admin:'Администратор',moderator:'Менеджер по безопасности',user:'Специалист по безопасности'})[role]||role||'';}
+
+function moduleNavSetup(user){
+ const nav=document.querySelector('.sb-site-nav-inner,.nav-inner');if(!nav)return;
+ const permissions=user&&user.permissions?user.permissions:{};
+ const modules=[
+  {href:'incidents.php',label:'Происшествия',permission:'incidents.view'},
+  {href:'damage.php',label:'Возмещение ущерба',permission:'damage.view'},
+  {href:'settings.php',label:'Настройки',admin:true}
+ ];
+ modules.forEach(item=>{
+  let link=nav.querySelector('a[href="'+item.href+'"],a[href="/'+item.href+'"]');
+  if(!link){link=document.createElement('a');link.href=nav.classList.contains('nav-inner')?item.href:'/'+item.href;link.textContent=item.label;const notices=nav.querySelector('a[href$="notifications.php"]');if(notices)nav.insertBefore(link,notices);else nav.append(link);}
+  link.hidden=item.admin?!(user&&user.role==='admin'):!permissions[item.permission];
+  if(location.pathname.endsWith('/'+item.href)||location.pathname===item.href){nav.querySelectorAll('a').forEach(a=>a.classList.remove('active'));link.classList.add('active');}
+ });
+ const pageLinks=[['reports.php','reports.view'],['tasks.php','tasks.view'],['employees.php','employees.view']];
+ pageLinks.forEach(([href,key])=>{const link=nav.querySelector('a[href="'+href+'"],a[href="/'+href+'"]');if(link)link.hidden=!!user&&!permissions[key];});
+ const docs=nav.querySelector('a[href="documents.php"],a[href="/documents.php"]');
+ if(docs)docs.hidden=!!user&&!permissions['documents.view'];
+}
+async function applySystemBrand(){
+ try{
+  const d=await request('system_info');
+  document.querySelectorAll('.sb-site-brand-text strong,.brand h1,.brand-text h1').forEach(n=>{n.textContent=d.org_name||'Служба безопасности';});
+  document.querySelectorAll('.sb-site-brand-text small,.brand p,.brand-text span').forEach(n=>{n.textContent=d.org_subtitle||'';});
+  document.querySelectorAll('.sb-site-logo,.brand .logo,.brand-logo').forEach(n=>{
+   if(d.has_logo){const img=document.createElement('img');img.src='/api.php?action=system_logo&v='+Date.now();img.alt='Логотип';img.style.cssText='width:100%;height:100%;object-fit:contain;border-radius:inherit';n.replaceChildren(img);}
+   else n.textContent='СБ';
+  });
+ }catch(e){}
+}
 function localLink(value){return typeof value==='string'&&/^\/?[a-z0-9_/-]+\.php(?:\?[a-z0-9_=&%-]*)?$/i.test(value)&&!value.includes('..')?value:'/notifications.php';}
 function noticeSetup(){
  const trigger=document.querySelector('.sb-site-actions > a[href="/notifications.php"],.header-right > a[href="notifications.php"],.header-right > a[href="/notifications.php"],.header-actions > a[href*="notifications.php"]');
@@ -72,7 +102,7 @@ async function init(){
  const add=$('sbHeaderAddUser')||$('btnHeaderAddUser');
  const manage=$('sbHeaderManage')||$('adminManageLink')||$('btnHeaderManage');
  if(add)add.hidden=true;if(manage)manage.hidden=true;
- try{const d=await request('status');if(d.authenticated&&d.user){const u=d.user,wrap=$('sbHeaderUser'),name=$('sbHeaderName'),meta=$('sbHeaderMeta');if(wrap)wrap.hidden=false;if(name)name.textContent=u.full_name||u.username||'';if(meta)meta.textContent=roleName(u.role)+((u.object_names||[]).length?' · '+u.object_names.join(', '):'');if(add)add.hidden=!(u.role==='admin'||u.role==='moderator');if(manage)manage.hidden=u.role!=='admin';}}catch(e){if(add)add.hidden=true;if(manage)manage.hidden=true;}
+ try{const d=await request('status');if(d.authenticated&&d.user){const u=d.user,wrap=$('sbHeaderUser'),name=$('sbHeaderName'),meta=$('sbHeaderMeta');if(wrap)wrap.hidden=false;if(name)name.textContent=u.full_name||u.username||'';if(meta)meta.textContent=roleName(u.role)+((u.object_names||[]).length?' · '+u.object_names.join(', '):'');if(add)add.hidden=!(u.permissions&&u.permissions['employees.manage']);if(manage)manage.hidden=u.role!=='admin';moduleNavSetup(u);applySystemBrand();}}catch(e){if(add)add.hidden=true;if(manage)manage.hidden=true;}
  await refreshNotices();
  if(noticeTimer)clearInterval(noticeTimer);noticeTimer=setInterval(refreshNotices,5000);
  document.addEventListener('visibilitychange',refreshNotices);window.addEventListener('focus',refreshNotices);
