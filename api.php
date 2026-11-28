@@ -1281,11 +1281,11 @@ if ($action === 'documents_data' && $method === 'GET') {
         $document['ack_total'] = (int)$document['ack_total'];
         $document['ack_done'] = (int)$document['ack_done'];
         $document['acknowledged'] = (bool)$document['acknowledged'];
-        $document['can_delete'] = $ctx['role'] === 'admin'
+        $document['can_delete'] = role_can($pdo,$ctx,'documents.manage') && ($ctx['role'] === 'admin'
             || ($ctx['role'] === 'moderator'
                 && $document['object_id'] !== null
                 && (int)$document['uploaded_by'] === (int)$ctx['id']
-                && in_array((int)$document['object_id'], $objectIds, true));
+                && in_array((int)$document['object_id'], $objectIds, true)));
     }
     unset($document);
     $categories = [];
@@ -1794,9 +1794,9 @@ if ($action === 'tasks_data' && $method === 'GET') {
         $task['created_by'] = (int)$task['created_by'];
         $task['comment_count'] = $commentCounts[$task['id']] ?? 0;
         $task['is_overdue'] = !empty($task['due_date']) && $task['due_date'] < date('Y-m-d') && $task['status'] !== 'done';
-        $task['can_manage'] = $ctx['role'] !== 'user' && ($ctx['role'] === 'admin' || (int)$task['created_by'] === (int)$ctx['id']);
+        $task['can_manage'] = role_can($pdo,$ctx,'tasks.manage') && $ctx['role'] !== 'user' && ($ctx['role'] === 'admin' || (int)$task['created_by'] === (int)$ctx['id']);
         $task['is_recipient'] = (bool)$task['is_recipient'];
-        $task['can_update'] = $task['is_recipient'] || $ctx['role']==='admin' || ($ctx['role']==='moderator' && (int)$task['created_by']===(int)$ctx['id']);
+        $task['can_update'] = role_can($pdo,$ctx,'tasks.update_status') && ($task['is_recipient'] || $ctx['role']==='admin' || ($ctx['role']==='moderator' && (int)$task['created_by']===(int)$ctx['id']));
     }
 
     $objectsSql = "SELECT o.id,o.name FROM sb_objects o WHERE o.is_active=1";
@@ -1933,7 +1933,10 @@ if ($action === 'task_comments' && $method === 'GET') {
         ':comment_moderator_scope'=>(int)$ctx['id'],
         ':id'=>$taskId
     ]);
-    reply(200,['ok'=>true,'comments'=>$cs->fetchAll()]);
+    $comments=$cs->fetchAll();
+    if(!role_can($pdo,$ctx,'tasks.comment')) foreach($comments as &$commentRow) $commentRow['can_delete']=0;
+    unset($commentRow);
+    reply(200,['ok'=>true,'comments'=>$comments]);
 }
 if ($action === 'task_comment_delete' && $method === 'POST') {
     if (!role_can($pdo,$ctx,'tasks.comment')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
