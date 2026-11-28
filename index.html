@@ -67,6 +67,18 @@ async function dashboard(){
  $('adminManageLink').hidden=user.role!=='admin';
  const data=await get('dashboard_data');
  user=data.user||user;
+ const perms=user.permissions||{};
+ document.querySelectorAll('.quick').forEach(link=>{
+  const href=link.getAttribute('href')||'';
+  if(href==='reports.php'||href==='reports/daily-report.php')link.hidden=!perms['reports.view'];
+  if(href==='tasks.php')link.hidden=!perms['tasks.view'];
+  if(href==='employees.php')link.hidden=!perms['employees.view'];
+  if(href==='documents.php')link.hidden=!perms['documents.view'];
+ });
+ const taskPanel=$('taskList').closest('.panel'),reportPanel=$('reportList').closest('.panel');
+ if(taskPanel)taskPanel.hidden=!perms['tasks.view'];
+ if(reportPanel)reportPanel.hidden=!perms['reports.view'];
+ document.querySelectorAll('.welcome .actions a').forEach(link=>{if(link.href.includes('reports'))link.hidden=!perms['reports.view'];});
  renderTasks(data.tasks||[]);
  renderReports(data.reports||[]);
  renderNotices(data.notifications||[]);
