@@ -1242,9 +1242,10 @@ if ($action === 'document_acknowledge' && $method === 'POST') {
     }
     $ack = $pdo->prepare('INSERT IGNORE INTO sb_document_acknowledgements (document_id,user_id) VALUES (:doc,:user)');
     $ack->execute([':doc'=>$id, ':user'=>(int)$ctx['id']]);
+    $wasNew = $ack->rowCount() === 1;
     $date = $pdo->prepare('SELECT acknowledged_at FROM sb_document_acknowledgements WHERE document_id=:doc AND user_id=:user');
     $date->execute([':doc'=>$id, ':user'=>(int)$ctx['id']]);
-    audit_log($pdo, $ctx, 'document_acknowledged', 'document', $id, (string)$document['title']);
+    if ($wasNew) audit_log($pdo, $ctx, 'document_acknowledged', 'document', $id, (string)$document['title']);
     reply(200, ['ok'=>true,'acknowledged_at'=>$date->fetchColumn()]);
 }
 
