@@ -537,7 +537,7 @@ function notification_add(PDO $pdo, int $userId, string $type, string $title, st
         $st->execute([':uid'=>$userId, ':type'=>mb_substr($type,0,48), ':title'=>mb_substr($title,0,180), ':message'=>$message, ':link'=>mb_substr($link,0,255)]);
         $notificationId = (int)$pdo->lastInsertId();
         // Transactional outbox: no network requests are made inside business transactions.
-        $queue = $pdo->prepare("INSERT INTO sb_push_queue (notification_id,user_id) SELECT :nid,:uid WHERE EXISTS (SELECT 1 FROM sb_push_subscriptions WHERE user_id=:sub_uid AND is_active=1)");
+        $queue = $pdo->prepare("INSERT INTO sb_push_queue (notification_id,user_id) SELECT :nid,:uid WHERE EXISTS (SELECT 1 FROM sb_push_subscriptions WHERE user_id=:sub_uid AND is_active=1) AND NOT EXISTS (SELECT 1 FROM sb_system_settings WHERE setting_key='push_enabled' AND setting_value='0')");
         $queue->execute([':nid'=>$notificationId, ':uid'=>$userId, ':sub_uid'=>$userId]);
     } catch (Throwable $e) { error_log('SB notification error: '.$e->getMessage()); }
 }
@@ -1014,9 +1014,9 @@ if ($action === 'settings_data' && $method === 'GET') {
 if ($action === 'settings_save' && $method === 'POST') {
     if(!role_can($pdo,$ctx,'settings.manage'))reply(403,['ok'=>false,'error'=>'Доступ к настройкам запрещён.']);
     $body=input_json();check_csrf($body);$settings=$body['settings']??[];if(!is_array($settings))reply(400,['ok'=>false,'error'=>'Некорректные настройки.']);
-    $allowed=['organization_name'=>120,'logo_url'=>500,'notification_email'=>180,'task_template'=>3000,'incident_template'=>3000];
+    $allowed=['organization_name'=>120,'logo_url'=>500,'notification_email'=>180,'push_enabled'=>1,'task_template'=>3000,'incident_template'=>3000];
     $up=$pdo->prepare('INSERT INTO sb_system_settings (setting_key,setting_value,updated_by) VALUES (:key,:value,:user) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),updated_by=VALUES(updated_by)');
-    foreach($allowed as $key=>$max){if(!array_key_exists($key,$settings))continue;$value=trim((string)$settings[$key]);if(mb_strlen($value)>$max)reply(400,['ok'=>false,'error'=>'Слишком длинное значение настройки: '.$key]);if($key==='logo_url'&&$value!==''&&(!filter_var($value,FILTER_VALIDATE_URL)||strtolower((string)parse_url($value,PHP_URL_SCHEME))!=='https'))reply(400,['ok'=>false,'error'=>'Для логотипа укажите корректную HTTPS-ссылку.']);$up->execute([':key'=>$key,':value'=>$value,':user'=>(int)$ctx['id']]);}
+    foreach($allowed as $key=>$max){if(!array_key_exists($key,$settings))continue;$value=trim((string)$settings[$key]);if(mb_strlen($value)>$max)reply(400,['ok'=>false,'error'=>'Слишком длинное значение настройки: '.$key]);if($key==='push_enabled'&&!in_array($value,['0','1'],true))reply(400,['ok'=>false,'error'=>'Некорректное значение настройки push_enabled.']);if($key==='logo_url'&&$value!==''&&(!filter_var($value,FILTER_VALIDATE_URL)||strtolower((string)parse_url($value,PHP_URL_SCHEME))!=='https'))reply(400,['ok'=>false,'error'=>'Для логотипа укажите корректную HTTPS-ссылку.']);$up->execute([':key'=>$key,':value'=>$value,':user'=>(int)$ctx['id']]);}
     audit_log($pdo,$ctx,'system_settings_updated','settings',null,'Настройки системы',array_keys($settings));reply(200,['ok'=>true]);
 }
 
