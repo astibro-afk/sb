@@ -595,7 +595,7 @@ function role_permission_defaults(string $role): array {
         return $values;
     }
     $enabled = [
-        'reports.view','reports.create','reports.comment',
+        'reports.view','reports.create','reports.comment','reports.delete',
         'tasks.view','tasks.create','tasks.update','tasks.comment_delete',
         'employees.view','documents.view','documents.acknowledge',
         'incidents.view','incidents.create','damage.view'
