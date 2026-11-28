@@ -199,3 +199,38 @@
 .sb-notice-foot a,.sb-notice-read-all{border:0;background:none;color:#08777b;font:700 11px Inter,Arial,sans-serif;text-decoration:none;cursor:pointer;padding:4px}
 .sb-notice-foot a:hover,.sb-notice-read-all:hover{text-decoration:underline}
 @media(max-width:700px){.sb-notification-dropdown{right:-6px;width:min(360px,calc(100vw - 18px));max-height:calc(100vh - 85px)}}
+
+
+/* На телефонах список уведомлений прокручивается отдельно от закреплённой нижней панели */
+.sb-notification-dropdown{
+  height:min(570px,calc(100vh - 100px));
+  min-height:180px;
+}
+.sb-notice-list{
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.sb-notice-foot{flex:0 0 auto}
+@media(max-width:700px){
+  .sb-notification-dropdown{
+    position:fixed;
+    top:calc(env(safe-area-inset-top,0px) + 72px);
+    right:9px;
+    bottom:calc(env(safe-area-inset-bottom,0px) + 10px);
+    left:auto;
+    width:min(360px,calc(100vw - 18px));
+    height:auto;
+    max-height:none;
+  }
+}
+@media(max-width:480px){
+  .sb-notification-dropdown{
+    top:calc(env(safe-area-inset-top,0px) + 112px);
+    right:9px;
+    bottom:calc(env(safe-area-inset-bottom,0px) + 10px);
+    width:calc(100vw - 18px);
+  }
+}
