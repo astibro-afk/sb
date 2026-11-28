@@ -164,7 +164,7 @@ function db(array $cfg): PDO {
         ]);
         // Инициализация схемы один раз на PHP-сессию, а не при каждом AJAX-запросе.
         // Версию можно повысить при добавлении новых миграций.
-        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-28-1') {
+        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-28-2') {
             $pdo->exec(
                 "CREATE TABLE IF NOT EXISTS sb_app_data (
                     data_key VARCHAR(100) NOT NULL PRIMARY KEY,
@@ -336,7 +336,25 @@ function db(array $cfg): PDO {
                 CONSTRAINT fk_push_pair_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE,
                 CONSTRAINT fk_push_pair_creator FOREIGN KEY (created_by) REFERENCES sb_users(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-            $_SESSION['sb_schema_version'] = '2026-11-28-1';
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_documents (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(180) NOT NULL,
+                description TEXT NULL,
+                category VARCHAR(80) NOT NULL DEFAULT 'Прочее',
+                original_name VARCHAR(255) NOT NULL,
+                stored_name VARCHAR(80) NOT NULL UNIQUE,
+                mime_type VARCHAR(127) NOT NULL,
+                file_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                object_id INT UNSIGNED NULL DEFAULT NULL,
+                uploaded_by INT UNSIGNED NOT NULL,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_documents_scope (object_id,is_active,created_at),
+                INDEX idx_documents_category (category),
+                INDEX idx_documents_uploader (uploaded_by)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $_SESSION['sb_schema_version'] = '2026-11-28-2';
         }
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
@@ -978,6 +996,235 @@ if ($action === 'notifications_read' && $method === 'POST') {
         $st->execute([':uid'=>(int)$ctx['id']]);
     } else reply(400, ['ok'=>false, 'error'=>'Не выбрано уведомление.']);
     reply(200, ['ok'=>true]);
+}
+
+
+if ($action === 'documents_data' && $method === 'GET') {
+    $search = trim((string)($_GET['search'] ?? ''));
+    $category = trim((string)($_GET['category'] ?? ''));
+    $search = mb_substr($search, 0, 100);
+    $where = ['d.is_active=1'];
+    $params = [];
+    if ($ctx['role'] !== 'admin') {
+        $where[] = '(d.object_id IS NULL OR EXISTS (
+            SELECT 1 FROM sb_user_objects uo
+            WHERE uo.user_id=:viewer AND uo.object_id=d.object_id
+        ))';
+        $params[':viewer'] = (int)$ctx['id'];
+    }
+    if ($category !== '') {
+        $where[] = 'd.category=:category';
+        $params[':category'] = mb_substr($category, 0, 80);
+    }
+    if ($search !== '') {
+        $where[] = '(d.title LIKE :title OR d.description LIKE :description OR d.original_name LIKE :filename)';
+        $needle = '%' . $search . '%';
+        $params[':title'] = $needle;
+        $params[':description'] = $needle;
+        $params[':filename'] = $needle;
+    }
+    $sql = "SELECT d.id,d.title,d.description,d.category,d.original_name,d.mime_type,d.file_size,
+        d.object_id,d.uploaded_by,d.created_at,u.full_name AS uploader_name,o.name AS object_name
+        FROM sb_documents d
+        LEFT JOIN sb_users u ON u.id=d.uploaded_by
+        LEFT JOIN sb_objects o ON o.id=d.object_id
+        WHERE " . implode(' AND ', $where) . "
+        ORDER BY d.created_at DESC,d.id DESC LIMIT 250";
+    $st = $pdo->prepare($sql);
+    $st->execute($params);
+    $documents = $st->fetchAll();
+    $objectIds = user_object_ids($pdo, (int)$ctx['id']);
+    foreach ($documents as &$document) {
+        $document['id'] = (int)$document['id'];
+        $document['file_size'] = (int)$document['file_size'];
+        $document['object_id'] = $document['object_id'] === null ? null : (int)$document['object_id'];
+        $document['can_delete'] = $ctx['role'] === 'admin'
+            || ($ctx['role'] === 'moderator'
+                && $document['object_id'] !== null
+                && (int)$document['uploaded_by'] === (int)$ctx['id']
+                && in_array((int)$document['object_id'], $objectIds, true));
+    }
+    unset($document);
+    $categories = [];
+    foreach ($documents as $document) {
+        $name = (string)$document['category'];
+        if ($name !== '' && !in_array($name, $categories, true)) $categories[] = $name;
+    }
+    sort($categories, SORT_NATURAL | SORT_FLAG_CASE);
+    if ($ctx['role'] === 'admin') {
+        $objects = $pdo->query("SELECT id,name FROM sb_objects WHERE is_active=1 ORDER BY name")->fetchAll();
+    } else {
+        $objects = [];
+        if ($objectIds) {
+            $marks = implode(',', array_fill(0, count($objectIds), '?'));
+            $os = $pdo->prepare("SELECT id,name FROM sb_objects WHERE is_active=1 AND id IN ($marks) ORDER BY name");
+            $os->execute($objectIds);
+            $objects = $os->fetchAll();
+        }
+    }
+    reply(200, ['ok'=>true,'documents'=>$documents,'categories'=>$categories,'objects'=>$objects,'user'=>$ctx,'csrf'=>csrf_token()]);
+}
+
+if ($action === 'document_upload' && $method === 'POST') {
+    if (!in_array($ctx['role'], ['admin','moderator'], true)) {
+        reply(403, ['ok'=>false,'error'=>'Загружать документы могут только администратор и модератор.']);
+    }
+    check_csrf($_POST);
+    $title = trim((string)($_POST['title'] ?? ''));
+    $description = trim((string)($_POST['description'] ?? ''));
+    $category = trim((string)($_POST['category'] ?? 'Прочее'));
+    $objectId = (int)($_POST['object_id'] ?? 0);
+    if ($title === '' || mb_strlen($title) > 180) reply(400, ['ok'=>false,'error'=>'Укажите название документа (не более 180 символов).']);
+    if (mb_strlen($description) > 3000) reply(400, ['ok'=>false,'error'=>'Описание не должно превышать 3000 символов.']);
+    if ($category === '' || mb_strlen($category) > 80) reply(400, ['ok'=>false,'error'=>'Укажите корректную категорию документа.']);
+    $allowedObjects = user_object_ids($pdo, (int)$ctx['id']);
+    if ($ctx['role'] === 'moderator') {
+        if ($objectId < 1 || !in_array($objectId, $allowedObjects, true)) {
+            reply(403, ['ok'=>false,'error'=>'Модератор может размещать документы только для своих объектов.']);
+        }
+    } elseif ($objectId > 0) {
+        $checkObject = $pdo->prepare('SELECT id FROM sb_objects WHERE id=:id AND is_active=1 LIMIT 1');
+        $checkObject->execute([':id'=>$objectId]);
+        if (!$checkObject->fetchColumn()) reply(400, ['ok'=>false,'error'=>'Выбранный объект не найден или отключён.']);
+    }
+    if (!isset($_FILES['file']) || !is_array($_FILES['file'])) reply(400, ['ok'=>false,'error'=>'Выберите файл для загрузки.']);
+    $file = $_FILES['file'];
+    $uploadError = (int)($file['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        $message = $uploadError === UPLOAD_ERR_INI_SIZE || $uploadError === UPLOAD_ERR_FORM_SIZE
+            ? 'Файл превышает допустимый размер 20 МБ.'
+            : ($uploadError === UPLOAD_ERR_NO_FILE ? 'Выберите файл для загрузки.' : 'Не удалось принять файл. Попробуйте ещё раз.');
+        reply(400, ['ok'=>false,'error'=>$message]);
+    }
+    $maxBytes = 20 * 1024 * 1024;
+    $tmpName = (string)($file['tmp_name'] ?? '');
+    $fileSize = (int)($file['size'] ?? 0);
+    if ($fileSize < 1 || $fileSize > $maxBytes || !is_uploaded_file($tmpName)) {
+        reply(400, ['ok'=>false,'error'=>'Файл пустой, слишком большой или некорректный. Максимальный размер — 20 МБ.']);
+    }
+    $originalName = basename(str_replace('\\', '/', (string)($file['name'] ?? 'document')));
+    $extension = strtolower((string)pathinfo($originalName, PATHINFO_EXTENSION));
+    $mimeByExtension = [
+        'pdf'=>['application/pdf'],
+        'doc'=>['application/msword','application/octet-stream'],
+        'docx'=>['application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/zip'],
+        'xls'=>['application/vnd.ms-excel','application/octet-stream'],
+        'xlsx'=>['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/zip'],
+        'ppt'=>['application/vnd.ms-powerpoint','application/octet-stream'],
+        'pptx'=>['application/vnd.openxmlformats-officedocument.presentationml.presentation','application/zip'],
+        'txt'=>['text/plain','application/octet-stream'],
+        'csv'=>['text/plain','text/csv','application/vnd.ms-excel','application/octet-stream'],
+        'rtf'=>['application/rtf','text/rtf','text/plain'],
+        'odt'=>['application/vnd.oasis.opendocument.text','application/zip'],
+        'ods'=>['application/vnd.oasis.opendocument.spreadsheet','application/zip'],
+        'odp'=>['application/vnd.oasis.opendocument.presentation','application/zip'],
+        'jpg'=>['image/jpeg'],
+        'jpeg'=>['image/jpeg'],
+        'png'=>['image/png']
+    ];
+    if (!isset($mimeByExtension[$extension])) {
+        reply(415, ['ok'=>false,'error'=>'Формат файла не поддерживается. Разрешены PDF, Office, ODT/ODS/ODP, TXT/CSV, JPG и PNG.']);
+    }
+    $mime = 'application/octet-stream';
+    if (function_exists('finfo_open')) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo) {
+            $detected = finfo_file($finfo, $tmpName);
+            finfo_close($finfo);
+            if (is_string($detected) && $detected !== '') $mime = $detected;
+        }
+    }
+    if (!in_array($mime, $mimeByExtension[$extension], true)) {
+        reply(415, ['ok'=>false,'error'=>'Содержимое файла не соответствует его расширению.']);
+    }
+    $storage = __DIR__ . '/documents-storage';
+    if (!is_dir($storage) && !@mkdir($storage, 0750, true) && !is_dir($storage)) {
+        reply(500, ['ok'=>false,'error'=>'Не удалось подготовить хранилище документов на сервере.']);
+    }
+    $denyFile = $storage . '/.htaccess';
+    if (!is_file($denyFile)) {
+        $denyRules = "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Deny from all\n</IfModule>\n";
+        if (@file_put_contents($denyFile, $denyRules, LOCK_EX) === false) {
+            reply(500, ['ok'=>false,'error'=>'Не удалось закрыть прямой доступ к хранилищу документов.']);
+        }
+    }
+    $indexFile = $storage . '/index.html';
+    if (!is_file($indexFile)) @file_put_contents($indexFile, '<!doctype html><title></title>', LOCK_EX);
+    $storedName = bin2hex(random_bytes(24)) . '.' . $extension;
+    $destination = $storage . '/' . $storedName;
+    if (!move_uploaded_file($tmpName, $destination)) {
+        reply(500, ['ok'=>false,'error'=>'Не удалось сохранить файл на сервере.']);
+    }
+    $originalName = mb_substr(preg_replace('/[\x00-\x1F\x7F]/u', '', $originalName) ?: 'document.' . $extension, 0, 255);
+    try {
+        $st = $pdo->prepare("INSERT INTO sb_documents
+            (title,description,category,original_name,stored_name,mime_type,file_size,object_id,uploaded_by)
+            VALUES (:title,:description,:category,:original,:stored,:mime,:size,:object,:uploader)");
+        $st->execute([
+            ':title'=>$title, ':description'=>$description, ':category'=>$category,
+            ':original'=>$originalName, ':stored'=>$storedName, ':mime'=>$mime,
+            ':size'=>$fileSize, ':object'=>$objectId > 0 ? $objectId : null,
+            ':uploader'=>(int)$ctx['id']
+        ]);
+        $id = (int)$pdo->lastInsertId();
+        audit_log($pdo, $ctx, 'document_uploaded', 'document', $id, $title, ['category'=>$category,'object_id'=>$objectId ?: null,'file_size'=>$fileSize]);
+        reply(200, ['ok'=>true,'id'=>$id]);
+    } catch (Throwable $e) {
+        @unlink($destination);
+        error_log('SB document upload error: '.$e->getMessage());
+        reply(500, ['ok'=>false,'error'=>'Не удалось зарегистрировать документ в базе данных.']);
+    }
+}
+
+if ($action === 'document_delete' && $method === 'POST') {
+    $body = input_json();
+    check_csrf($body);
+    $id = (int)($body['id'] ?? 0);
+    if ($id < 1) reply(400, ['ok'=>false,'error'=>'Не выбран документ.']);
+    $st = $pdo->prepare('SELECT id,title,stored_name,object_id,uploaded_by FROM sb_documents WHERE id=:id AND is_active=1 LIMIT 1');
+    $st->execute([':id'=>$id]);
+    $document = $st->fetch();
+    if (!$document) reply(404, ['ok'=>false,'error'=>'Документ не найден.']);
+    $allowedObjects = user_object_ids($pdo, (int)$ctx['id']);
+    $canDelete = $ctx['role'] === 'admin'
+        || ($ctx['role'] === 'moderator'
+            && $document['object_id'] !== null
+            && (int)$document['uploaded_by'] === (int)$ctx['id']
+            && in_array((int)$document['object_id'], $allowedObjects, true));
+    if (!$canDelete) reply(403, ['ok'=>false,'error'=>'Недостаточно прав для удаления этого документа.']);
+    $del = $pdo->prepare('DELETE FROM sb_documents WHERE id=:id');
+    $del->execute([':id'=>$id]);
+    $path = __DIR__ . '/documents-storage/' . basename((string)$document['stored_name']);
+    if (is_file($path)) @unlink($path);
+    audit_log($pdo, $ctx, 'document_deleted', 'document', $id, (string)$document['title']);
+    reply(200, ['ok'=>true]);
+}
+
+if ($action === 'document_download' && $method === 'GET') {
+    $id = (int)($_GET['id'] ?? 0);
+    if ($id < 1) reply(400, ['ok'=>false,'error'=>'Не выбран документ.']);
+    $st = $pdo->prepare('SELECT id,title,original_name,stored_name,mime_type,file_size,object_id FROM sb_documents WHERE id=:id AND is_active=1 LIMIT 1');
+    $st->execute([':id'=>$id]);
+    $document = $st->fetch();
+    if (!$document) reply(404, ['ok'=>false,'error'=>'Документ не найден.']);
+    if ($ctx['role'] !== 'admin' && $document['object_id'] !== null
+        && !in_array((int)$document['object_id'], user_object_ids($pdo, (int)$ctx['id']), true)) {
+        reply(403, ['ok'=>false,'error'=>'Нет доступа к этому документу.']);
+    }
+    $storage = realpath(__DIR__ . '/documents-storage');
+    $path = $storage ? realpath($storage . '/' . basename((string)$document['stored_name'])) : false;
+    if (!$storage || !$path || dirname($path) !== $storage || !is_file($path)) {
+        reply(404, ['ok'=>false,'error'=>'Файл документа не найден на сервере.']);
+    }
+    $downloadName = (string)$document['original_name'];
+    $asciiName = preg_replace('/[^A-Za-z0-9._-]/', '_', $downloadName) ?: 'document';
+    header('Content-Type: ' . (string)$document['mime_type']);
+    header('Content-Length: ' . (string)filesize($path));
+    header('Content-Disposition: attachment; filename="' . $asciiName . '"; filename*=UTF-8\'\'' . rawurlencode($downloadName));
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Security-Policy: sandbox');
+    readfile($path);
+    exit;
 }
 
 if ($action === 'push_config' && $method === 'GET') {

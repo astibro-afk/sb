@@ -3,6 +3,23 @@
 const api='/api.php?action=',$=id=>document.getElementById(id);
 let csrf='',noticeTimer=null,noticeBusy=false;
 async function request(action,options){const r=await fetch(api+action,Object.assign({credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}},options||{}));const raw=await r.text();let d;try{d=JSON.parse(raw);}catch(e){throw new Error('Некорректный ответ сервера.');}if(!r.ok||d.ok===false)throw new Error(d.error||'Ошибка запроса.');if(d.csrf)csrf=d.csrf;return d;}
+
+function documentsNavSetup(){
+ const nav=document.querySelector('.sb-site-nav-inner,.nav-inner');
+ if(!nav)return;
+ let link=nav.querySelector('a[href="/documents.php"],a[href="documents.php"]');
+ if(!link){
+  link=document.createElement('a');
+  link.href=nav.classList.contains('nav-inner')?'documents.php':'/documents.php';
+  link.textContent='База документов';
+  const notifications=nav.querySelector('a[href$="notifications.php"]');
+  if(notifications)nav.insertBefore(link,notifications);else nav.append(link);
+ }
+ if(/(?:^|\/)documents\.php$/.test(location.pathname)){
+  nav.querySelectorAll('a').forEach(item=>item.classList.remove('active'));
+  link.classList.add('active');
+ }
+}
 function roleName(role){return ({admin:'Администратор',moderator:'Менеджер по безопасности',user:'Специалист по безопасности'})[role]||role||'';}
 function localLink(value){return typeof value==='string'&&/^\/?[a-z0-9_/-]+\.php(?:\?[a-z0-9_=&%-]*)?$/i.test(value)&&!value.includes('..')?value:'/notifications.php';}
 function noticeSetup(){
@@ -50,6 +67,7 @@ function renderNotices(data){
 async function refreshNotices(){if(noticeBusy||document.visibilityState==='hidden')return;noticeBusy=true;try{const d=await request('notifications_data');renderNotices(d);}catch(e){}finally{noticeBusy=false;}}
 async function markNotice(id,all){await request('notifications_read',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({csrf,id,all})});await refreshNotices();}
 async function init(){
+ documentsNavSetup();
  noticeSetup();
  const add=$('sbHeaderAddUser')||$('btnHeaderAddUser');
  const manage=$('sbHeaderManage')||$('adminManageLink')||$('btnHeaderManage');
