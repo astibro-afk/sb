@@ -59,6 +59,21 @@ textarea{min-height:70px;resize:vertical}
 .error{display:none;background:#fff0ed;border:1px solid #f0c9c3;color:#a63f2d;margin-bottom:12px;text-align:left}
 .success{display:none;background:#edf8f3;border:1px solid #cfe9dc;color:#286d54;margin-bottom:12px;text-align:left}
 .loading{color:#71858a;text-align:center;padding:25px}
+.ack-state{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px;padding:10px 11px;border:1px solid #e3eded;border-radius:10px;background:#f8fbfb}
+.ack-state-text{font-size:11px;color:#49666b;font-weight:700}
+.ack-state-text.done{color:#26734f}
+.ack-panel{margin-top:10px;padding:12px;border:1px solid #e3eded;border-radius:10px;background:#fbfdfd}
+.ack-summary{font-size:12px;font-weight:800;margin-bottom:9px}
+.ack-list{display:grid;gap:7px}
+.ack-person{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:7px 0;border-top:1px solid #edf2f3}
+.ack-person-name{font-size:12px;font-weight:700}
+.ack-person-meta{font-size:10px;color:#819398}
+.ack-person-status{font-size:10px;font-weight:750;white-space:nowrap}
+.ack-person-status.done{color:#26734f}
+.ack-person-status.pending{color:#a76a27}
+.check-field{display:flex;align-items:flex-start;gap:9px;font-size:12px;font-weight:700;color:#31565b}
+.check-field input{width:16px;height:16px;margin:1px 0 0;flex:0 0 auto}
+.check-hint{margin-left:25px}
 @media(max-width:760px){.doc-list{grid-template-columns:1fr}.form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.toolbar{grid-template-columns:1fr 1fr}.toolbar input{grid-column:1/-1}}
 @media(max-width:520px){.page{padding:18px 12px 36px}.title-row{flex-direction:column}h1{font-size:22px}.form-grid{grid-template-columns:1fr}.field.wide,.field.full{grid-column:auto}.form-footer{justify-content:stretch}.form-footer .btn{width:100%}.toolbar{grid-template-columns:1fr}.toolbar input{grid-column:auto}}
 </style>
@@ -89,6 +104,7 @@ textarea{min-height:70px;resize:vertical}
    <div class="field"><label for="category">Категория *</label><select id="category" name="category"><option>Инструкции</option><option>Регламенты</option><option>Приказы и распоряжения</option><option>Памятки</option><option>Формы и шаблоны</option><option>Прочее</option></select></div>
    <div class="field"><label for="object">Доступ</label><select id="object" name="object_id"></select><span class="hint" id="scopeHint"></span></div>
    <div class="field full"><label for="description">Описание</label><textarea id="description" name="description" maxlength="3000" placeholder="Кратко опишите содержание документа и кому он предназначен"></textarea></div>
+   <div class="field full"><label class="check-field"><input id="requiresAck" type="checkbox" name="requires_ack" value="1"> Требуется подтверждение ознакомления</label><span class="hint check-hint">Сотрудникам, которым доступен документ, придёт уведомление. Руководитель увидит, кто подтвердил прочтение.</span></div>
    <div class="field full"><label for="file">Файл *</label><input id="file" name="file" type="file" required accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp,.jpg,.jpeg,.png"><span class="hint">PDF, Word, Excel, PowerPoint, ODT/ODS/ODP, TXT/CSV, JPG, PNG. Максимум 20 МБ.</span></div>
    <div class="form-footer"><button class="btn primary" id="uploadBtn" type="submit">Загрузить документ</button></div>
   </form>
@@ -128,6 +144,33 @@ function fillCategories(){
  all.forEach(c=>$('categoryFilter').add(new Option(c,c)));
  $('categoryFilter').value=selected;
 }
+async function acknowledgeDocument(doc,button){
+ if(!confirm('Подтвердить, что вы ознакомились с документом «'+doc.title+'»?'))return;
+ button.disabled=true;button.textContent='Сохраняем…';
+ try{
+  const response=await fetch('api.php?action=document_acknowledge',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({csrf:state.csrf,id:Number(doc.id)})});
+  await read(response);await load();showSuccess('Ознакомление с документом подтверждено.');
+ }catch(e){showError(e.message);button.disabled=false;button.textContent='Подтвердить ознакомление';}
+}
+async function toggleAckStatus(doc,panel,button){
+ if(!panel.hidden){panel.hidden=true;button.textContent='Кто ознакомился';return;}
+ panel.hidden=false;panel.replaceChildren(node('div','loading','Загружаем список ознакомления…'));button.textContent='Скрыть статус';
+ try{
+  const data=await read(await fetch('api.php?action=document_ack_status&id='+encodeURIComponent(doc.id),{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}}));
+  panel.replaceChildren();
+  panel.append(node('div','ack-summary','Ознакомились: '+data.done+' из '+data.total+' · Не ознакомились: '+data.pending));
+  const list=node('div','ack-list');
+  if(!data.employees.length)list.append(node('div','hint','Нет сотрудников в зоне контроля.'));
+  data.employees.forEach(employee=>{
+   const row=node('div','ack-person'),left=node('div',''),right=node('div','ack-person-status '+(employee.acknowledged?'done':'pending'));
+   left.append(node('div','ack-person-name',employee.full_name||'Сотрудник'));
+   if(employee.object_names)left.append(node('div','ack-person-meta',employee.object_names));
+   right.textContent=employee.acknowledged?'Ознакомлен · '+date(employee.acknowledged_at):'Ожидает';
+   row.append(left,right);list.append(row);
+  });
+  panel.append(list);
+ }catch(e){panel.replaceChildren(node('div','hint',e.message));showError(e.message);}
+}
 function render(){
  const box=$('documents');box.replaceChildren();
  $('count').textContent='Документов: '+state.documents.length+(state.documents.length===250?' · показаны последние 250':'');
@@ -137,6 +180,18 @@ function render(){
   const main=node('div','doc-main');main.append(node('h3','',d.title),node('div','filename',d.original_name));top.append(main);card.append(top);
   if(d.description)card.append(node('p','doc-desc',d.description));
   const meta=node('div','doc-meta');meta.append(node('span','pill',d.category||'Прочее'),node('span','',d.object_name||'Общий документ'),node('span','',fileSize(d.file_size)),node('span','',date(d.created_at)),node('span','',d.uploader_name||'Сотрудник'));card.append(meta);
+  if(Number(d.requires_ack)===1){
+   const ackBox=node('div','ack-state'),ackText=node('span','ack-state-text',state.user.role==='user'?(d.acknowledged?'Ознакомление подтверждено':'Требуется подтвердить ознакомление'):(state.user.role==='admin'?'Ознакомились: '+d.ack_done+' из '+d.ack_total:'Контроль ознакомления'));
+   if(d.acknowledged)ackText.classList.add('done');
+   ackBox.append(ackText);
+   if(state.user.role==='user'&&!d.acknowledged){
+    const confirmBtn=node('button','btn primary','Подтвердить ознакомление');confirmBtn.type='button';confirmBtn.addEventListener('click',()=>acknowledgeDocument(d,confirmBtn));ackBox.append(confirmBtn);
+   }else if(state.user.role==='admin'||state.user.role==='moderator'){
+    const statusBtn=node('button','btn','Кто ознакомился');statusBtn.type='button';
+    const panel=node('div','ack-panel');panel.hidden=true;statusBtn.addEventListener('click',()=>toggleAckStatus(d,panel,statusBtn));ackBox.append(statusBtn);card.append(ackBox,panel);
+   }
+   if(state.user.role==='user'||!['admin','moderator'].includes(state.user.role))card.append(ackBox);
+  }
   const actions=node('div','doc-actions'),right=node('div','right');
   const download=node('a','btn primary','Скачать файл');download.href='api.php?action=document_download&id='+encodeURIComponent(d.id);download.setAttribute('rel','noopener');right.append(download);
   actions.append(node('span','hint',d.mime_type||''),right);
@@ -168,7 +223,7 @@ $('uploadForm').addEventListener('submit',async e=>{
  if(file.size>20*1024*1024){showError('Файл превышает допустимый размер 20 МБ.');return;}
  const button=$('uploadBtn');button.disabled=true;button.textContent='Загружаем…';
  try{
-  const form=new FormData();form.append('csrf',state.csrf);form.append('title',$('title').value.trim());form.append('category',$('category').value);form.append('description',$('description').value.trim());form.append('object_id',$('object').value);form.append('file',file);
+  const form=new FormData();form.append('csrf',state.csrf);form.append('title',$('title').value.trim());form.append('category',$('category').value);form.append('description',$('description').value.trim());form.append('object_id',$('object').value);form.append('requires_ack',$('requiresAck').checked?'1':'0');form.append('file',file);
   const response=await fetch('api.php?action=document_upload',{method:'POST',credentials:'same-origin',body:form});
   await read(response);$('uploadForm').reset();fillObjects();await load();showSuccess('Документ добавлен в базу.');
  }catch(err){showError(err.message);}
