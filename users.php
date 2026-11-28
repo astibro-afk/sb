@@ -119,7 +119,7 @@ try {
     $seedRole = $pdo->prepare("INSERT IGNORE INTO sb_roles (role_key,display_name,base_role,is_system) VALUES (:k,:n,:b,1)");
     foreach ([['admin','Администратор','admin'],['moderator','Модератор','moderator'],['user','Пользователь','user']] as $rr) $seedRole->execute([':k'=>$rr[0],':n'=>$rr[1],':b'=>$rr[2]]);
     $basePermissions = [
-        'moderator'=>['tasks.view','tasks.create','tasks.manage','tasks.update_status','tasks.comment','employees.view','employees.manage','documents.view','documents.manage','documents.acknowledge','reports.view','reports.create','reports.manage','incidents.view','incidents.create','incidents.manage','damage.view','damage.manage'],
+        'moderator'=>['tasks.view','tasks.create','tasks.manage','tasks.update_status','tasks.comment','employees.view','employees.manage','documents.view','documents.manage','documents.acknowledge','reports.view','reports.create','reports.manage','incidents.view','incidents.create' ,'damage.view','damage.manage'],
         'user'=>['tasks.view','tasks.update_status','tasks.comment','employees.view','documents.view','documents.acknowledge','reports.view','reports.create','incidents.view','incidents.create','damage.view']
     ];
     $permissionSeed=$pdo->prepare('INSERT IGNORE INTO sb_role_permissions (role_key,permission_key,is_allowed) VALUES (:role,:permission,1)');
@@ -160,7 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $checkRole = $pdo->prepare('SELECT is_system FROM sb_roles WHERE role_key=:key');
             $checkRole->execute([':key'=>$roleKey]);
             $roleSystem = $checkRole->fetchColumn();
-            $knownPermissions = ['tasks.view','tasks.create','tasks.update_status','tasks.manage','tasks.comment','employees.view','employees.manage','documents.view','documents.acknowledge','documents.manage','reports.view','reports.create','reports.manage','incidents.view','incidents.create','incidents.manage','damage.view','damage.manage','settings.manage','roles.manage'];
+            $knownPermissions = ['tasks.view','tasks.create','tasks.update_status','tasks.manage','tasks.comment','employees.view','employees.manage','documents.view','documents.acknowledge','documents.manage','reports.view','reports.create','reports.manage','incidents.view','incidents.create','incidents.manage','damage.view','damage.manage','settings.manage'];
             if ($roleSystem === false) $err = 'Роль не найдена.';
             elseif ($roleKey === 'admin') $err = 'Права администратора нельзя ограничить.';
             else {
