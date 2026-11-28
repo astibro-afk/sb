@@ -116,7 +116,7 @@ async function load(page){const token=++loadToken;clearError();try{
  const params={page:page||state.pagination.page||1,search:$('search').value.trim(),status:$('statusFilter').value,object_id:$('objectFilter').value,archive:state.archiveView?'1':'0'};
  const d=await get('tasks_data',params);if(token!==loadToken)return;
  state.tasks=d.tasks||[];state.stats=d.stats||{};state.pagination=d.pagination||{page:1,total_pages:1,total:0};state.objects=d.objects||[];state.assignees=d.assignees||[];state.user=d.user;state.csrf=d.csrf||'';
- const canCreate=state.user.role==='admin'||state.user.role==='moderator';$('createPanel').classList.toggle('hidden',!canCreate);
+ const taskPermissions=new Set(state.user.permissions||[]);const canCreate=state.user.role==='admin'||(state.user.role==='moderator'&&taskPermissions.has('tasks.create'));$('createPanel').classList.toggle('hidden',!canCreate);$('description').placeholder=d.task_template||'Опишите задачу, ожидаемый результат и важные детали';
  const selectedObject=$('object').value;
  $('object').replaceChildren(new Option('Выберите объект',''));$('objectFilter').replaceChildren(new Option('Все объекты',''));
  state.objects.forEach(o=>{$('object').add(new Option(o.name,o.id));$('objectFilter').add(new Option(o.name,o.id));});

@@ -20,7 +20,13 @@ function documentsNavSetup(){
   link.classList.add('active');
  }
 }
-function roleName(role){return ({admin:'Администратор',moderator:'Менеджер по безопасности',user:'Специалист по безопасности'})[role]||role||'';}
+function roleName(user){const role=user&&user.role;return user&&user.role_name||({admin:'Администратор',moderator:'Менеджер по безопасности',user:'Специалист по безопасности'})[role]||role||'';}
+function setupPermissionNav(user){
+ const nav=document.querySelector('.sb-site-nav-inner,.nav-inner');if(!nav)return;
+ const permissions=new Set(user.permissions||[]);const allowed=(key)=>user.role==='admin'||permissions.has(key);
+ const links=[['tasks.php','Задачи','tasks.view'],['reports.php','Отчёты','reports.view'],['employees.php','Сотрудники','employees.view'],['documents.php','База документов','documents.view'],['incidents.php','Инциденты','incidents.view'],['damage.php','Возмещение ущерба','damage.view'],['settings.php','Настройки','settings.manage']];
+ for(const [href,label,permission] of links){let link=nav.querySelector('a[href$="'+href+'"]');if(!link&&allowed(permission)){link=document.createElement('a');link.href=nav.classList.contains('nav-inner')?href:'/'+href;link.textContent=label;nav.append(link);}if(link)link.hidden=!allowed(permission);}
+}
 function localLink(value){return typeof value==='string'&&/^\/?[a-z0-9_/-]+\.php(?:\?[a-z0-9_=&%-]*)?$/i.test(value)&&!value.includes('..')?value:'/notifications.php';}
 function noticeSetup(){
  const trigger=document.querySelector('.sb-site-actions > a[href="/notifications.php"],.header-right > a[href="notifications.php"],.header-right > a[href="/notifications.php"],.header-actions > a[href*="notifications.php"]');
@@ -72,7 +78,7 @@ async function init(){
  const add=$('sbHeaderAddUser')||$('btnHeaderAddUser');
  const manage=$('sbHeaderManage')||$('adminManageLink')||$('btnHeaderManage');
  if(add)add.hidden=true;if(manage)manage.hidden=true;
- try{const d=await request('status');if(d.authenticated&&d.user){const u=d.user,wrap=$('sbHeaderUser'),name=$('sbHeaderName'),meta=$('sbHeaderMeta');if(wrap)wrap.hidden=false;if(name)name.textContent=u.full_name||u.username||'';if(meta)meta.textContent=roleName(u.role)+((u.object_names||[]).length?' · '+u.object_names.join(', '):'');if(add)add.hidden=!(u.role==='admin'||u.role==='moderator');if(manage)manage.hidden=u.role!=='admin';}}catch(e){if(add)add.hidden=true;if(manage)manage.hidden=true;}
+ try{const d=await request('status');if(d.authenticated&&d.user){const u=d.user,wrap=$('sbHeaderUser'),name=$('sbHeaderName'),meta=$('sbHeaderMeta');if(wrap)wrap.hidden=false;if(name)name.textContent=u.full_name||u.username||'';if(meta)meta.textContent=roleName(u)+((u.object_names||[]).length?' · '+u.object_names.join(', '):'');if(add)add.hidden=!(u.role==='admin'||(u.role==='moderator'&&(u.permissions||[]).includes('employees.manage')));if(manage)manage.hidden=u.role!=='admin';setupPermissionNav(u);}}catch(e){if(add)add.hidden=true;if(manage)manage.hidden=true;}
  await refreshNotices();
  if(noticeTimer)clearInterval(noticeTimer);noticeTimer=setInterval(refreshNotices,5000);
  document.addEventListener('visibilitychange',refreshNotices);window.addEventListener('focus',refreshNotices);
