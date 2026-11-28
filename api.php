@@ -1869,8 +1869,8 @@ if ($action === 'task_comment_add' && $method === 'POST') {
         $pdo->beginTransaction();
         $ins=$pdo->prepare('INSERT INTO sb_task_comments(task_id,user_id,user_name,comment) VALUES(?,?,?,?)');
         $ins->execute([$taskId,(int)$ctx['id'],(string)$ctx['full_name'],$comment]);
-        $touchTask=$pdo->prepare('UPDATE sb_tasks SET updated_at=CURRENT_TIMESTAMP WHERE id=?');$touchTask->execute([$taskId]);
         $commentId=(int)$pdo->lastInsertId();
+        $touchTask=$pdo->prepare('UPDATE sb_tasks SET updated_at=CURRENT_TIMESTAMP WHERE id=?');$touchTask->execute([$taskId]);
         $saveStage='сохранении метаданных вложений';
         $attach=$pdo->prepare('INSERT INTO sb_task_comment_attachments(comment_id,original_name,stored_name,mime_type,file_size) VALUES(?,?,?,?,?)');
         foreach($files as $file)$attach->execute([$commentId,$file['name'],$file['stored'],$file['mime'],$file['size']]);
