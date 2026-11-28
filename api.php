@@ -606,12 +606,13 @@ function role_permission_defaults(string $role): array {
 function role_permissions(PDO $pdo, string $role): array {
     $values = role_permission_defaults($role);
     if ($role === 'admin') return $values;
+    $allowed = $values;
     try {
         $st = $pdo->prepare('SELECT permission_key,is_enabled FROM sb_role_permissions WHERE role=:role');
         $st->execute([':role'=>$role]);
         foreach ($st->fetchAll() as $row) {
             $key = (string)$row['permission_key'];
-            if (array_key_exists($key, $values)) $values[$key] = (bool)$row['is_enabled'];
+            if (array_key_exists($key, $values) && !empty($allowed[$key])) $values[$key] = (bool)$row['is_enabled'];
         }
     } catch (Throwable $e) { error_log('SB role permissions read error: '.$e->getMessage()); }
     return $values;
