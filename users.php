@@ -415,7 +415,7 @@ $permissionCatalog = [
     'employees.view'=>'Просмотр сотрудников','employees.manage'=>'Управление сотрудниками',
     'documents.view'=>'Просмотр базы документов','documents.acknowledge'=>'Подтверждение ознакомления','documents.manage'=>'Загрузка и удаление документов',
     'reports.view'=>'Просмотр отчётов','reports.create'=>'Создание и изменение своих отчётов','reports.manage'=>'Управление отчётами в зоне доступа','incidents.view'=>'Просмотр инцидентов','incidents.create'=>'Создание инцидентов',
-    'damage.view'=>'Просмотр ущерба','damage.manage'=>'Изменение возмещения ущерба','settings.manage'=>'Настройки системы'=>'Управление ролями'
+    'damage.view'=>'Просмотр ущерба','damage.manage'=>'Изменение возмещения ущерба','settings.manage'=>'Настройки системы'
 ];
 $permissionRows = $pdo->query('SELECT role_key,permission_key FROM sb_role_permissions WHERE is_allowed=1')->fetchAll();
 $roleAllowed = [];
