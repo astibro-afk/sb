@@ -2,6 +2,54 @@
 'use strict';
 const api='/api.php?action=',$=id=>document.getElementById(id);
 let csrf='',noticeTimer=null,noticeBusy=false;
+
+const actionMessages={
+ task_create:'Задача создана',task_edit:'Изменения задачи сохранены',task_update:'Статус задачи обновлён',
+ task_delete:'Задача удалена',task_archive:'Задача перемещена в архив',task_restore:'Задача возвращена из архива',
+ task_comment_add:'Комментарий отправлен',task_comment_delete:'Комментарий удалён',
+ document_upload:'Документ загружен',document_delete:'Документ удалён',document_acknowledge:'Ознакомление подтверждено',
+ user_save:'Изменения сотрудника сохранены',moderator_user_create:'Сотрудник добавлен',
+ object_save:'Изменения объекта сохранены',reports_delete:'Отчёт удалён',archive_delete:'Запись удалена',
+ report_comment:'Комментарий к отчёту отправлен',delete:'Запись удалена'
+};
+let toastRoot=null;
+function toastSetup(){
+ if(toastRoot)return;
+ const style=document.createElement('style');
+ style.textContent='.sb-toast-stack{position:fixed;z-index:5000;top:max(16px,env(safe-area-inset-top));right:18px;display:flex;flex-direction:column;gap:9px;width:min(390px,calc(100vw - 28px));pointer-events:none}.sb-toast{display:flex;align-items:flex-start;gap:11px;padding:13px 14px;border:1px solid #cfe5da;border-left:4px solid #26945c;border-radius:12px;background:#fff;color:#24453a;box-shadow:0 12px 34px rgba(20,48,38,.18);font:600 13px/1.45 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;pointer-events:auto;animation:sbToastIn .2s ease-out}.sb-toast.is-error{border-color:#edc7c1;border-left-color:#c84d40;color:#84382f}.sb-toast-mark{flex:none;width:21px;height:21px;display:grid;place-items:center;border-radius:50%;background:#e8f6ee;color:#21834f;font-size:13px}.sb-toast.is-error .sb-toast-mark{background:#fff0ed;color:#b44335}.sb-toast-message{flex:1;min-width:0;overflow-wrap:anywhere}.sb-toast-close{flex:none;border:0;background:transparent;color:#819496;font-size:19px;line-height:1;cursor:pointer;padding:0 1px}.sb-toast.is-leaving{opacity:0;transform:translateY(-5px);transition:opacity .18s,transform .18s}@keyframes sbToastIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}@media(max-width:520px){.sb-toast-stack{top:max(10px,env(safe-area-inset-top));right:10px;width:calc(100vw - 20px)}}';
+ document.head.append(style);
+ toastRoot=document.createElement('div');toastRoot.className='sb-toast-stack';toastRoot.setAttribute('aria-live','polite');toastRoot.setAttribute('aria-relevant','additions');document.body.append(toastRoot);
+}
+function showToast(message,type){
+ if(!message)return;
+ toastSetup();
+ const item=document.createElement('div');item.className='sb-toast'+(type==='error'?' is-error':'');item.setAttribute('role','status');
+ const mark=document.createElement('span');mark.className='sb-toast-mark';mark.textContent=type==='error'?'!':'✓';
+ const text=document.createElement('span');text.className='sb-toast-message';text.textContent=message;
+ const close=document.createElement('button');close.type='button';close.className='sb-toast-close';close.textContent='×';close.setAttribute('aria-label','Закрыть уведомление');
+ let timer=0;const remove=()=>{clearTimeout(timer);item.classList.add('is-leaving');setTimeout(()=>item.remove(),190);};
+ close.addEventListener('click',remove);item.append(mark,text,close);toastRoot.append(item);
+ while(toastRoot.children.length>4)toastRoot.firstElementChild.remove();
+ timer=setTimeout(remove,3800);
+}
+window.sbToast=showToast;
+function installActionToasts(){
+ if(window.__sbActionToastsInstalled)return;window.__sbActionToastsInstalled=true;
+ const nativeFetch=window.fetch.bind(window);
+ window.fetch=async function(input,init){
+  const response=await nativeFetch(input,init);
+  try{
+   const url=new URL(typeof input==='string'?input:input.url,location.href);
+   const method=String((init&&init.method)||(typeof input!=='string'&&input.method)||'GET').toUpperCase();
+   const action=url.searchParams.get('action');
+   if(method==='POST'&&url.pathname.endsWith('/api.php')&&action&&!['notifications_read','logout','presence_ping','push_pair_create','push_pair_delete','push_pair_revoke'].includes(action)){
+    const payload=await response.clone().json();
+    if(response.ok&&payload&&payload.ok!==false)showToast(actionMessages[action]||'Изменения сохранены');
+   }
+  }catch(e){}
+  return response;
+ };
+}
 async function request(action,options){const r=await fetch(api+action,Object.assign({credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}},options||{}));const raw=await r.text();let d;try{d=JSON.parse(raw);}catch(e){throw new Error('Некорректный ответ сервера.');}if(!r.ok||d.ok===false)throw new Error(d.error||'Ошибка запроса.');if(d.csrf)csrf=d.csrf;return d;}
 
 function documentsNavSetup(){
@@ -76,6 +124,7 @@ function renderNotices(data){
 async function refreshNotices(){if(noticeBusy||document.visibilityState==='hidden')return;noticeBusy=true;try{const d=await request('notifications_data');renderNotices(d);}catch(e){}finally{noticeBusy=false;}}
 async function markNotice(id,all){await request('notifications_read',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({csrf,id,all})});await refreshNotices();}
 async function init(){
+ toastSetup();installActionToasts();
  documentsNavSetup();
  noticeSetup();
  const add=$('sbHeaderAddUser')||$('btnHeaderAddUser');
