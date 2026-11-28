@@ -1001,7 +1001,7 @@ if ($action === 'settings_save' && $method === 'POST') {
     $body=input_json();check_csrf($body);$settings=$body['settings']??[];if(!is_array($settings))reply(400,['ok'=>false,'error'=>'Некорректные настройки.']);
     $allowed=['organization_name'=>120,'logo_url'=>500,'notification_email'=>180,'task_template'=>3000,'incident_template'=>3000];
     $up=$pdo->prepare('INSERT INTO sb_system_settings (setting_key,setting_value,updated_by) VALUES (:key,:value,:user) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),updated_by=VALUES(updated_by)');
-    foreach($allowed as $key=>$max){if(!array_key_exists($key,$settings))continue;$value=trim((string)$settings[$key]);if(mb_strlen($value)>$max)reply(400,['ok'=>false,'error'=>'Слишком длинное значение настройки: '.$key]);$up->execute([':key'=>$key,':value'=>$value,':user'=>(int)$ctx['id']]);}
+    foreach($allowed as $key=>$max){if(!array_key_exists($key,$settings))continue;$value=trim((string)$settings[$key]);if(mb_strlen($value)>$max)reply(400,['ok'=>false,'error'=>'Слишком длинное значение настройки: '.$key]);if($key==='logo_url'&&$value!==''&&(!filter_var($value,FILTER_VALIDATE_URL)||strtolower((string)parse_url($value,PHP_URL_SCHEME))!=='https'))reply(400,['ok'=>false,'error'=>'Для логотипа укажите корректную HTTPS-ссылку.']);$up->execute([':key'=>$key,':value'=>$value,':user'=>(int)$ctx['id']]);}
     audit_log($pdo,$ctx,'system_settings_updated','settings',null,'Настройки системы',array_keys($settings));reply(200,['ok'=>true]);
 }
 
@@ -1160,8 +1160,11 @@ if ($action === 'dashboard_data' && $method === 'GET') {
     $unreadStmt = $pdo->prepare('SELECT COUNT(*) FROM sb_notifications WHERE user_id=:unread_uid AND is_read=0');
     $unreadStmt->execute([':unread_uid'=>$uid]);
 
+    $publicSettings = [];
+    $publicSettingStmt = $pdo->query("SELECT setting_key,setting_value FROM sb_system_settings WHERE setting_key IN ('organization_name','logo_url')");
+    foreach ($publicSettingStmt->fetchAll() as $settingRow) $publicSettings[(string)$settingRow['setting_key']] = (string)$settingRow['setting_value'];
     reply(200, [
-        'ok'=>true, 'user'=>$ctx, 'csrf'=>csrf_token(),
+        'ok'=>true, 'user'=>$ctx, 'settings'=>$publicSettings, 'csrf'=>csrf_token(),
         'tasks'=>$tasks,
         'task_summary'=>[
             'total'=>(int)($taskSummary['total'] ?? 0),
