@@ -30,7 +30,7 @@ let csrf='';
 async function load(){
  const r=await fetch(api('incidents_data'),{credentials:'same-origin'});const d=await r.json();
  if(!r.ok||!d.ok){document.getElementById('incidents').textContent=d.error||'Не удалось загрузить список';return;}
- csrf=d.csrf||'';
+ csrf=d.csrf||'';document.querySelector('[name="description"]').placeholder=d.incident_template||'Кратко опишите событие, обстоятельства и участников';
  if(d.can_create){document.getElementById('createPanel').hidden=false;const s=document.getElementById('objectId');s.innerHTML=d.objects.map(o=>'<option value="'+Number(o.id)+'">'+esc(o.name)+'</option>').join('');}
  const list=document.getElementById('incidents');
  list.innerHTML=d.incidents.length?d.incidents.map(i=>'<article class="item"><h3>'+esc(i.object_name)+' · '+esc(i.event_at)+'</h3><div class="muted">Зарегистрировал: '+esc(i.creator_name)+(i.phone?' · Телефон: '+esc(i.phone):'')+'</div><p style="white-space:pre-wrap;margin:8px 0">'+esc(i.description)+'</p>'+(i.photo_url?'<a href="'+esc(i.photo_url)+'" target="_blank" rel="noopener"><img class="photo" src="'+esc(i.photo_url)+'" alt="Фото инцидента"></a>':'')+'</article>').join(''):'<div class="muted">Инцидентов пока нет.</div>';
