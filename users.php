@@ -610,9 +610,11 @@ foreach ($roleRows as $roleRow) $roleNames[(string)$roleRow['role_key']] = (stri
   <div class="user-list" style="margin-top:12px">
     <?php foreach ($roleRows as $roleRow): ?><div class="user-card">
       <div class="user-edit-form" style="grid-template-columns:minmax(180px,1fr) 150px auto">
-        <div class="field"><label><?= (int)$roleRow['is_system'] ? 'Системная роль' : 'Настраиваемая роль' ?></label><input value="<?= h($roleRow['display_name']) ?>" disabled></div>
+        <?php if (!(int)$roleRow['is_system']): ?><form method="post" class="field">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="role_save"><input type="hidden" name="role_key" value="<?= h($roleRow['role_key']) ?>">
+          <label>Название настраиваемой роли</label><div style="display:flex;gap:6px"><input name="display_name" maxlength="80" value="<?= h($roleRow['display_name']) ?>" required><button class="btn secondary small" type="submit">Сохранить</button></div>
+        </form><?php else: ?><div class="field"><label>Системная роль</label><input value="<?= h($roleRow['display_name']) ?>" disabled></div><?php endif; ?>
         <div class="field"><label>Базовая модель</label><input value="<?= h($roleRow['base_role']==='moderator'?'Объектная зона':($roleRow['base_role']==='admin'?'Полный доступ':'Личные данные')) ?>" disabled></div>
-        <div class="save-field"></div>
       </div>
       <?php if (!(int)$roleRow['is_system']): ?><form method="post" onsubmit="return confirm('Удалить роль?');"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="role_delete"><input type="hidden" name="role_key" value="<?= h($roleRow['role_key']) ?>"><button class="btn danger small" type="submit">Удалить</button></form><?php endif; ?>
       <?php if ($roleRow['role_key'] !== 'admin'): ?><details style="margin-top:10px"><summary style="cursor:pointer;color:var(--teal);font-size:12px;font-weight:700">Настроить разрешения</summary>
