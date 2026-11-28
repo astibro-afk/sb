@@ -120,19 +120,13 @@ try {
     foreach ([['admin','Разработчик','admin',1],['user','Пользователь','user',0]] as $rr) $seedRole->execute([':k'=>$rr[0],':n'=>$rr[1],':b'=>$rr[2],':system'=>$rr[3]]);
     $pdo->exec("UPDATE sb_roles SET display_name='Разработчик', is_system=1, base_role='admin' WHERE role_key='admin'");
     $pdo->exec("UPDATE sb_roles SET display_name='Пользователь', is_system=0, base_role='user' WHERE role_key='user'");
-    // Preserve former moderator access and employee assignments in a regular configurable role.
-    $pdo->exec("INSERT IGNORE INTO sb_roles (role_key,display_name,base_role,is_system) VALUES ('custom_object_lead','Руководитель объектов','moderator',0)");
-    $pdo->exec("UPDATE sb_roles SET base_role='moderator', is_system=0 WHERE role_key='custom_object_lead'");
-    $copyLegacyPermissions = $pdo->prepare("INSERT IGNORE INTO sb_role_permissions (role_key,permission_key,is_allowed) SELECT 'custom_object_lead',permission_key,is_allowed FROM sb_role_permissions WHERE role_key='moderator'");
-    $copyLegacyPermissions->execute();
+    // Seed default permissions only for the built-in configurable "Пользователь" role.
+    // Custom roles must remain deleted when the developer removes them.
     $basePermissions = [
-        'custom_object_lead'=>['tasks.view','tasks.create','tasks.manage','tasks.update_status','tasks.comment','employees.view','employees.manage','documents.view','documents.manage','documents.acknowledge','reports.view','reports.create','reports.manage'],
         'user'=>['tasks.view','tasks.update_status','tasks.comment','employees.view','documents.view','documents.acknowledge','reports.view','reports.create']
     ];
     $permissionSeed=$pdo->prepare('INSERT IGNORE INTO sb_role_permissions (role_key,permission_key,is_allowed) VALUES (:role,:permission,1)');
     foreach($basePermissions as $rk=>$perms) foreach($perms as $permission) $permissionSeed->execute([':role'=>$rk,':permission'=>$permission]);
-    $pdo->exec("UPDATE sb_users SET role='custom_object_lead' WHERE role='moderator'");
-    $pdo->exec("DELETE FROM sb_roles WHERE role_key='moderator'");
 } catch (Throwable $e) {
     error_log('SB users page database error: ' . $e->getMessage());
     http_response_code(500);
