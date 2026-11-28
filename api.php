@@ -1282,10 +1282,7 @@ if ($action === 'document_ack_status' && $method === 'GET') {
             $where[] = 'EXISTS (SELECT 1 FROM sb_user_objects scoped_obj WHERE scoped_obj.user_id=u.id AND scoped_obj.object_id IN ('.implode(',', $marks).'))';
         }
     }
-    $sql = "SELECT u.id,u.full_name,a.acknowledged_at,
-        (SELECT GROUP_CONCAT(DISTINCT ob.name ORDER BY ob.name SEPARATOR ', ')
-         FROM sb_user_objects uo JOIN sb_objects ob ON ob.id=uo.object_id
-         WHERE uo.user_id=u.id) AS object_names
+    $sql = "SELECT u.id,u.full_name,a.acknowledged_at
         FROM sb_users u
         LEFT JOIN sb_document_acknowledgements a ON a.document_id=:doc AND a.user_id=u.id
         WHERE ".implode(' AND ',$where)."
