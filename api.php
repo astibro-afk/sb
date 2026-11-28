@@ -453,7 +453,17 @@ function db(array $cfg): PDO {
                 CONSTRAINT fk_task_comment_mention_comment FOREIGN KEY (comment_id) REFERENCES sb_task_comments(id) ON DELETE CASCADE,
                 CONSTRAINT fk_task_comment_mention_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-            $_SESSION['sb_schema_version'] = '2026-11-28-7';
+            $pdo->exec("CREATE TABLE IF NOT EXISTS sb_task_comment_reads (
+                user_id INT UNSIGNED NOT NULL,
+                task_id BIGINT UNSIGNED NOT NULL,
+                last_seen_comment_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id,task_id),
+                INDEX idx_task_comment_reads_task (task_id),
+                CONSTRAINT fk_task_comment_reads_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE,
+                CONSTRAINT fk_task_comment_reads_task FOREIGN KEY (task_id) REFERENCES sb_tasks(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $_SESSION['sb_schema_version'] = '2026-11-28-8';
         }
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
@@ -1668,10 +1678,20 @@ if ($action === 'tasks_data' && $method === 'GET') {
     $commentCounts = [];
     $ids = array_map(function($task) { return (int)$task['id']; }, $tasks);
     if ($ids) {
+        $seedRead = $pdo->prepare("INSERT IGNORE INTO sb_task_comment_reads (user_id,task_id,last_seen_comment_id)
+            SELECT ?, ?, COALESCE(MAX(id),0) FROM sb_task_comments WHERE task_id=?");
+        foreach ($ids as $taskId) $seedRead->execute([(int)$ctx['id'],$taskId,$taskId]);
         $marks = implode(',', array_fill(0, count($ids), '?'));
-        $cs = $pdo->prepare("SELECT task_id,COUNT(*) AS comment_count FROM sb_task_comments WHERE task_id IN ($marks) GROUP BY task_id");
-        $cs->execute($ids);
-        foreach ($cs->fetchAll() as $c) $commentCounts[(int)$c['task_id']] = (int)$c['comment_count'];
+        $cs = $pdo->prepare("SELECT c.task_id,COUNT(*) AS comment_count,
+            SUM(c.id>r.last_seen_comment_id) AS unread_comment_count
+            FROM sb_task_comments c
+            JOIN sb_task_comment_reads r ON r.task_id=c.task_id AND r.user_id=?
+            WHERE c.task_id IN ($marks) GROUP BY c.task_id");
+        $cs->execute(array_merge([(int)$ctx['id']],$ids));
+        foreach ($cs->fetchAll() as $c) $commentCounts[(int)$c['task_id']] = [
+            'total'=>(int)$c['comment_count'],
+            'unread'=>(int)$c['unread_comment_count']
+        ];
     }
     foreach ($tasks as &$task) {
         $task['id'] = (int)$task['id'];
@@ -1680,7 +1700,8 @@ if ($action === 'tasks_data' && $method === 'GET') {
         $task['created_by'] = (int)$task['created_by'];
         $task['object_ids'] = array_values(array_filter(array_map('intval', explode(',', (string)($task['object_ids'] ?? '')))));
         $task['assignee_ids'] = array_values(array_filter(array_map('intval', explode(',', (string)($task['assignee_ids'] ?? '')))));
-        $task['comment_count'] = $commentCounts[$task['id']] ?? 0;
+        $task['comment_count'] = $commentCounts[$task['id']]['total'] ?? 0;
+        $task['unread_comment_count'] = $commentCounts[$task['id']]['unread'] ?? 0;
         $task['is_overdue'] = !empty($task['due_date']) && $task['due_date'] < date('Y-m-d') && $task['status'] !== 'done';
         $task['can_manage'] = role_can($pdo,$ctx,'tasks.manage') && $ctx['role'] !== 'user' && ($ctx['role'] === 'admin' || (int)$task['created_by'] === (int)$ctx['id']);
         $task['is_recipient'] = (bool)$task['is_recipient'];
@@ -1943,6 +1964,10 @@ if ($action === 'task_comments' && $method === 'GET') {
         ':id'=>$taskId
     ]);
     $comments=$cs->fetchAll();
+    $lastSeenCommentId=$comments?(int)$comments[count($comments)-1]['id']:0;
+    $readMarker=$pdo->prepare("INSERT INTO sb_task_comment_reads (user_id,task_id,last_seen_comment_id) VALUES (:user,:task,:last_seen)
+        ON DUPLICATE KEY UPDATE last_seen_comment_id=GREATEST(last_seen_comment_id,VALUES(last_seen_comment_id))");
+    $readMarker->execute([':user'=>(int)$ctx['id'],':task'=>$taskId,':last_seen'=>$lastSeenCommentId]);
     if(!role_can($pdo,$ctx,'tasks.comment')) foreach($comments as &$commentRow) $commentRow['can_delete']=0;
     unset($commentRow);
     $commentIds=array_map(fn($row)=>(int)$row['id'],$comments);
