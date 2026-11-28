@@ -1825,8 +1825,11 @@ if ($action === 'tasks_data' && $method === 'GET') {
         $assignees = $us->fetchAll();
     }
 
+    $taskTemplateStmt=$pdo->prepare("SELECT setting_value FROM sb_system_settings WHERE setting_key='task_template' LIMIT 1");
+    $taskTemplateStmt->execute();$taskTemplate=(string)($taskTemplateStmt->fetchColumn()?:'');
     reply(200, [
         'ok'=>true,
+        'task_template'=>$taskTemplate,
         'tasks'=>$tasks,
         'objects'=>$objects,
         'assignees'=>$assignees,
