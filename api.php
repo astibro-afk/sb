@@ -1700,7 +1700,7 @@ if ($action === 'tasks_data' && $method === 'GET') {
 
     $assignees = [];
     if ($ctx['role'] !== 'user') {
-        $usersSql = "SELECT u.id,u.full_name,u.role,MIN(uo.object_id) AS object_id FROM sb_users u
+        $usersSql = "SELECT u.id,u.full_name,u.role,MIN(uo.object_id) AS object_id,GROUP_CONCAT(DISTINCT uo.object_id ORDER BY uo.object_id SEPARATOR ',') AS object_ids FROM sb_users u
             JOIN sb_user_objects uo ON uo.user_id=u.id JOIN sb_objects o ON o.id=uo.object_id
             WHERE u.is_active=1 AND o.is_active=1 AND u.id<>:exclude_self";
         $userParams = [':exclude_self' => (int)$ctx['id']];
@@ -1712,6 +1712,7 @@ if ($action === 'tasks_data' && $method === 'GET') {
         $us = $pdo->prepare($usersSql);
         $us->execute($userParams);
         $assignees = $us->fetchAll();
+        foreach ($assignees as &$assignee) $assignee['object_ids'] = array_values(array_filter(array_map('intval', explode(',', (string)($assignee['object_ids'] ?? ''))))); unset($assignee);
     }
 
     reply(200, [
