@@ -1175,15 +1175,15 @@ if ($action === 'dashboard_data' && $method === 'GET') {
     foreach ($publicSettingStmt->fetchAll() as $settingRow) $publicSettings[(string)$settingRow['setting_key']] = (string)$settingRow['setting_value'];
     reply(200, [
         'ok'=>true, 'user'=>$ctx, 'settings'=>$publicSettings, 'csrf'=>csrf_token(),
-        'tasks'=>$tasks,
+        'tasks'=>role_can($pdo,$ctx,'tasks.view')?$tasks:[],
         'task_summary'=>[
-            'total'=>(int)($taskSummary['total'] ?? 0),
-            'active'=>(int)($taskSummary['active_count'] ?? 0),
-            'review'=>(int)($taskSummary['review_count'] ?? 0),
-            'overdue'=>(int)($taskSummary['overdue_count'] ?? 0)
+            'total'=>role_can($pdo,$ctx,'tasks.view')?(int)($taskSummary['total'] ?? 0):0,
+            'active'=>role_can($pdo,$ctx,'tasks.view')?(int)($taskSummary['active_count'] ?? 0):0,
+            'review'=>role_can($pdo,$ctx,'tasks.view')?(int)($taskSummary['review_count'] ?? 0):0,
+            'overdue'=>role_can($pdo,$ctx,'tasks.view')?(int)($taskSummary['overdue_count'] ?? 0):0
         ],
-        'reports'=>$reports, 'reports_count'=>$reportCount,
-        'employees_count'=>$employeeCount, 'last_report'=>$lastReport,
+        'reports'=>role_can($pdo,$ctx,'reports.view')?$reports:[], 'reports_count'=>role_can($pdo,$ctx,'reports.view')?$reportCount:0,
+        'employees_count'=>role_can($pdo,$ctx,'employees.view')?$employeeCount:0, 'last_report'=>role_can($pdo,$ctx,'reports.view')?$lastReport:null,
         'objects'=>$allowedObjects,
         'notifications'=>$notifications, 'unread'=>(int)$unreadStmt->fetchColumn()
     ]);
