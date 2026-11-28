@@ -55,3 +55,11 @@ button:disabled{cursor:not-allowed;opacity:.55}
 ::-webkit-scrollbar-track{background:#0b1120}
 ::-webkit-scrollbar-thumb{background:#2b3d58;border:2px solid #0b1120;border-radius:20px}
 ::-webkit-scrollbar-thumb:hover{background:#3d5a80}
+
+/* Standalone account and activation cards keep their intentional reading width. */
+body>main.card{width:min(720px,calc(100% - 32px))!important;max-width:720px!important;margin:32px auto!important;padding:28px!important}
+body>main.card h2{color:#e8eef9!important}
+body>main.card .result{background:#17243a!important;color:#e8eef9!important;border:1px solid var(--sb-line)!important}
+body>main.card .ok{color:#6ee7b7!important}
+body>main.card .err{color:#fda4af!important}
+@media(max-width:900px){body>main.card{margin:24px auto!important;padding:24px!important}}
