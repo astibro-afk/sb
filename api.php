@@ -167,20 +167,24 @@ function ensure_roles_schema(PDO $pdo): void {
         PRIMARY KEY (role_key,permission_key),
         CONSTRAINT fk_sb_role_permission_role FOREIGN KEY (role_key) REFERENCES sb_roles(role_key) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Create default roles only on a fresh installation. Once roles exist, deleting
+    // a configurable role must be permanent and its permissions must remain user-managed.
+    $isInitialRoleSetup = (int)$pdo->query('SELECT COUNT(*) FROM sb_roles')->fetchColumn() === 0;
+    $seedRoles = [['admin','Разработчик','admin',1]];
+    if ($isInitialRoleSetup) $seedRoles[] = ['user','Пользователь','user',0];
     $seed = $pdo->prepare("INSERT IGNORE INTO sb_roles (role_key,display_name,base_role,is_system) VALUES (:key,:name,:base,:system)");
-    foreach ([['admin','Разработчик','admin',1],['user','Пользователь','user',0]] as $role) {
+    foreach ($seedRoles as $role) {
         $seed->execute([':key'=>$role[0],':name'=>$role[1],':base'=>$role[2],':system'=>$role[3]]);
     }
     $pdo->exec("UPDATE sb_roles SET display_name='Разработчик', is_system=1, base_role='admin' WHERE role_key='admin'");
-    $pdo->exec("UPDATE sb_roles SET display_name='Пользователь', is_system=0, base_role='user' WHERE role_key='user'");
-    // Seed default permissions only for the built-in configurable "Пользователь" role.
-    // Custom roles must remain deleted when the developer removes them.
-    $defaults = [
-        'user'=>['tasks.view','tasks.update_status','tasks.comment','employees.view','documents.view','documents.acknowledge','reports.view','reports.create']
-    ];
-    $permissionInsert = $pdo->prepare('INSERT IGNORE INTO sb_role_permissions (role_key,permission_key,is_allowed) VALUES (:role,:permission,1)');
-    foreach ($defaults as $roleKey=>$permissions) foreach ($permissions as $permission) {
-        $permissionInsert->execute([':role'=>$roleKey,':permission'=>$permission]);
+    if ($isInitialRoleSetup) {
+        $defaults = [
+            'user'=>['tasks.view','tasks.update_status','tasks.comment','employees.view','documents.view','documents.acknowledge','reports.view','reports.create']
+        ];
+        $permissionInsert = $pdo->prepare('INSERT IGNORE INTO sb_role_permissions (role_key,permission_key,is_allowed) VALUES (:role,:permission,1)');
+        foreach ($defaults as $roleKey=>$permissions) foreach ($permissions as $permission) {
+            $permissionInsert->execute([':role'=>$roleKey,':permission'=>$permission]);
+        }
     }
 }
 
