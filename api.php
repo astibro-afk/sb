@@ -145,6 +145,34 @@ function ensure_archive_columns(PDO $pdo): void {
     }
 }
 
+function ensure_roles_schema(PDO $pdo): void {
+    $cols = $pdo->query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='sb_users'")->fetchAll(PDO::FETCH_COLUMN);
+    if (in_array('role', $cols, true)) {
+        $type = $pdo->query("SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='sb_users' AND COLUMN_NAME='role'")->fetchColumn();
+        if (stripos((string)$type, 'varchar(64)') === false) $pdo->exec("ALTER TABLE sb_users MODIFY role VARCHAR(64) NOT NULL DEFAULT 'user'");
+    }
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_roles (
+        role_key VARCHAR(64) NOT NULL PRIMARY KEY,
+        display_name VARCHAR(80) NOT NULL,
+        base_role VARCHAR(16) NOT NULL,
+        is_system TINYINT(1) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_sb_roles_display_name (display_name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sb_role_permissions (
+        role_key VARCHAR(64) NOT NULL,
+        permission_key VARCHAR(100) NOT NULL,
+        is_allowed TINYINT(1) NOT NULL DEFAULT 0,
+        PRIMARY KEY (role_key,permission_key),
+        CONSTRAINT fk_sb_role_permission_role FOREIGN KEY (role_key) REFERENCES sb_roles(role_key) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $seed = $pdo->prepare("INSERT IGNORE INTO sb_roles (role_key,display_name,base_role,is_system) VALUES (:key,:name,:base,1)");
+    foreach ([['admin','Администратор','admin'],['moderator','Модератор','moderator'],['user','Пользователь','user']] as $role) {
+        $seed->execute([':key'=>$role[0],':name'=>$role[1],':base'=>$role[2]]);
+    }
+}
+
 function ensure_document_ack_schema(PDO $pdo): void {
     $columns = $pdo->query("SELECT COLUMN_NAME FROM information_schema.COLUMNS
         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sb_documents'")->fetchAll(PDO::FETCH_COLUMN);
@@ -181,7 +209,7 @@ function db(array $cfg): PDO {
         ]);
         // Инициализация схемы один раз на PHP-сессию, а не при каждом AJAX-запросе.
         // Версию можно повысить при добавлении новых миграций.
-        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-28-3') {
+        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-28-4') {
             $pdo->exec(
                 "CREATE TABLE IF NOT EXISTS sb_app_data (
                     data_key VARCHAR(100) NOT NULL PRIMARY KEY,
@@ -372,7 +400,8 @@ function db(array $cfg): PDO {
                 INDEX idx_documents_uploader (uploaded_by)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
             ensure_document_ack_schema($pdo);
-            $_SESSION['sb_schema_version'] = '2026-11-28-3';
+            ensure_roles_schema($pdo);
+            $_SESSION['sb_schema_version'] = '2026-11-28-4';
         }
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
@@ -469,11 +498,17 @@ function user_ctx(PDO $pdo, array $u): array {
     $objectRows = get_user_object_rows($pdo, (int)$u['id']);
     $objectIds = array_map(function($row) { return (int)$row['id']; }, $objectRows);
     $objectNames = array_map(function($row) { return (string)$row['name']; }, $objectRows);
+    $roleKey = (string)$u['role'];
+    $roleStmt = $pdo->prepare('SELECT display_name,base_role FROM sb_roles WHERE role_key=:key LIMIT 1');
+    $roleStmt->execute([':key'=>$roleKey]);
+    $roleInfo = $roleStmt->fetch() ?: ['display_name'=>$roleKey,'base_role'=>in_array($roleKey,['admin','moderator','user'],true)?$roleKey:'user'];
     return [
         'id' => (int)$u['id'],
         'username' => (string)$u['username'],
         'full_name' => (string)$u['full_name'],
-        'role' => (string)$u['role'],
+        'role' => (string)$roleInfo['base_role'],
+        'role_key' => $roleKey,
+        'role_name' => (string)$roleInfo['display_name'],
         'object_id' => $objectIds ? $objectIds[0] : ($u['object_id'] !== null ? (int)$u['object_id'] : null),
         'object_name' => $objectNames ? $objectNames[0] : '',
         'object_ids' => $objectIds,
