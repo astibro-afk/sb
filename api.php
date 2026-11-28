@@ -986,7 +986,9 @@ if ($action === 'damage_save' && $method === 'POST') {
     if($id>0){$chk=$pdo->prepare('SELECT object_id FROM sb_damage_cases WHERE id=:id');$chk->execute([':id'=>$id]);$old=$chk->fetchColumn();if($old===false||($ctx['role']!=='admin'&&!in_array((int)$old,$scope,true)))reply(404,['ok'=>false,'error'=>'Запись не найдена в вашей зоне доступа.']);
         $st=$pdo->prepare('UPDATE sb_damage_cases SET object_id=:object,incident_id=:incident,title=:title,established_amount=:est,claimed_amount=:claimed,reimbursed_amount=:paid,notes=:notes,updated_by=:user WHERE id=:id');
     }else{$st=$pdo->prepare('INSERT INTO sb_damage_cases (object_id,incident_id,title,established_amount,claimed_amount,reimbursed_amount,notes,created_by,updated_by) VALUES (:object,:incident,:title,:est,:claimed,:paid,:notes,:created,:updated)');}
-    $st->execute([':object'=>$objectId,':incident'=>$incidentId>0?$incidentId:null,':title'=>$title,':est'=>$est,':claimed'=>$claimed,':paid'=>$paid,':notes'=>$notes,':created'=>(int)$ctx['id'],':updated'=>(int)$ctx['id'],':user'=>(int)$ctx['id']]);
+    $saveParams=[':object'=>$objectId,':incident'=>$incidentId>0?$incidentId:null,':title'=>$title,':est'=>$est,':claimed'=>$claimed,':paid'=>$paid,':notes'=>$notes];
+    if($id>0){$saveParams[':user']=(int)$ctx['id'];$saveParams[':id']=$id;}else{$saveParams[':created']=(int)$ctx['id'];$saveParams[':updated']=(int)$ctx['id'];}
+    $st->execute($saveParams);
     $savedId=$id>0?$id:(int)$pdo->lastInsertId();audit_log($pdo,$ctx,$id>0?'damage_updated':'damage_created','damage',$savedId,$title,['established'=>$est,'claimed'=>$claimed,'reimbursed'=>$paid]);reply(200,['ok'=>true,'id'=>$savedId]);
 }
 if ($action === 'settings_data' && $method === 'GET') {
