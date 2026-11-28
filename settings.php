@@ -12,7 +12,8 @@ if(empty($_SESSION['sb_user_id'])){header('Location: index.html');exit;}
 <section class="panel"><form id="settingsForm" class="form">
 <div class="field wide"><label>Название организации</label><input name="organization_name" maxlength="120" placeholder="Служба безопасности"></div>
 <div class="field wide"><label>Ссылка на логотип (HTTPS)</label><input name="logo_url" type="url" maxlength="500" placeholder="https://..."></div>
-<div class="field wide"><label>Контактный e-mail для уведомлений</label><input name="notification_email" type="email" maxlength="180" placeholder="security@example.com"></div>
+<div class="field"><label>Web Push-уведомления</label><select name="push_enabled"><option value="1">Включены</option><option value="0">Отключены</option></select></div>
+<div class="field"><label>Контактный e-mail</label><input name="notification_email" type="email" maxlength="180" placeholder="security@example.com"></div>
 <div class="field wide"><label>Шаблон задачи</label><textarea name="task_template" maxlength="3000" placeholder="Стандартный текст задачи..."></textarea></div>
 <div class="field wide"><label>Шаблон регистрации инцидента</label><textarea name="incident_template" maxlength="3000" placeholder="Какие сведения необходимо указать..."></textarea></div>
 <div class="field wide"><button class="btn primary" type="submit">Сохранить настройки</button><span id="message" class="muted" role="status"></span></div>
