@@ -146,7 +146,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $act = (string)($_POST['act'] ?? '');
         $id = (int)($_POST['id'] ?? 0);
 
-        if ($act === 'role_save') {
+        if ($act === 'role_permissions_save') {
+            $roleKey = trim((string)($_POST['role_key'] ?? ''));
+            $allowed = $_POST['permissions'] ?? [];
+            if (!is_array($allowed)) $allowed = [];
+            $checkRole = $pdo->prepare('SELECT is_system FROM sb_roles WHERE role_key=:key');
+            $checkRole->execute([':key'=>$roleKey]);
+            $roleSystem = $checkRole->fetchColumn();
+            $knownPermissions = ['tasks.view','tasks.create','tasks.manage','employees.view','employees.manage','documents.view','documents.manage','reports.view','incidents.view','incidents.create','incidents.manage','damage.view','damage.manage','settings.manage','roles.manage'];
+            if ($roleSystem === false) $err = 'Роль не найдена.';
+            elseif ($roleKey === 'admin') $err = 'Права администратора нельзя ограничить.';
+            else {
+                $allowed = array_values(array_intersect($knownPermissions, array_map('strval',$allowed)));
+                $pdo->beginTransaction();
+                try {
+                    $pdo->prepare('DELETE FROM sb_role_permissions WHERE role_key=:key')->execute([':key'=>$roleKey]);
+                    $ins = $pdo->prepare('INSERT INTO sb_role_permissions (role_key,permission_key,is_allowed) VALUES (:key,:permission,1)');
+                    foreach ($allowed as $permission) $ins->execute([':key'=>$roleKey,':permission'=>$permission]);
+                    $pdo->commit();
+                    users_audit_log($pdo,$me,'role_permissions_updated','role',null,$roleKey,['permissions'=>$allowed]);
+                } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }
+            }
+        } elseif ($act === 'role_save') {
             $roleKey = trim((string)($_POST['role_key'] ?? ''));
             $displayName = trim((string)($_POST['display_name'] ?? ''));
             $baseRole = (string)($_POST['base_role'] ?? 'user');
@@ -377,6 +398,16 @@ $unassignedUsers = array_values(array_filter($users, function($u) use ($userObje
 }));
 $auditRows = $pdo->query('SELECT actor_name, action, target_label, created_at FROM sb_audit_log ORDER BY id DESC LIMIT 50')->fetchAll();
 $roleRows = $pdo->query('SELECT role_key,display_name,base_role,is_system FROM sb_roles ORDER BY is_system DESC,display_name')->fetchAll();
+$permissionCatalog = [
+    'tasks.view'=>'Просмотр задач','tasks.create'=>'Создание задач','tasks.manage'=>'Изменение и удаление задач',
+    'employees.view'=>'Просмотр сотрудников','employees.manage'=>'Управление сотрудниками',
+    'documents.view'=>'Просмотр базы документов','documents.manage'=>'Загрузка и удаление документов',
+    'reports.view'=>'Просмотр отчётов','incidents.view'=>'Просмотр инцидентов','incidents.create'=>'Создание инцидентов','incidents.manage'=>'Управление инцидентами',
+    'damage.view'=>'Просмотр ущерба','damage.manage'=>'Изменение возмещения ущерба','settings.manage'=>'Настройки системы','roles.manage'=>'Управление ролями'
+];
+$permissionRows = $pdo->query('SELECT role_key,permission_key FROM sb_role_permissions WHERE is_allowed=1')->fetchAll();
+$roleAllowed = [];
+foreach ($permissionRows as $pr) $roleAllowed[(string)$pr['role_key']][(string)$pr['permission_key']] = true;
 $roleNames = [];
 foreach ($roleRows as $roleRow) $roleNames[(string)$roleRow['role_key']] = (string)$roleRow['display_name'];
 ?>
@@ -564,6 +595,14 @@ foreach ($roleRows as $roleRow) $roleNames[(string)$roleRow['role_key']] = (stri
         <div class="save-field"><button class="btn secondary" type="submit">Сохранить название</button></div>
       </form>
       <?php if (!(int)$roleRow['is_system']): ?><form method="post" onsubmit="return confirm('Удалить роль?');"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="role_delete"><input type="hidden" name="role_key" value="<?= h($roleRow['role_key']) ?>"><button class="btn danger small" type="submit">Удалить</button></form><?php else: ?><span class="status active">Системная</span><?php endif; ?>
+      <details style="margin-top:10px"><summary style="cursor:pointer;color:var(--teal);font-size:12px;font-weight:700">Настроить разрешения</summary>
+        <form method="post" style="margin-top:10px;padding:12px;background:#f7fafa;border:1px solid var(--line);border-radius:10px">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="role_permissions_save"><input type="hidden" name="role_key" value="<?= h($roleRow['role_key']) ?>">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px">
+          <?php foreach ($permissionCatalog as $pk=>$pl): ?><label style="display:flex;align-items:center;gap:7px;font-size:12px"><input type="checkbox" name="permissions[]" value="<?= h($pk) ?>" style="width:15px;height:15px" <?= !empty($roleAllowed[$roleRow['role_key']][$pk]) ? 'checked' : '' ?>><?= h($pl) ?></label><?php endforeach; ?>
+          </div><button class="btn secondary small" type="submit" style="margin-top:10px">Сохранить разрешения</button>
+        </form>
+      </details>
     </div><?php endforeach; ?>
   </div>
 </section>
