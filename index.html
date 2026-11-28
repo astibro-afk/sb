@@ -67,6 +67,14 @@ async function dashboard(){
  $('adminManageLink').hidden=user.role!=='admin';$('settingsQuick').hidden=user.role!=='admin';
  const data=await get('dashboard_data');
  user=data.user||user;
+ const perms=new Set(user.permissions||[]);
+ const hideWithout=(selector,permission)=>document.querySelectorAll(selector).forEach(node=>{node.hidden=user.role!=='admin'&&!perms.has(permission);});
+ hideWithout('a[href="tasks.php"]','tasks.view');
+ hideWithout('a[href="reports.php"],a[href="reports/daily-report.php"]','reports.view');
+ hideWithout('a[href="employees.php"]','employees.view');
+ hideWithout('a[href="documents.php"]','documents.view');
+ hideWithout('a[href="incidents.php"]','incidents.view');
+ hideWithout('a[href="damage.php"]','damage.view');
  if(data.settings&&data.settings.organization_name)$('brandName').textContent=data.settings.organization_name;
  if(data.settings&&data.settings.logo_url){$('brandLogo').textContent='';$('brandLogo').style.background='transparent';$('brandLogo').style.padding='0';const img=document.createElement('img');img.src=data.settings.logo_url;img.alt='Логотип';img.style.width='100%';img.style.height='100%';img.style.objectFit='contain';$('brandLogo').appendChild(img);}
  renderTasks(data.tasks||[]);
