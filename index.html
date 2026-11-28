@@ -70,7 +70,8 @@ async function dashboard(){
  const perms=user.permissions||{};
  document.querySelectorAll('.quick').forEach(link=>{
   const href=link.getAttribute('href')||'';
-  if(href==='reports.php'||href==='reports/daily-report.php')link.hidden=!perms['reports.view'];
+  if(href==='reports.php')link.hidden=!perms['reports.view'];
+  if(href==='reports/daily-report.php')link.hidden=!perms['reports.create'];
   if(href==='tasks.php')link.hidden=!perms['tasks.view'];
   if(href==='employees.php')link.hidden=!perms['employees.view'];
   if(href==='documents.php')link.hidden=!perms['documents.view'];
