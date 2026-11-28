@@ -45,3 +45,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 button:disabled{cursor:not-allowed;opacity:.55}
 ::selection{background:rgba(59,130,246,.35);color:#fff}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+/* Native hidden state must win over component display rules. */
+[hidden]{display:none!important}
+:where(input[type=checkbox],input[type=radio]){accent-color:#3b82f6}
+:where(select option){background:#111b2e;color:#e8eef9}
+:where(hr){border:0;border-top:1px solid var(--sb-line)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:#0b1120}
+::-webkit-scrollbar-thumb{background:#2b3d58;border:2px solid #0b1120;border-radius:20px}
+::-webkit-scrollbar-thumb:hover{background:#3d5a80}
