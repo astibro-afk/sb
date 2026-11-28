@@ -930,7 +930,9 @@ if ($action === 'incidents_data' && $method === 'GET') {
         WHERE ".implode(' AND ',$where)." ORDER BY i.event_at DESC,i.id DESC LIMIT 200");
     $st->execute($params); $rows=$st->fetchAll();
     foreach($rows as &$row){$row['id']=(int)$row['id'];$row['object_id']=(int)$row['object_id'];$row['photo_url']=$row['photo_name']?'api.php?action=incident_photo&id='.$row['id']:'';} unset($row);
-    reply(200,['ok'=>true,'incidents'=>$rows,'csrf'=>csrf_token()]);
+    if($ctx['role']==='admin') $objects=$pdo->query('SELECT id,name FROM sb_objects WHERE is_active=1 ORDER BY name')->fetchAll();
+    else { $ids=user_object_ids($pdo,(int)$ctx['id']); $objects=[]; if($ids){$marks=implode(',',array_fill(0,count($ids),'?'));$os=$pdo->prepare("SELECT id,name FROM sb_objects WHERE is_active=1 AND id IN ($marks) ORDER BY name");$os->execute($ids);$objects=$os->fetchAll();} }
+    reply(200,['ok'=>true,'incidents'=>$rows,'objects'=>$objects,'can_create'=>role_can($pdo,$ctx,'incidents.create'),'csrf'=>csrf_token()]);
 }
 if ($action === 'incident_create' && $method === 'POST') {
     if (!role_can($pdo,$ctx,'incidents.create')) reply(403,['ok'=>false,'error'=>'Нет разрешения на создание инцидентов.']);
@@ -983,8 +985,8 @@ if ($action === 'damage_save' && $method === 'POST') {
     if($incidentId>0){$chk=$pdo->prepare('SELECT id,object_id FROM sb_incidents WHERE id=:id');$chk->execute([':id'=>$incidentId]);$inc=$chk->fetch();if(!$inc||(int)$inc['object_id']!==$objectId)reply(400,['ok'=>false,'error'=>'Выбранный инцидент не относится к этому объекту.']);}
     if($id>0){$chk=$pdo->prepare('SELECT object_id FROM sb_damage_cases WHERE id=:id');$chk->execute([':id'=>$id]);$old=$chk->fetchColumn();if($old===false||($ctx['role']!=='admin'&&!in_array((int)$old,$scope,true)))reply(404,['ok'=>false,'error'=>'Запись не найдена в вашей зоне доступа.']);
         $st=$pdo->prepare('UPDATE sb_damage_cases SET object_id=:object,incident_id=:incident,title=:title,established_amount=:est,claimed_amount=:claimed,reimbursed_amount=:paid,notes=:notes,updated_by=:user WHERE id=:id');
-    }else{$st=$pdo->prepare('INSERT INTO sb_damage_cases (object_id,incident_id,title,established_amount,claimed_amount,reimbursed_amount,notes,created_by,updated_by) VALUES (:object,:incident,:title,:est,:claimed,:paid,:notes,:user,:user)');}
-    $st->execute([':object'=>$objectId,':incident'=>$incidentId>0?$incidentId:null,':title'=>$title,':est'=>$est,':claimed'=>$claimed,':paid'=>$paid,':notes'=>$notes,':user'=>(int)$ctx['id']]);
+    }else{$st=$pdo->prepare('INSERT INTO sb_damage_cases (object_id,incident_id,title,established_amount,claimed_amount,reimbursed_amount,notes,created_by,updated_by) VALUES (:object,:incident,:title,:est,:claimed,:paid,:notes,:created,:updated)');}
+    $st->execute([':object'=>$objectId,':incident'=>$incidentId>0?$incidentId:null,':title'=>$title,':est'=>$est,':claimed'=>$claimed,':paid'=>$paid,':notes'=>$notes,':created'=>(int)$ctx['id'],':updated'=>(int)$ctx['id'],':user'=>(int)$ctx['id']]);
     $savedId=$id>0?$id:(int)$pdo->lastInsertId();audit_log($pdo,$ctx,$id>0?'damage_updated':'damage_created','damage',$savedId,$title,['established'=>$est,'claimed'=>$claimed,'reimbursed'=>$paid]);reply(200,['ok'=>true,'id'=>$savedId]);
 }
 if ($action === 'settings_data' && $method === 'GET') {
