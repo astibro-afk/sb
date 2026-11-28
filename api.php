@@ -1169,6 +1169,15 @@ if ($action === 'dashboard_data' && $method === 'GET') {
     $unreadStmt = $pdo->prepare('SELECT COUNT(*) FROM sb_notifications WHERE user_id=:unread_uid AND is_read=0');
     $unreadStmt->execute([':unread_uid'=>$uid]);
 
+    if (!has_permission($pdo,$ctx,'tasks.view')) {
+        $tasks=[];
+        $taskSummary=['total'=>0,'active_count'=>0,'review_count'=>0,'overdue_count'=>0];
+    }
+    if (!has_permission($pdo,$ctx,'reports.view')) {
+        $reports=[];$reportCount=0;$lastReport=null;
+    }
+    if (!has_permission($pdo,$ctx,'employees.view')) $employeeCount=0;
+
     reply(200, [
         'ok'=>true, 'user'=>$ctx, 'csrf'=>csrf_token(),
         'tasks'=>$tasks,
