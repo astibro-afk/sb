@@ -126,10 +126,10 @@ document.addEventListener('click',e=>{if(!e.target.closest('.multi-dropdown'))cl
 function fillAssignees(keepSelection=true){const sel=$('assignee');const previous=keepSelection?Array.from(sel.selectedOptions).map(o=>o.value):[];const hadAll=previous.includes('__all__');const objectIds=selectedObjectIds();const available=state.assignees.filter(u=>!state.user||Number(u.id)!==Number(state.user.id)).filter(u=>!objectIds.length||(u.object_ids||[]).some(id=>objectIds.includes(Number(id))));sel.replaceChildren(new Option('Все сотрудники','__all__'));available.forEach(u=>sel.add(new Option(u.full_name,u.id)));if(hadAll){sel.options[0].selected=true;}else{Array.from(sel.options).forEach(o=>{if(o.value!=='__all__'&&previous.includes(o.value))o.selected=true;});}refreshMultiDropdown('assignee');}
 function stats(){const s=state.stats||{};$('total').textContent=Number(s.total||0);$('active').textContent=Number(s.active||0);$('reviewCount').textContent=Number(s.review||0);$('overdue').textContent=Number(s.overdue||0);}
 function renderPagination(){const p=state.pagination||{page:1,total_pages:1,total:0};const wrap=$('pagination');wrap.hidden=Number(p.total_pages)<=1;$('prevPage').disabled=Number(p.page)<=1;$('nextPage').disabled=Number(p.page)>=Number(p.total_pages);$('pageInfo').textContent='Страница '+p.page+' из '+p.total_pages+' · задач: '+p.total;}
-let activeTaskModal=null;
+let activeTaskModal=null;let commentPollTimer=null;
 function closeTaskView(){
  if(!activeTaskModal)return;
- activeTaskModal.remove();activeTaskModal=null;document.body.style.overflow='';
+ if(commentPollTimer){clearInterval(commentPollTimer);commentPollTimer=null;}activeTaskModal.remove();activeTaskModal=null;document.body.style.overflow='';
  document.removeEventListener('keydown',activeTaskKeyHandler);
 }
 function activeTaskKeyHandler(e){if(e.key==='Escape')closeTaskView();}
@@ -158,21 +158,39 @@ function openTaskView(task){
  if(actions.childNodes.length){actions.prepend(node('h3','task-view-actions-title','Действия с задачей'));info.insertBefore(actions,info.querySelector('.task-view-description')||meta);}
  const comments=node('details','comments task-view-comments');comments.open=true;const summary=node('summary','','Обсуждение ('+(task.comment_count||0)+')');comments.append(summary);
  const commentItems=node('div','comments-list');comments.append(commentItems);
+ const appendComment=c=>{
+  const item=node('div','comment');item.dataset.commentId=String(c.id);
+  if(Number(c.can_delete)===1){const del=node('button','comment-delete','×');del.type='button';del.title='Удалить комментарий';del.setAttribute('aria-label','Удалить комментарий');del.addEventListener('click',()=>deleteComment(c.id,task,item,summary,commentItems));item.append(del);}
+  item.append(node('b','',c.user_name||'Сотрудник'),node('small','',time(c.created_at)),node('p','',c.comment));
+  (c.mentions||[]).forEach(m=>item.append(node('span','tag','@'+m.full_name)));
+  (c.attachments||[]).forEach(a=>{const link=node('a','',a.original_name+' · '+Math.max(1,Math.round(Number(a.file_size||0)/1024))+' КБ');link.href='api.php?action=task_comment_attachment_download&id='+encodeURIComponent(a.id);link.target='_blank';link.rel='noopener';item.append(link);});
+  commentItems.append(item);
+ };
  comments.addEventListener('toggle',async()=>{
   if(!comments.open||comments.dataset.loaded==='1')return;
   comments.dataset.loaded='1';commentItems.replaceChildren(node('div','comment','Загружаем комментарии…'));
   try{
    const data=await get('task_comments',{id:task.id});comments._mentionable=data.mentionable_users||[];const mentionSelect=discussion.querySelector('.comment-form select');if(mentionSelect)(data.mentionable_users||[]).forEach(u=>mentionSelect.add(new Option(u.full_name,u.id)));commentItems.replaceChildren();
-   (data.comments||[]).forEach(c=>{
-    const item=node('div','comment');
-    if(Number(c.can_delete)===1){const del=node('button','comment-delete','×');del.type='button';del.title='Удалить комментарий';del.setAttribute('aria-label','Удалить комментарий');del.addEventListener('click',()=>deleteComment(c.id,task,item,summary,commentItems));item.append(del);}
-    item.append(node('b','',c.user_name||'Сотрудник'),node('small','',time(c.created_at)),node('p','',c.comment));
-    (c.mentions||[]).forEach(m=>item.append(node('span','tag','@'+m.full_name)));
-    (c.attachments||[]).forEach(a=>{const link=node('a','',a.original_name+' · '+Math.max(1,Math.round(Number(a.file_size||0)/1024))+' КБ');link.href='api.php?action=task_comment_attachment_download&id='+encodeURIComponent(a.id);link.target='_blank';link.rel='noopener';item.append(link);});
-    commentItems.append(item);
-   });
+   (data.comments||[]).forEach(appendComment);
    summary.textContent='Обсуждение ('+(data.comments||[]).length+')';if(!(data.comments||[]).length)commentItems.append(node('div','comment','Комментариев пока нет.'));
    requestAnimationFrame(()=>{commentItems.scrollTop=commentItems.scrollHeight;});
+   if(commentPollTimer)clearInterval(commentPollTimer);
+   commentPollTimer=setInterval(async()=>{
+    if(!activeTaskModal||document.visibilityState==='hidden'||!comments.open)return;
+    try{
+     const fresh=await get('task_comments',{id:task.id});
+     const known=new Set(Array.from(commentItems.querySelectorAll('[data-comment-id]')).map(el=>el.dataset.commentId));
+     const incoming=(fresh.comments||[]).filter(c=>!known.has(String(c.id)));
+     if(!incoming.length)return;
+     const nearBottom=commentItems.scrollHeight-commentItems.scrollTop-commentItems.clientHeight<90;
+     const empty=commentItems.querySelector('.comment')?.textContent==='Комментариев пока нет.';
+     if(empty)commentItems.replaceChildren();
+     incoming.forEach(appendComment);
+     summary.textContent='Обсуждение ('+(fresh.comments||[]).length+')';
+     task.comment_count=(fresh.comments||[]).length;
+     if(nearBottom)requestAnimationFrame(()=>{commentItems.scrollTop=commentItems.scrollHeight;});
+    }catch(_err){/* Следующая проверка повторит запрос без прерывания работы с задачей. */}
+   },4000);
   }catch(err){comments.dataset.loaded='0';commentItems.replaceChildren(node('div','comment',err.message));}
  });
  if(!state.archiveView){
