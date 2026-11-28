@@ -33,6 +33,43 @@ if(empty($_SESSION['sb_user_id'])){header('Location: index.html');exit;}
 .multi-dropdown-option input{width:14px;height:14px;flex:none;margin:0;accent-color:#08777b;cursor:pointer}
 .multi-dropdown-option span{min-width:0;overflow-wrap:anywhere}
 .multi-dropdown-empty{padding:10px 8px;color:#819496;font-size:11px}
+
+/* Единая сетка строк задач: без наложения заголовков, метаданных и кнопок */
+.task-list{display:flex;flex-direction:column;gap:8px}
+.task-row-card{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:stretch;gap:12px;padding:0 14px;min-height:78px;border:1px solid #dfe9e7;border-radius:12px;background:#fff;box-shadow:0 2px 7px rgba(26,52,56,.035);transition:border-color .15s,box-shadow .15s}
+.task-row-card:hover{border-color:#b9d4d0;box-shadow:0 4px 13px rgba(26,52,56,.07)}
+.task-row-card.overdue{border-left:3px solid #cf6658}
+.task-row-open{display:grid;grid-template-columns:minmax(220px,.9fr) minmax(0,1.1fr);align-items:center;gap:22px;width:100%;min-width:0;min-height:76px;padding:11px 0}
+.task-row-main{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:7px;min-width:0}
+.task-row-title{display:block;width:100%;font-size:14px;line-height:1.35;font-weight:700;color:#203e42;white-space:normal;overflow-wrap:anywhere}
+.task-row-main .badges{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.task-row-main .tag{padding:3px 8px;font-size:10px;line-height:1.35}
+.task-row-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:center;justify-content:stretch;gap:8px 14px;min-width:0;color:#526e70;font-size:12px}
+.task-row-meta>span{display:flex;flex-direction:column;gap:2px;min-width:0;max-width:none;white-space:normal;line-height:1.3}
+.task-row-meta b{display:block;color:#87999a;font-size:10px;font-weight:650;letter-spacing:.02em}
+.task-row-meta>span:not(:has(b)){overflow-wrap:anywhere}
+.task-row-controls{display:flex;align-items:center;justify-content:center;gap:3px;padding-left:9px;border-left:1px solid #edf2f1}
+.task-row-icon{width:32px;height:32px;flex:none;border-radius:8px}
+.task-row-icon:focus-visible{outline:2px solid #08777b;outline-offset:2px}
+@media(max-width:980px){
+ .task-row-open{grid-template-columns:minmax(190px,.8fr) minmax(0,1.2fr);gap:14px}
+ .task-row-meta{gap:7px}
+}
+@media(max-width:780px){
+ .task-row-card{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:0 10px;min-height:0}
+ .task-row-open{display:flex;flex-direction:column;align-items:stretch;gap:9px;min-height:0;padding:12px 0}
+ .task-row-main{align-items:flex-start;gap:7px}
+ .task-row-title{font-size:14px}
+ .task-row-meta{grid-template-columns:repeat(2,minmax(0,1fr));justify-content:start;gap:8px 14px}
+ .task-row-controls{align-items:flex-start;padding:12px 0 0 7px}
+}
+@media(max-width:420px){
+ .task-row-meta{grid-template-columns:minmax(0,1fr);gap:6px}
+ .task-row-meta>span{display:grid;grid-template-columns:76px minmax(0,1fr);gap:6px;align-items:start}
+ .task-row-meta b{font-size:10px}
+ .task-row-controls{gap:0}
+ .task-row-icon{width:29px;height:29px}
+}
 </style><link rel="stylesheet" href="site-header.css">
 </head><body>
 <header class="sb-site-header"><div class="sb-site-top"><a class="sb-site-brand" href="/index.html"><span class="sb-site-logo">СБ</span><span class="sb-site-brand-text"><strong>Служба безопасности</strong><small>Группа БФ Волгоград 1</small></span></a><div class="sb-site-actions"><div class="sb-site-user" id="sbHeaderUser" hidden><strong id="sbHeaderName"></strong><small id="sbHeaderMeta"></small></div><a class="sb-site-manage" id="sbHeaderAddUser" href="/add-user.php" hidden>Добавить пользователя</a><a class="sb-site-manage" id="sbHeaderManage" href="/users.php" hidden>Управление</a><a class="sb-site-notice" href="/notifications.php">Уведомления <span id="sbHeaderBadge" hidden>0</span></a><button class="sb-site-logout" id="sbHeaderLogout" type="button">Выход</button></div></div><nav class="sb-site-nav" aria-label="Основная навигация"><div class="sb-site-nav-inner"><a href="/index.html">Главная</a><a href="/reports.php">Отчёты</a><a class="active" href="/tasks.php">Задачи</a><a href="/employees.php">Сотрудники</a><a href="/notifications.php">Уведомления</a></div></nav></header>
