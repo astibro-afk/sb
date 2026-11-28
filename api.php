@@ -960,10 +960,11 @@ if ($action === 'incident_create' && $method === 'POST') {
     if(isset($_FILES['photo'])&&($_FILES['photo']['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_NO_FILE){
         $file=$_FILES['photo'];$tmp=(string)($file['tmp_name']??'');$size=(int)($file['size']??0);
         if(($file['error']??UPLOAD_ERR_OK)!==UPLOAD_ERR_OK||$size<1||$size>10*1024*1024||!is_uploaded_file($tmp))reply(400,['ok'=>false,'error'=>'Фото должно быть не более 10 МБ.']);
-        $finfo=finfo_open(FILEINFO_MIME_TYPE);$mime=$finfo?finfo_file($finfo,$tmp):'';if($finfo)finfo_close($finfo);
+        $finfo=function_exists('finfo_open')?finfo_open(FILEINFO_MIME_TYPE):false;if(!$finfo)reply(500,['ok'=>false,'error'=>'На сервере недоступна проверка типа фото.']);$mime=finfo_file($finfo,$tmp);finfo_close($finfo);
         $ext=['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'][$mime]??null;if(!$ext)reply(415,['ok'=>false,'error'=>'Разрешены фото JPG, PNG или WEBP.']);
         $dir=__DIR__.'/incident-storage';if(!is_dir($dir)&&!@mkdir($dir,0750,true)&&!is_dir($dir))reply(500,['ok'=>false,'error'=>'Не удалось подготовить хранилище фото.']);
         if(!is_file($dir.'/.htaccess'))@file_put_contents($dir.'/.htaccess',"Require all denied\n");
+        if(!is_file($dir.'/index.html'))@file_put_contents($dir.'/index.html','<!doctype html><title></title>');
         $photoName=bin2hex(random_bytes(24)).'.'.$ext;$photoMime=$mime;
         if(!move_uploaded_file($tmp,$dir.'/'.$photoName))reply(500,['ok'=>false,'error'=>'Не удалось сохранить фото.']);
     }
