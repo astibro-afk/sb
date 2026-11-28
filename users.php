@@ -400,8 +400,11 @@ foreach ($users as $u) {
 }
 $activeObjectIds = [];
 foreach ($objects as $o) if ((int)$o['is_active'] === 1) $activeObjectIds[(int)$o['id']] = true;
-$unassignedUsers = array_values(array_filter($users, function($u) use ($userObjectIds, $activeObjectIds) {
-    if ((int)$u['is_active'] !== 1 || !in_array($u['role'], ['user','moderator'], true)) return false;
+$roleBaseRows = $pdo->query('SELECT role_key,base_role FROM sb_roles')->fetchAll();
+$roleBaseMap = [];
+foreach ($roleBaseRows as $rb) $roleBaseMap[(string)$rb['role_key']] = (string)$rb['base_role'];
+$unassignedUsers = array_values(array_filter($users, function($u) use ($userObjectIds, $activeObjectIds, $roleBaseMap) {
+    if ((int)$u['is_active'] !== 1 || !in_array($roleBaseMap[(string)$u['role']] ?? 'user', ['user','moderator'], true)) return false;
     foreach ($userObjectIds[(int)$u['id']] ?? [] as $oid) if (isset($activeObjectIds[(int)$oid])) return false;
     return true;
 }));
