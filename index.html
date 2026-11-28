@@ -36,7 +36,7 @@
 <section class="panel"><div class="panel-head"><h3 id="reportsHeading">Последние отчёты</h3><a href="reports.php">Все отчёты →</a></div><div class="panel-body" id="reportList"><div class="loading">Загружаем отчёты…</div></div></section>
 </div><aside>
 <section class="panel"><div class="panel-head"><h3>Быстрый доступ</h3></div><div class="quick-grid">
-<a class="quick" href="reports/daily-report.php"><span class="quick-icon">＋</span>Создать ежедневный отчёт</a><a class="quick" href="reports.php"><span class="quick-icon">▤</span>Архив отчётов</a><a class="quick" href="tasks.php"><span class="quick-icon">✓</span>Задачи и поручения</a><a class="quick" href="employees.php"><span class="quick-icon">♙</span>Сотрудники</a><a class="quick" href="documents.php"><span class="quick-icon">▣</span>База документов</a><a class="quick" href="notifications.php"><span class="quick-icon">♢</span>Уведомления</a>
+<a class="quick" href="reports/daily-report.php"><span class="quick-icon">＋</span>Создать ежедневный отчёт</a><a class="quick" href="reports.php"><span class="quick-icon">▤</span>Архив отчётов</a><a class="quick" href="tasks.php"><span class="quick-icon">✓</span>Задачи и поручения</a><a class="quick" href="employees.php"><span class="quick-icon">♙</span>Сотрудники</a><a class="quick" href="documents.php"><span class="quick-icon">▣</span>База документов</a><a class="quick" href="incidents.php"><span class="quick-icon">!</span>Журнал происшествий</a><a class="quick" href="damage.php"><span class="quick-icon">₽</span>Возмещение ущерба</a><a class="quick" href="settings.php"><span class="quick-icon">⚙</span>Настройки системы</a><a class="quick" href="notifications.php"><span class="quick-icon">♢</span>Уведомления</a>
 </div></section>
 <section class="panel"><div class="panel-head"><h3>Уведомления</h3><a href="notifications.php">Все →</a></div><div class="panel-body" id="noticeList"><div class="loading">Загружаем уведомления…</div></div></section>
 <section class="panel"><div class="panel-head"><h3>Объекты в зоне доступа</h3></div><div class="panel-body" id="objectList"><div class="loading">Загружаем объекты…</div></div></section>
@@ -75,6 +75,9 @@ async function dashboard(){
   if(href==='tasks.php')link.hidden=!perms['tasks.view'];
   if(href==='employees.php')link.hidden=!perms['employees.view'];
   if(href==='documents.php')link.hidden=!perms['documents.view'];
+  if(href==='incidents.php')link.hidden=!perms['incidents.view'];
+  if(href==='damage.php')link.hidden=!perms['damage.view'];
+  if(href==='settings.php')link.hidden=user.role!=='admin';
  });
  const taskPanel=$('taskList').closest('.panel'),reportPanel=$('reportList').closest('.panel');
  if(taskPanel)taskPanel.hidden=!perms['tasks.view'];
