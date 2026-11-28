@@ -942,7 +942,9 @@ if ($action === 'incidents_data' && $method === 'GET') {
     foreach($rows as &$row){$row['id']=(int)$row['id'];$row['object_id']=(int)$row['object_id'];$row['photo_url']=$row['photo_name']?'api.php?action=incident_photo&id='.$row['id']:'';} unset($row);
     if($ctx['role']==='admin') $objects=$pdo->query('SELECT id,name FROM sb_objects WHERE is_active=1 ORDER BY name')->fetchAll();
     else { $ids=user_object_ids($pdo,(int)$ctx['id']); $objects=[]; if($ids){$marks=implode(',',array_fill(0,count($ids),'?'));$os=$pdo->prepare("SELECT id,name FROM sb_objects WHERE is_active=1 AND id IN ($marks) ORDER BY name");$os->execute($ids);$objects=$os->fetchAll();} }
-    reply(200,['ok'=>true,'incidents'=>$rows,'objects'=>$objects,'can_create'=>role_can($pdo,$ctx,'incidents.create'),'csrf'=>csrf_token()]);
+    $templateStmt=$pdo->prepare("SELECT setting_value FROM sb_system_settings WHERE setting_key='incident_template' LIMIT 1");
+    $templateStmt->execute();$incidentTemplate=(string)($templateStmt->fetchColumn()?:'');
+    reply(200,['ok'=>true,'incidents'=>$rows,'objects'=>$objects,'can_create'=>role_can($pdo,$ctx,'incidents.create'),'incident_template'=>$incidentTemplate,'csrf'=>csrf_token()]);
 }
 if ($action === 'incident_create' && $method === 'POST') {
     if (!role_can($pdo,$ctx,'incidents.create')) reply(403,['ok'=>false,'error'=>'Нет разрешения на создание инцидентов.']);
