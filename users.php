@@ -607,14 +607,14 @@ foreach ($roleRows as $roleRow) $roleNames[(string)$roleRow['role_key']] = (stri
         <div class="save-field"><button class="btn secondary" type="submit">Сохранить название</button></div>
       </form>
       <?php if (!(int)$roleRow['is_system']): ?><form method="post" onsubmit="return confirm('Удалить роль?');"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="role_delete"><input type="hidden" name="role_key" value="<?= h($roleRow['role_key']) ?>"><button class="btn danger small" type="submit">Удалить</button></form><?php else: ?><span class="status active">Системная</span><?php endif; ?>
-      <details style="margin-top:10px"><summary style="cursor:pointer;color:var(--teal);font-size:12px;font-weight:700">Настроить разрешения</summary>
+      <?php if ($roleRow['role_key'] !== 'admin'): ?><details style="margin-top:10px"><summary style="cursor:pointer;color:var(--teal);font-size:12px;font-weight:700">Настроить разрешения</summary>
         <form method="post" style="margin-top:10px;padding:12px;background:#f7fafa;border:1px solid var(--line);border-radius:10px">
           <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="role_permissions_save"><input type="hidden" name="role_key" value="<?= h($roleRow['role_key']) ?>">
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px">
           <?php foreach ($permissionCatalog as $pk=>$pl): ?><label style="display:flex;align-items:center;gap:7px;font-size:12px"><input type="checkbox" name="permissions[]" value="<?= h($pk) ?>" style="width:15px;height:15px" <?= !empty($roleAllowed[$roleRow['role_key']][$pk]) ? 'checked' : '' ?>><?= h($pl) ?></label><?php endforeach; ?>
           </div><button class="btn secondary small" type="submit" style="margin-top:10px">Сохранить разрешения</button>
         </form>
-      </details>
+      </details><?php endif; ?>
     </div><?php endforeach; ?>
   </div>
 </section>
