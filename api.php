@@ -2718,6 +2718,8 @@ if ($action === 'incident_create' && $method === 'POST') {
     $uploads=[];$photo=$_FILES['photos']??null;
     if(is_array($photo)&&isset($photo['name'])&&is_array($photo['name'])){
         $count=count($photo['name']);if($count>5)reply(400,['ok'=>false,'error'=>'Можно приложить не более 5 фотографий.']);
+        $totalPhotoBytes=0;foreach(($photo['size']??[]) as $photoSize)$totalPhotoBytes+=(int)$photoSize;
+        if($totalPhotoBytes>15*1024*1024)reply(400,['ok'=>false,'error'=>'Общий размер фотографий не должен превышать 15 МБ.']);
         for($n=0;$n<$count;$n++){
             if((int)($photo['error'][$n]??UPLOAD_ERR_NO_FILE)===UPLOAD_ERR_NO_FILE)continue;
             if((int)($photo['error'][$n]??0)!==UPLOAD_ERR_OK||(int)($photo['size'][$n]??0)<1||(int)$photo['size'][$n]>5*1024*1024)reply(400,['ok'=>false,'error'=>'Каждая фотография должна быть размером до 5 МБ.']);
