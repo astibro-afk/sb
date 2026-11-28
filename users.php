@@ -116,17 +116,23 @@ try {
         PRIMARY KEY (role_key,permission_key),
         CONSTRAINT fk_sb_role_permission_role FOREIGN KEY (role_key) REFERENCES sb_roles(role_key) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    $seedRole = $pdo->prepare("INSERT IGNORE INTO sb_roles (role_key,display_name,base_role,is_system) VALUES (:k,:n,:b,1)");
-    foreach ([['admin','Разработчик','admin'],['moderator','Модератор','moderator'],['user','Пользователь','user']] as $rr) $seedRole->execute([':k'=>$rr[0],':n'=>$rr[1],':b'=>$rr[2]]);
+    $seedRole = $pdo->prepare("INSERT IGNORE INTO sb_roles (role_key,display_name,base_role,is_system) VALUES (:k,:n,:b,:system)");
+    foreach ([['admin','Разработчик','admin',1],['user','Пользователь','user',0]] as $rr) $seedRole->execute([':k'=>$rr[0],':n'=>$rr[1],':b'=>$rr[2],':system'=>$rr[3]]);
     $pdo->exec("UPDATE sb_roles SET display_name='Разработчик', is_system=1, base_role='admin' WHERE role_key='admin'");
-    $pdo->exec("UPDATE sb_roles SET display_name='Модератор', is_system=1, base_role='moderator' WHERE role_key='moderator'");
     $pdo->exec("UPDATE sb_roles SET display_name='Пользователь', is_system=0, base_role='user' WHERE role_key='user'");
+    // Preserve former moderator access and employee assignments in a regular configurable role.
+    $pdo->exec("INSERT IGNORE INTO sb_roles (role_key,display_name,base_role,is_system) VALUES ('custom_object_lead','Руководитель объектов','moderator',0)");
+    $pdo->exec("UPDATE sb_roles SET base_role='moderator', is_system=0 WHERE role_key='custom_object_lead'");
+    $copyLegacyPermissions = $pdo->prepare("INSERT IGNORE INTO sb_role_permissions (role_key,permission_key,is_allowed) SELECT 'custom_object_lead',permission_key,is_allowed FROM sb_role_permissions WHERE role_key='moderator'");
+    $copyLegacyPermissions->execute();
     $basePermissions = [
-        'moderator'=>['tasks.view','tasks.create','tasks.manage','tasks.update_status','tasks.comment','employees.view','employees.manage','documents.view','documents.manage','documents.acknowledge','reports.view','reports.create','reports.manage'],
+        'custom_object_lead'=>['tasks.view','tasks.create','tasks.manage','tasks.update_status','tasks.comment','employees.view','employees.manage','documents.view','documents.manage','documents.acknowledge','reports.view','reports.create','reports.manage'],
         'user'=>['tasks.view','tasks.update_status','tasks.comment','employees.view','documents.view','documents.acknowledge','reports.view','reports.create']
     ];
     $permissionSeed=$pdo->prepare('INSERT IGNORE INTO sb_role_permissions (role_key,permission_key,is_allowed) VALUES (:role,:permission,1)');
     foreach($basePermissions as $rk=>$perms) foreach($perms as $permission) $permissionSeed->execute([':role'=>$rk,':permission'=>$permission]);
+    $pdo->exec("UPDATE sb_users SET role='custom_object_lead' WHERE role='moderator'");
+    $pdo->exec("DELETE FROM sb_roles WHERE role_key='moderator'");
 } catch (Throwable $e) {
     error_log('SB users page database error: ' . $e->getMessage());
     http_response_code(500);
@@ -594,11 +600,11 @@ foreach ($roleRows as $roleRow) $roleNames[(string)$roleRow['role_key']] = (stri
 <?php if ($unassignedUsers): ?><div class="alert"><strong>Требуют назначения объектов:</strong> <?= h(implode(', ', array_map(function($u){ return $u['full_name'].' ('.$u['username'].')'; }, $unassignedUsers))) ?>. Эти сотрудники не смогут работать с отчётами, пока им не назначат активный объект.</div><?php endif; ?>
 
 <section class="panel">
-  <div class="panel-head"><div class="panel-heading"><div class="section-icon">♙</div><div><h2 class="panel-title">Роли и права доступа</h2><div class="panel-subtitle">Две фиксированные системные роли и дополнительные настраиваемые роли. Базовая модель задаёт область данных; разрешения дополнительно ограничивают доступ.</div></div></div><span class="counter"><?= count($roleRows) ?> ролей</span></div>
+  <div class="panel-head"><div class="panel-heading"><div class="section-icon">♙</div><div><h2 class="panel-title">Роли и права доступа</h2><div class="panel-subtitle">Одна системная роль и дополнительные настраиваемые роли. Базовая модель задаёт область данных; разрешения дополнительно ограничивают доступ.</div></div></div><span class="counter"><?= count($roleRows) ?> ролей</span></div>
   <form method="post" class="add-object" style="grid-template-columns:minmax(180px,1fr) minmax(150px,.8fr) auto">
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="role_save">
     <div class="field"><label>Название новой роли</label><input name="display_name" maxlength="80" placeholder="Например, Старший специалист" required></div>
-    <div class="field"><label>Основа доступа</label><select name="base_role"><option value="user">Пользователь</option><option value="moderator">Модератор</option></select></div>
+    <div class="field"><label>Основа доступа</label><select name="base_role"><option value="user">Пользователь</option><option value="moderator">Руководитель объектов</option></select></div>
     <div class="submit-field"><button class="btn" type="submit">Создать роль</button></div>
   </form>
   <div class="user-list" style="margin-top:12px">
@@ -606,9 +612,9 @@ foreach ($roleRows as $roleRow) $roleNames[(string)$roleRow['role_key']] = (stri
       <div class="user-edit-form" style="grid-template-columns:minmax(180px,1fr) 150px auto">
         <div class="field"><label><?= (int)$roleRow['is_system'] ? 'Системная роль' : 'Настраиваемая роль' ?></label><input value="<?= h($roleRow['display_name']) ?>" disabled></div>
         <div class="field"><label>Базовая модель</label><input value="<?= h($roleRow['base_role']==='moderator'?'Объектная зона':($roleRow['base_role']==='admin'?'Полный доступ':'Личные данные')) ?>" disabled></div>
-        <div class="save-field"><?php if ((int)$roleRow['is_system']): ?><span class="status active">Фиксированная</span><?php else: ?><span class="status">Настраиваемая</span><?php endif; ?></div>
+        <div class="save-field"></div>
       </div>
-      <?php if (!(int)$roleRow['is_system']): ?><form method="post" onsubmit="return confirm('Удалить роль?');"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="role_delete"><input type="hidden" name="role_key" value="<?= h($roleRow['role_key']) ?>"><button class="btn danger small" type="submit">Удалить</button></form><?php else: ?><span class="status active">Системная</span><?php endif; ?>
+      <?php if (!(int)$roleRow['is_system']): ?><form method="post" onsubmit="return confirm('Удалить роль?');"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="role_delete"><input type="hidden" name="role_key" value="<?= h($roleRow['role_key']) ?>"><button class="btn danger small" type="submit">Удалить</button></form><?php endif; ?>
       <?php if ($roleRow['role_key'] !== 'admin'): ?><details style="margin-top:10px"><summary style="cursor:pointer;color:var(--teal);font-size:12px;font-weight:700">Настроить разрешения</summary>
         <form method="post" style="margin-top:10px;padding:12px;background:#f7fafa;border:1px solid var(--line);border-radius:10px">
           <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="role_permissions_save"><input type="hidden" name="role_key" value="<?= h($roleRow['role_key']) ?>">
