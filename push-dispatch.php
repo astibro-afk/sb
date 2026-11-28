@@ -11,6 +11,7 @@ function sb_push_base64url_encode(string $value): string {
 
 function sb_push_dispatch_pending(PDO $pdo, int $limit = 4): void {
     if ($pdo->inTransaction()) return;
+    if (function_exists('system_setting') && system_setting($pdo, 'push_enabled', '1') !== '1') return;
 
     try {
         $due = $pdo->query(
