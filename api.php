@@ -171,6 +171,14 @@ function ensure_roles_schema(PDO $pdo): void {
     foreach ([['admin','Администратор','admin'],['moderator','Модератор','moderator'],['user','Пользователь','user']] as $role) {
         $seed->execute([':key'=>$role[0],':name'=>$role[1],':base'=>$role[2]]);
     }
+    $defaults = [
+        'moderator'=>['tasks.view','tasks.create','tasks.manage','employees.view','documents.view','documents.manage','reports.view','incidents.view','incidents.create','incidents.manage','damage.view','damage.manage'],
+        'user'=>['tasks.view','documents.view','reports.view','incidents.view','incidents.create','damage.view']
+    ];
+    $permissionInsert = $pdo->prepare('INSERT IGNORE INTO sb_role_permissions (role_key,permission_key,is_allowed) VALUES (:role,:permission,1)');
+    foreach ($defaults as $roleKey=>$permissions) foreach ($permissions as $permission) {
+        $permissionInsert->execute([':role'=>$roleKey,':permission'=>$permission]);
+    }
 }
 
 function ensure_document_ack_schema(PDO $pdo): void {
