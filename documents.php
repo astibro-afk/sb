@@ -186,7 +186,7 @@ function render(){
    ackBox.append(ackText);
    if(state.user.role==='user'&&!d.acknowledged){
     const confirmBtn=node('button','btn primary','Подтвердить ознакомление');confirmBtn.type='button';confirmBtn.addEventListener('click',()=>acknowledgeDocument(d,confirmBtn));ackBox.append(confirmBtn);
-   }else if(state.user.role==='admin'||state.user.role==='moderator'){
+   }else if(state.user.role==='admin'||(state.user.role==='moderator'&&(state.user.permissions||[]).includes('documents.manage'))){
     const statusBtn=node('button','btn','Кто ознакомился');statusBtn.type='button';
     const panel=node('div','ack-panel');panel.hidden=true;statusBtn.addEventListener('click',()=>toggleAckStatus(d,panel,statusBtn));ackBox.append(statusBtn);card.append(ackBox,panel);
    }
@@ -205,7 +205,7 @@ async function load(){
   const params=new URLSearchParams({action:'documents_data',search:$('search').value.trim(),category:$('categoryFilter').value});
   const data=await read(await fetch('api.php?'+params.toString(),{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}}));
   state.user=data.user;state.documents=data.documents||[];state.objects=data.objects||[];state.categories=data.categories||[];
-  $('uploadPanel').hidden=!(state.user.role==='admin'||state.user.role==='moderator');
+  const documentPermissions=new Set(state.user.permissions||[]);$('uploadPanel').hidden=!(state.user.role==='admin'||(state.user.role==='moderator'&&documentPermissions.has('documents.manage')));
   fillObjects();fillCategories();render();
  }catch(e){showError(e.message);$('documents').replaceChildren(node('div','empty','Не удалось загрузить список документов.'));}
  finally{loading=false;if(pendingLoad){pendingLoad=false;load();}}
