@@ -411,7 +411,7 @@ $unassignedUsers = array_values(array_filter($users, function($u) use ($userObje
 $auditRows = $pdo->query('SELECT actor_name, action, target_label, created_at FROM sb_audit_log ORDER BY id DESC LIMIT 50')->fetchAll();
 $roleRows = $pdo->query('SELECT role_key,display_name,base_role,is_system FROM sb_roles ORDER BY is_system DESC,display_name')->fetchAll();
 $permissionCatalog = [
-    'tasks.view'=>'Просмотр задач','tasks.create'=>'Создание задач','tasks.update_status'=>'Изменение статуса задач','tasks.manage'=>'Изменение и удаление задач','tasks.comment'=>'Комментарии к задачам',
+    'tasks.view'=>'Просмотр задач','tasks.create'=>'Создание задач','tasks.update_status'=>'Изменение статуса задач','tasks.manage'=>'Архивирование и управление задачами','tasks.comment'=>'Комментарии к задачам',
     'employees.view'=>'Просмотр сотрудников','employees.manage'=>'Управление сотрудниками',
     'documents.view'=>'Просмотр базы документов','documents.acknowledge'=>'Подтверждение ознакомления','documents.manage'=>'Загрузка и удаление документов',
     'reports.view'=>'Просмотр отчётов','reports.create'=>'Создание и изменение своих отчётов','reports.manage'=>'Управление отчётами в зоне доступа','incidents.view'=>'Просмотр инцидентов','incidents.create'=>'Создание инцидентов',
@@ -591,7 +591,7 @@ foreach ($roleRows as $roleRow) $roleNames[(string)$roleRow['role_key']] = (stri
 <?php if ($unassignedUsers): ?><div class="alert"><strong>Требуют назначения объектов:</strong> <?= h(implode(', ', array_map(function($u){ return $u['full_name'].' ('.$u['username'].')'; }, $unassignedUsers))) ?>. Эти сотрудники не смогут работать с отчётами, пока им не назначат активный объект.</div><?php endif; ?>
 
 <section class="panel">
-  <div class="panel-head"><div class="panel-heading"><div class="section-icon">♙</div><div><h2 class="panel-title">Роли и права доступа</h2><div class="panel-subtitle">Переименование системных ролей и создание дополнительных ролей</div></div></div><span class="counter"><?= count($roleRows) ?> ролей</span></div>
+  <div class="panel-head"><div class="panel-heading"><div class="section-icon">♙</div><div><h2 class="panel-title">Роли и права доступа</h2><div class="panel-subtitle">Переименование системных ролей и создание дополнительных ролей. Базовая модель задаёт область данных; разрешения дополнительно ограничивают доступ.</div></div></div><span class="counter"><?= count($roleRows) ?> ролей</span></div>
   <form method="post" class="add-object" style="grid-template-columns:minmax(180px,1fr) minmax(150px,.8fr) auto">
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="act" value="role_save">
     <div class="field"><label>Название новой роли</label><input name="display_name" maxlength="80" placeholder="Например, Старший специалист" required></div>
