@@ -241,7 +241,7 @@ function db(array $cfg): PDO {
         $pdo->exec("SET time_zone = '+00:00'");
         // Инициализация схемы один раз на PHP-сессию, а не при каждом AJAX-запросе.
         // Версию можно повысить при добавлении новых миграций.
-        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-28-7') {
+        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-28-8') {
             $pdo->exec(
                 "CREATE TABLE IF NOT EXISTS sb_app_data (
                     data_key VARCHAR(100) NOT NULL PRIMARY KEY,
