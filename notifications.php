@@ -21,7 +21,7 @@ if (empty($_SESSION['sb_user_id'])) { header('Location: index.html'); exit; }
 const list=document.getElementById('list'), unread=document.getElementById('unread'), total=document.getElementById('total');
 let csrf='';
 function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n;}
-function localLink(value){return /^(index\.html|[a-z0-9_-]+\.php)$/i.test(value||'')?value:'index.html';}
+function localLink(value){return typeof value==='string'&&/^\\/?[a-z0-9_/-]+\\.php(?:\\?[a-z0-9_=&%-]*)?$/i.test(value)&&!value.includes('..')?value:'index.html';}
 async function load(){
  const r=await fetch('api.php?action=notifications_data',{credentials:'same-origin',cache:'no-store'}),d=await r.json();
  if(!r.ok||!d.ok)throw new Error(d.error||'Не удалось загрузить уведомления.');
