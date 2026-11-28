@@ -2112,17 +2112,21 @@ if ($action === 'task_update' && $method === 'POST') {
     $st=$pdo->prepare("SELECT t.*, EXISTS(SELECT 1 FROM sb_task_assignees ta WHERE ta.task_id=t.id AND ta.user_id=:uid) AS is_recipient, EXISTS(SELECT 1 FROM sb_task_objects txo JOIN sb_user_objects uo ON uo.object_id=txo.object_id WHERE txo.task_id=t.id AND uo.user_id=:mid) AS has_object FROM sb_tasks t WHERE t.id=:id LIMIT 1");
     $st->execute([':uid'=>(int)$ctx['id'],':mid'=>(int)$ctx['id'],':id'=>$id]); $task=$st->fetch(); if(!$task)reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
     if((int)$task['is_archived']===1)reply(409,['ok'=>false,'error'=>'Архивную задачу нельзя изменять.']);
-    $isRecipient=(int)$task['is_recipient']===1; $isManager=$ctx['role']==='admin'||($ctx['role']==='moderator'&&(int)$task['created_by']===(int)$ctx['id']);
-    $canSee=$ctx['role']==='admin'||($ctx['role']==='user'&&$isRecipient)||($ctx['role']==='moderator'&&(int)$task['has_object']===1); if(!$canSee)reply(403,['ok'=>false,'error'=>'Нет доступа к этой задаче.']);
+    $isRecipient=(int)$task['is_recipient']===1; $isAdmin=$ctx['role']==='admin'; $isManager=$isAdmin||($ctx['role']==='moderator'&&(int)$task['created_by']===(int)$ctx['id']);
+    $canSee=$isAdmin||($ctx['role']==='user'&&$isRecipient)||($ctx['role']==='moderator'&&(int)$task['has_object']===1); if(!$canSee)reply(403,['ok'=>false,'error'=>'Нет доступа к этой задаче.']);
     $status=(string)($body['status']??'');
     if($status!==''){
-        if($isRecipient&&!$isManager&&!in_array($status,['in_progress','review'],true))reply(403,['ok'=>false,'error'=>'Исполнитель может перевести задачу в работу или на проверку.']);
-        if(!$isRecipient&&!$isManager)reply(403,['ok'=>false,'error'=>'Недостаточно прав для изменения статуса.']);
-        if($isManager&&!in_array($status,['in_progress','done'],true))reply(400,['ok'=>false,'error'=>'Руководитель может вернуть задачу в работу или подтвердить выполнение.']);
-        if(!in_array($status,['in_progress','review','done'],true))reply(400,['ok'=>false,'error'=>'Недопустимый статус.']);
-        if($status==='review'&&$task['status']!=='in_progress')reply(409,['ok'=>false,'error'=>'Отправить на проверку можно только задачу, которая находится в работе.']);
-        if($status==='in_progress'&&!$isManager&&$task['status']==='done')reply(409,['ok'=>false,'error'=>'Выполненную задачу может вернуть в работу только руководитель.']);
-        if($status==='done'&&$task['status']!=='review')reply(409,['ok'=>false,'error'=>'Подтвердить можно только задачу на проверке.']);
+        if($isAdmin){
+            if(!in_array($status,['new','in_progress','review','done'],true))reply(400,['ok'=>false,'error'=>'Недопустимый статус.']);
+        }else{
+            if($isRecipient&&!$isManager&&!in_array($status,['in_progress','review'],true))reply(403,['ok'=>false,'error'=>'Исполнитель может перевести задачу в работу или на проверку.']);
+            if(!$isRecipient&&!$isManager)reply(403,['ok'=>false,'error'=>'Недостаточно прав для изменения статуса.']);
+            if($isManager&&!in_array($status,['in_progress','done'],true))reply(400,['ok'=>false,'error'=>'Руководитель может вернуть задачу в работу или подтвердить выполнение.']);
+            if(!in_array($status,['in_progress','review','done'],true))reply(400,['ok'=>false,'error'=>'Недопустимый статус.']);
+            if($status==='review'&&$task['status']!=='in_progress')reply(409,['ok'=>false,'error'=>'Отправить на проверку можно только задачу, которая находится в работе.']);
+            if($status==='in_progress'&&!$isManager&&$task['status']==='done')reply(409,['ok'=>false,'error'=>'Выполненную задачу может вернуть в работу только руководитель.']);
+            if($status==='done'&&$task['status']!=='review')reply(409,['ok'=>false,'error'=>'Подтвердить можно только задачу на проверке.']);
+        }
         $up=$pdo->prepare('UPDATE sb_tasks SET status=:status WHERE id=:id');$up->execute([':status'=>$status,':id'=>$id]);
         audit_log($pdo,$ctx,'task_status_changed','task',$id,(string)$task['title'],['from'=>$task['status'],'to'=>$status]);
         if($status==='review'&&(int)$task['created_by']!==(int)$ctx['id'])notification_add($pdo,(int)$task['created_by'],'task','Задача ожидает проверки','Сотрудник отправил задачу «'.$task['title'].'» на проверку.','tasks.php');
