@@ -1658,8 +1658,8 @@ if ($action === 'tasks_data' && $method === 'GET') {
         (SELECT GROUP_CONCAT(DISTINCT txo_ids.object_id ORDER BY txo_ids.object_id SEPARATOR ',') FROM sb_task_objects txo_ids WHERE txo_ids.task_id=t.id) AS object_ids,
         EXISTS(SELECT 1 FROM sb_task_assignees me WHERE me.task_id=t.id AND me.user_id=:viewer_recipient) AS is_recipient,
         t.due_date,t.created_at,t.updated_at,t.archived_at" . $filteredSql . "
-        ORDER BY CASE WHEN t.status='done' THEN 1 ELSE 0 END, t.due_date IS NULL,
-        t.due_date ASC, t.updated_at DESC, t.id DESC LIMIT " . $perPage . " OFFSET " . $offset;
+        ORDER BY CASE WHEN t.status='done' THEN 1 ELSE 0 END, t.updated_at DESC, t.due_date IS NULL,
+        t.due_date ASC, t.id DESC LIMIT " . $perPage . " OFFSET " . $offset;
     $st = $pdo->prepare($tasksSql);
     $tasksParams=$params; $tasksParams[':viewer_object_name']=(int)$ctx['id']; $tasksParams[':viewer_recipient']=(int)$ctx['id']; $tasksParams[':viewer_is_admin']=$ctx['role']==='admin'?1:0;
     $st->execute($tasksParams);
@@ -1866,6 +1866,7 @@ if ($action === 'task_comment_add' && $method === 'POST') {
         $pdo->beginTransaction();
         $ins=$pdo->prepare('INSERT INTO sb_task_comments(task_id,user_id,user_name,comment) VALUES(?,?,?,?)');
         $ins->execute([$taskId,(int)$ctx['id'],(string)$ctx['full_name'],$comment]);
+        $touchTask=$pdo->prepare('UPDATE sb_tasks SET updated_at=CURRENT_TIMESTAMP WHERE id=?');$touchTask->execute([$taskId]);
         $commentId=(int)$pdo->lastInsertId();
         $attach=$pdo->prepare('INSERT INTO sb_task_comment_attachments(comment_id,original_name,stored_name,mime_type,file_size) VALUES(?,?,?,?,?)');
         foreach($files as $file)$attach->execute([$commentId,$file['name'],$file['stored'],$file['mime'],$file['size']]);
@@ -1987,6 +1988,7 @@ if ($action === 'task_comment_delete' && $method === 'POST') {
         $pdo->beginTransaction();
         $del=$pdo->prepare('DELETE FROM sb_task_comments WHERE id=?');
         $del->execute([$commentId]);
+        $touchTask=$pdo->prepare('UPDATE sb_tasks SET updated_at=CURRENT_TIMESTAMP WHERE id=?');$touchTask->execute([(int)$comment['task_id']]);
         if($del->rowCount()!==1) throw new RuntimeException('Комментарий уже был удалён.');
         audit_log($pdo,$ctx,'task_comment_deleted','task',(int)$comment['task_id'],(string)$comment['title'],[
             'comment_id'=>$commentId,
@@ -2096,6 +2098,7 @@ if ($action === 'task_update' && $method === 'POST') {
     }
     $comment=trim((string)($body['comment']??'')); if($comment!==''){if(mb_strlen($comment)>3000)reply(400,['ok'=>false,'error'=>'Комментарий не должен превышать 3000 символов.']);
         $ins=$pdo->prepare('INSERT INTO sb_task_comments(task_id,user_id,user_name,comment) VALUES(?,?,?,?)');$ins->execute([$id,(int)$ctx['id'],(string)$ctx['full_name'],$comment]);
+        $touchTask=$pdo->prepare('UPDATE sb_tasks SET updated_at=CURRENT_TIMESTAMP WHERE id=?');$touchTask->execute([$id]);
         $q=$pdo->prepare('SELECT user_id FROM sb_task_assignees WHERE task_id=? UNION SELECT created_by FROM sb_tasks WHERE id=?');$q->execute([$id,$id]);foreach($q->fetchAll(PDO::FETCH_COLUMN) as $uid)if((int)$uid!==(int)$ctx['id'])notification_add($pdo,(int)$uid,'task','Комментарий к задаче','Новый комментарий к задаче «'.$task['title'].'».','tasks.php');
         audit_log($pdo,$ctx,'task_comment_added','task',$id,(string)$task['title']);
     }
