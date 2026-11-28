@@ -2612,7 +2612,7 @@ if ($action === 'system_logo' && $method === 'GET') {
     $path=__DIR__.'/system-storage/'.$name;
     if (!is_file($path)) { http_response_code(404); exit; }
     $ext=strtolower((string)pathinfo($path,PATHINFO_EXTENSION));
-    header('Content-Type', $ext==='png'?'image/png':($ext==='webp'?'image/webp':'image/jpeg'));
+    header('Content-Type: '.($ext==='png'?'image/png':($ext==='webp'?'image/webp':'image/jpeg')));
     header('Content-Length: '.(string)filesize($path));
     header('Cache-Control: private, max-age=300');
     readfile($path); exit;
@@ -2626,8 +2626,8 @@ if ($action === 'settings_data' && $method === 'GET') {
 }
 if ($action === 'settings_save' && $method === 'POST') {
     require_role($ctx,'admin'); check_csrf($_POST);
-    $orgName=trim((string)($_POST['org_name']??''));
-    $orgSubtitle=trim((string)($_POST['org_subtitle']??''));
+    $orgName=trim((string)($_POST['org_name']??system_setting($pdo,'org_name','Служба безопасности')));
+    $orgSubtitle=trim((string)($_POST['org_subtitle']??system_setting($pdo,'org_subtitle','Группа БФ Волгоград 1')));
     if($orgName===''||mb_strlen($orgName)>120||mb_strlen($orgSubtitle)>160) reply(400,['ok'=>false,'error'=>'Проверьте название организации и подпись.']);
     $logoFile=system_setting($pdo,'logo_file','');
     if(!empty($_POST['remove_logo'])) $logoFile='';
@@ -2645,13 +2645,14 @@ if ($action === 'settings_save' && $method === 'POST') {
     try{
         save_system_setting($pdo,'org_name',$orgName,(int)$ctx['id']);
         save_system_setting($pdo,'org_subtitle',$orgSubtitle,(int)$ctx['id']);
-        save_system_setting($pdo,'notifications_enabled',!empty($_POST['notifications_enabled'])?'1':'0',(int)$ctx['id']);
-        save_system_setting($pdo,'push_enabled',!empty($_POST['push_enabled'])?'1':'0',(int)$ctx['id']);
+        if(array_key_exists('notifications_enabled',$_POST)) save_system_setting($pdo,'notifications_enabled',!empty($_POST['notifications_enabled'])?'1':'0',(int)$ctx['id']);
+        if(array_key_exists('push_enabled',$_POST)) save_system_setting($pdo,'push_enabled',!empty($_POST['push_enabled'])?'1':'0',(int)$ctx['id']);
         save_system_setting($pdo,'logo_file',$logoFile,(int)$ctx['id']);
         $keys=['incident_created','damage_payment','document_ack'];
         foreach($keys as $key){
-            $title=trim((string)($_POST['template_'.$key.'_title']??''));
-            $body=trim((string)($_POST['template_'.$key.'_body']??''));
+            $titleKey='template_'.$key.'_title';$bodyKey='template_'.$key.'_body';
+            if(!array_key_exists($titleKey,$_POST)&&!array_key_exists($bodyKey,$_POST)) continue;
+            $title=trim((string)($_POST[$titleKey]??''));$body=trim((string)($_POST[$bodyKey]??''));
             if($title===''||mb_strlen($title)>180||$body===''||mb_strlen($body)>1000) throw new InvalidArgumentException('Проверьте заголовки и тексты шаблонов уведомлений.');
             $st=$pdo->prepare('INSERT INTO sb_message_templates (template_key,title,body,updated_by) VALUES (:k,:t,:b,:u) ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_by=VALUES(updated_by)');
             $st->execute([':k'=>$key,':t'=>$title,':b'=>$body,':u'=>(int)$ctx['id']]);
