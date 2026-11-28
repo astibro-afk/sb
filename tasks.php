@@ -139,7 +139,7 @@ function render(){
    form.append(area,mention,fileInput,send);form.addEventListener('submit',async e=>{e.preventDefault();const comment=area.value.trim(),files=Array.from(fileInput.files||[]);if(!comment&&!files.length)return;send.disabled=true;clearError();try{const fd=new FormData();fd.append('csrf',state.csrf);fd.append('task_id',String(t.id));fd.append('comment',comment);fd.append('mentions',JSON.stringify(Array.from(mentionIds)));files.forEach(file=>fd.append('attachments[]',file));const response=await fetch('api.php?action=task_comment_add',{method:'POST',credentials:'same-origin',body:fd});const result=await json(response);if(!response.ok||!result.ok)throw new Error(result.error||'Не удалось отправить комментарий.');await load(state.pagination.page||1);}catch(err){showError(err.message);}finally{send.disabled=false;}});details.append(form);}card.append(details);tasksEl.append(card);
  });
 }
-function resetTaskForm(){editingTaskId=0;$('createForm').reset();Array.from($('object').options).forEach(o=>o.selected=false);Array.from($('assignee').options).forEach(o=>o.selected=false);$('createPanel').querySelector('h2').textContent='Поставить новую задачу';$('createBtn').textContent='Создать задачу';$('cancelEdit').hidden=true;fillAssignees(false);}
+function resetTaskForm(){editingTaskId=0;$('createForm').reset();Array.from($('object').options).forEach(o=>o.selected=false);Array.from($('assignee').options).forEach(o=>o.selected=false);$('createPanel').querySelector('h2').textContent='Поставить новую задачу';$('createBtn').textContent='Создать задачу';$('cancelEdit').hidden=true;fillAssignees(false);refreshMultiDropdown('object');refreshMultiDropdown('assignee');}
 function editTask(task){
  if(!state.user||state.user.role!=='admin'||state.archiveView)return;
  editingTaskId=Number(task.id);$('createPanel').classList.remove('hidden');$('createPanel').querySelector('h2').textContent='Изменить задачу';$('createBtn').textContent='Сохранить изменения';$('cancelEdit').hidden=false;
@@ -149,6 +149,7 @@ function editTask(task){
  Array.from($('object').options).forEach(o=>o.selected=o.value==='__all__'?allObjectsSelected:objectIds.includes(Number(o.value)));
  fillAssignees(false);const availableIds=state.assignees.filter(u=>(!state.user||Number(u.id)!==Number(state.user.id))&&(!objectIds.length||(u.object_ids||[]).some(id=>objectIds.includes(Number(id))))).map(u=>Number(u.id));const allAssigneesSelected=availableIds.length>0&&availableIds.every(id=>assigneeIds.includes(id));
  Array.from($('assignee').options).forEach(o=>o.selected=o.value==='__all__'?allAssigneesSelected:assigneeIds.includes(Number(o.value)));
+ refreshMultiDropdown('object');refreshMultiDropdown('assignee');
  $('createPanel').scrollIntoView({behavior:'smooth',block:'start'});$('title').focus();
 }
 async function deleteComment(commentId,task, item, summary, commentItems){
