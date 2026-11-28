@@ -46,7 +46,7 @@ async function applySystemBrand(){
   document.querySelectorAll('.sb-site-brand-text strong,.brand h1,.brand-text h1').forEach(n=>{n.textContent=d.org_name||'Служба безопасности';});
   document.querySelectorAll('.sb-site-brand-text small,.brand p,.brand-text span').forEach(n=>{n.textContent=d.org_subtitle||'';});
   document.querySelectorAll('.sb-site-logo,.brand .logo,.brand-logo').forEach(n=>{
-   if(d.has_logo){const img=document.createElement('img');img.src='/api.php?action=system_logo';img.alt='Логотип';img.style.cssText='width:100%;height:100%;object-fit:contain;border-radius:inherit';n.replaceChildren(img);}
+   if(d.has_logo){const img=document.createElement('img');img.src='/api.php?action=system_logo&v='+Date.now();img.alt='Логотип';img.style.cssText='width:100%;height:100%;object-fit:contain;border-radius:inherit';n.replaceChildren(img);}
    else n.textContent='СБ';
   });
  }catch(e){}
