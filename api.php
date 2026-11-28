@@ -168,9 +168,12 @@ function ensure_roles_schema(PDO $pdo): void {
         CONSTRAINT fk_sb_role_permission_role FOREIGN KEY (role_key) REFERENCES sb_roles(role_key) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $seed = $pdo->prepare("INSERT IGNORE INTO sb_roles (role_key,display_name,base_role,is_system) VALUES (:key,:name,:base,1)");
-    foreach ([['admin','Администратор','admin'],['moderator','Модератор','moderator'],['user','Пользователь','user']] as $role) {
+    foreach ([['admin','Разработчик','admin'],['moderator','Модератор','moderator'],['user','Пользователь','user']] as $role) {
         $seed->execute([':key'=>$role[0],':name'=>$role[1],':base'=>$role[2]]);
     }
+    $pdo->exec("UPDATE sb_roles SET display_name='Разработчик', is_system=1, base_role='admin' WHERE role_key='admin'");
+    $pdo->exec("UPDATE sb_roles SET display_name='Модератор', is_system=1, base_role='moderator' WHERE role_key='moderator'");
+    $pdo->exec("UPDATE sb_roles SET display_name='Пользователь', is_system=0, base_role='user' WHERE role_key='user'");
     $defaults = [
         'moderator'=>['tasks.view','tasks.create','tasks.manage','tasks.update_status','tasks.comment','employees.view','employees.manage','documents.view','documents.manage','documents.acknowledge','reports.view','reports.create','reports.manage'],
         'user'=>['tasks.view','tasks.update_status','tasks.comment','employees.view','documents.view','documents.acknowledge','reports.view','reports.create']
@@ -2730,7 +2733,9 @@ if ($action === 'user_save' && $method === 'POST') {
 
     if (!preg_match('/^[A-Za-z0-9._-]{3,64}$/', $username)) reply(400, ['ok' => false, 'error' => 'Логин: 3–64 символа — латиница, цифры, точка, подчёркивание, дефис.']);
     if ($fullName === '' || mb_strlen($fullName) > 255) reply(400, ['ok' => false, 'error' => 'Укажите ФИО (до 255 символов).']);
-    if (!in_array($role, ['admin', 'moderator', 'user'], true)) reply(400, ['ok' => false, 'error' => 'Недопустимая роль.']);
+    $roleCheck = $pdo->prepare('SELECT COUNT(*) FROM sb_roles WHERE role_key=:role');
+    $roleCheck->execute([':role'=>$role]);
+    if ((int)$roleCheck->fetchColumn() !== 1) reply(400, ['ok' => false, 'error' => 'Недопустимая роль.']);
     if ($objectIds) {
         $chk = $pdo->prepare('SELECT COUNT(*) FROM sb_objects WHERE id IN (' . implode(',', array_fill(0, count($objectIds), '?')) . ')');
         $chk->execute($objectIds);
