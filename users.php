@@ -34,8 +34,16 @@ function users_audit_log(PDO $pdo, array $actor, string $action, string $type, ?
 function users_notification_add(PDO $pdo, int $userId, string $type, string $title, string $message, string $link = ''): void {
     if ($userId < 1) return;
     try {
+        $enabled=$pdo->query("SELECT setting_value FROM sb_system_settings WHERE setting_key='notifications_enabled'")->fetchColumn();
+        if($enabled==='0') return;
         $st=$pdo->prepare('INSERT INTO sb_notifications (user_id,type,title,message,link) VALUES (:uid,:type,:title,:message,:link)');
         $st->execute([':uid'=>$userId,':type'=>$type,':title'=>$title,':message'=>$message,':link'=>$link]);
+        $notificationId=(int)$pdo->lastInsertId();
+        $pushEnabled=$pdo->query("SELECT setting_value FROM sb_system_settings WHERE setting_key='push_enabled'")->fetchColumn();
+        if($pushEnabled!=='0'){
+            $queue=$pdo->prepare("INSERT INTO sb_push_queue (notification_id,user_id) SELECT :nid,:uid WHERE EXISTS (SELECT 1 FROM sb_push_subscriptions WHERE user_id=:sub_uid AND is_active=1)");
+            $queue->execute([':nid'=>$notificationId,':uid'=>$userId,':sub_uid'=>$userId]);
+        }
     } catch (Throwable $e) { error_log('SB users notification error: '.$e->getMessage()); }
 }
 $err = '';
