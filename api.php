@@ -1244,13 +1244,13 @@ if ($action === 'documents_data' && $method === 'GET') {
     }
     $sql = "SELECT d.id,d.title,d.description,d.category,d.original_name,d.mime_type,d.file_size,
         d.object_id,d.uploaded_by,d.requires_ack,d.created_at,u.full_name AS uploader_name,o.name AS object_name,
-        (SELECT COUNT(*) FROM sb_users au WHERE au.is_active=1 AND au.role='user'
+        (SELECT COUNT(*) FROM sb_users au JOIN sb_roles ar ON ar.role_key=au.role AND ar.base_role='user' WHERE au.is_active=1
             AND (d.object_id IS NULL OR EXISTS (
                 SELECT 1 FROM sb_user_objects auo WHERE auo.user_id=au.id AND auo.object_id=d.object_id
             ))) AS ack_total,
         (SELECT COUNT(*) FROM sb_document_acknowledgements aa
-            JOIN sb_users au ON au.id=aa.user_id
-            WHERE aa.document_id=d.id AND au.is_active=1 AND au.role='user'
+            JOIN sb_users au ON au.id=aa.user_id JOIN sb_roles ar ON ar.role_key=au.role AND ar.base_role='user'
+            WHERE aa.document_id=d.id AND au.is_active=1
             AND (d.object_id IS NULL OR EXISTS (
                 SELECT 1 FROM sb_user_objects auo WHERE auo.user_id=au.id AND auo.object_id=d.object_id
             ))) AS ack_done,
@@ -1410,10 +1410,11 @@ if ($action === 'document_upload' && $method === 'POST') {
             if ($objectId > 0) {
                 $recipients = $pdo->prepare("SELECT DISTINCT u.id FROM sb_users u
                     JOIN sb_user_objects uo ON uo.user_id=u.id AND uo.object_id=:object
-                    WHERE u.is_active=1 AND u.role='user'");
+                    JOIN sb_roles ur ON ur.role_key=u.role AND ur.base_role='user'
+                    WHERE u.is_active=1");
                 $recipients->execute([':object'=>$objectId]);
             } else {
-                $recipients = $pdo->query("SELECT id FROM sb_users WHERE is_active=1 AND role='user'");
+                $recipients = $pdo->query("SELECT u.id FROM sb_users u JOIN sb_roles ur ON ur.role_key=u.role AND ur.base_role='user' WHERE u.is_active=1");
             }
             foreach ($recipients->fetchAll(PDO::FETCH_COLUMN) as $recipientId) {
                 notification_add($pdo, (int)$recipientId, 'document_ack_required', 'Требуется ознакомление',
@@ -1464,7 +1465,7 @@ if ($action === 'document_ack_status' && $method === 'GET') {
     $document = $st->fetch();
     if (!$document) reply(404, ['ok'=>false,'error'=>'Документ не найден.']);
     if (!(int)$document['requires_ack']) reply(409, ['ok'=>false,'error'=>'Для этого документа подтверждение не требуется.']);
-    $where = ["u.is_active=1","u.role='user'"];
+    $where = ["u.is_active=1","EXISTS (SELECT 1 FROM sb_roles ur WHERE ur.role_key=u.role AND ur.base_role='user')"];
     $params = [':doc'=>$id];
     if ($document['object_id'] !== null) {
         $where[] = 'EXISTS (SELECT 1 FROM sb_user_objects target_obj WHERE target_obj.user_id=u.id AND target_obj.object_id=:doc_object)';
