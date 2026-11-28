@@ -64,10 +64,11 @@ async function dashboard(){
  $('roleLabel').textContent=user.role_name||roleNames[user.role]||'Персональная панель';
  $('userChip').hidden=false;$('userName').textContent=user.full_name||user.username;
  $('userMeta').textContent=(user.role_name||roleNames[user.role]||user.role)+((user.object_names||[]).length?' · '+user.object_names.join(', '):'');
- $('adminManageLink').hidden=user.role!=='admin';$('settingsQuick').hidden=user.role!=='admin'&&!perms.has('settings.manage');
+ $('adminManageLink').hidden=user.role!=='admin';$('settingsQuick').hidden=user.role!=='admin';
  const data=await get('dashboard_data');
  user=data.user||user;
  const perms=new Set(user.permissions||[]);
+ $('settingsQuick').hidden=user.role!=='admin'&&!perms.has('settings.manage');
  const hideWithout=(selector,permission)=>document.querySelectorAll(selector).forEach(node=>{node.hidden=user.role!=='admin'&&!perms.has(permission);});
  hideWithout('a[href="tasks.php"]','tasks.view');
  hideWithout('a[href="reports.php"],a[href="reports/daily-report.php"]','reports.view');
