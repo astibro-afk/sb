@@ -971,6 +971,7 @@ if ($action === 'incident_create' && $method === 'POST') {
     }catch(Throwable $e){if($photoName)@unlink(__DIR__.'/incident-storage/'.$photoName);error_log('SB incident create: '.$e->getMessage());reply(500,['ok'=>false,'error'=>'Не удалось сохранить инцидент.']);}
 }
 if ($action === 'incident_photo' && $method === 'GET') {
+    if (!role_can($pdo,$ctx,'incidents.view')) { http_response_code(403); exit; }
     $id=(int)($_GET['id']??0);$st=$pdo->prepare('SELECT object_id,created_by,photo_name,photo_mime FROM sb_incidents WHERE id=:id');$st->execute([':id'=>$id]);$row=$st->fetch();
     if(!$row||empty($row['photo_name'])){http_response_code(404);exit;}
     $scope=user_object_ids($pdo,(int)$ctx['id']);if($ctx['role']==='user'&&(int)$row['created_by']!==(int)$ctx['id']){http_response_code(403);exit;}if($ctx['role']==='moderator'&&!in_array((int)$row['object_id'],$scope,true)){http_response_code(403);exit;}
