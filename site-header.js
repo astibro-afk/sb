@@ -35,6 +35,8 @@ function moduleNavSetup(user){
   link.hidden=item.admin?!(user&&user.role==='admin'):!permissions[item.permission];
   if(location.pathname.endsWith('/'+item.href)||location.pathname===item.href){nav.querySelectorAll('a').forEach(a=>a.classList.remove('active'));link.classList.add('active');}
  });
+ const pageLinks=[['reports.php','reports.view'],['tasks.php','tasks.view'],['employees.php','employees.view']];
+ pageLinks.forEach(([href,key])=>{const link=nav.querySelector('a[href="'+href+'"],a[href="/'+href+'"]');if(link)link.hidden=!!user&&!permissions[key];});
  const docs=nav.querySelector('a[href="documents.php"],a[href="/documents.php"]');
  if(docs)docs.hidden=!!user&&!permissions['documents.view'];
 }
