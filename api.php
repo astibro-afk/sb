@@ -1653,7 +1653,9 @@ if ($action === 'tasks_data' && $method === 'GET') {
     $tasksSql = "SELECT t.id,t.object_id,'' AS object_name,t.title,t.description,t.priority,t.status,
         t.assignee_id,au.full_name AS assignee_name,t.created_by,cu.full_name AS creator_name,
         (SELECT GROUP_CONCAT(DISTINCT u.full_name ORDER BY u.full_name SEPARATOR ', ') FROM sb_task_assignees ta JOIN sb_users u ON u.id=ta.user_id WHERE ta.task_id=t.id) AS assignee_names,
+        (SELECT GROUP_CONCAT(DISTINCT ta_ids.user_id ORDER BY ta_ids.user_id SEPARATOR ',') FROM sb_task_assignees ta_ids WHERE ta_ids.task_id=t.id) AS assignee_ids,
         (SELECT GROUP_CONCAT(DISTINCT ob.name ORDER BY ob.name SEPARATOR ', ') FROM sb_task_objects txo JOIN sb_objects ob ON ob.id=txo.object_id WHERE txo.task_id=t.id AND (:viewer_is_admin=1 OR EXISTS(SELECT 1 FROM sb_user_objects own WHERE own.user_id=:viewer_object_name AND own.object_id=txo.object_id))) AS object_names,
+        (SELECT GROUP_CONCAT(DISTINCT txo_ids.object_id ORDER BY txo_ids.object_id SEPARATOR ',') FROM sb_task_objects txo_ids WHERE txo_ids.task_id=t.id) AS object_ids,
         EXISTS(SELECT 1 FROM sb_task_assignees me WHERE me.task_id=t.id AND me.user_id=:viewer_recipient) AS is_recipient,
         t.due_date,t.created_at,t.updated_at,t.archived_at" . $filteredSql . "
         ORDER BY CASE WHEN t.status='done' THEN 1 ELSE 0 END, t.due_date IS NULL,
@@ -1676,6 +1678,8 @@ if ($action === 'tasks_data' && $method === 'GET') {
         $task['object_id'] = (int)$task['object_id'];
         $task['assignee_id'] = (int)$task['assignee_id'];
         $task['created_by'] = (int)$task['created_by'];
+        $task['object_ids'] = array_values(array_filter(array_map('intval', explode(',', (string)($task['object_ids'] ?? '')))));
+        $task['assignee_ids'] = array_values(array_filter(array_map('intval', explode(',', (string)($task['assignee_ids'] ?? '')))));
         $task['comment_count'] = $commentCounts[$task['id']] ?? 0;
         $task['is_overdue'] = !empty($task['due_date']) && $task['due_date'] < date('Y-m-d') && $task['status'] !== 'done';
         $task['can_manage'] = role_can($pdo,$ctx,'tasks.manage') && $ctx['role'] !== 'user' && ($ctx['role'] === 'admin' || (int)$task['created_by'] === (int)$ctx['id']);
@@ -2029,6 +2033,42 @@ if ($action === 'task_create' && $method === 'POST') {
         $pdo->commit();
     } catch(Throwable $e) { if($pdo->inTransaction())$pdo->rollBack(); error_log('SB task create error: '.$e->getMessage()); reply(500,['ok'=>false,'error'=>'Не удалось создать задачу.']); }
     audit_log($pdo,$ctx,'task_created','task',$id,$title,['object_ids'=>$targetIds,'assignee_ids'=>$recipientIds]); reply(200,['ok'=>true,'id'=>$id]);
+}
+if ($action === 'task_edit' && $method === 'POST') {
+    if (!role_can($pdo,$ctx,'tasks.manage') || ($ctx['role'] ?? '') !== 'admin') reply(403,['ok'=>false,'error'=>'Изменять задачи может только администратор.']);
+    $body=input_json(); check_csrf($body); $id=(int)($body['id']??0);
+    if($id<1) reply(400,['ok'=>false,'error'=>'Не выбрана задача.']);
+    $title=trim((string)($body['title']??'')); $description=trim((string)($body['description']??'')); $priority=(string)($body['priority']??'normal'); $due=(string)($body['due_date']??'');
+    $objectIds=array_values(array_unique(array_filter(array_map('intval',is_array($body['object_ids']??null)?$body['object_ids']:[]),function($v){return $v>0;})));
+    $assigneeIds=array_values(array_unique(array_filter(array_map('intval',is_array($body['assignee_ids']??null)?$body['assignee_ids']:[]),function($v){return $v>0;})));
+    if($title===''||mb_strlen($title)>180||mb_strlen($description)>5000) reply(400,['ok'=>false,'error'=>'Укажите название задачи (до 180 символов); описание — до 5000 символов.']);
+    if(!in_array($priority,['low','normal','high'],true)) reply(400,['ok'=>false,'error'=>'Некорректный приоритет.']);
+    if($due!==''&&!preg_match('/^\\d{4}-\\d{2}-\\d{2}$/',$due)) reply(400,['ok'=>false,'error'=>'Некорректный срок выполнения.']);
+    if(!$objectIds&&!$assigneeIds) reply(400,['ok'=>false,'error'=>'Выберите сотрудников или объекты.']);
+    $taskSt=$pdo->prepare('SELECT id,title,status,is_archived FROM sb_tasks WHERE id=? LIMIT 1');$taskSt->execute([$id]);$task=$taskSt->fetch();
+    if(!$task) reply(404,['ok'=>false,'error'=>'Задача не найдена.']);
+    if((int)$task['is_archived']===1) reply(409,['ok'=>false,'error'=>'Архивную задачу нельзя изменять.']);
+    if($assigneeIds && in_array((int)$ctx['id'],$assigneeIds,true)) reply(400,['ok'=>false,'error'=>'Нельзя назначить себя исполнителем задачи.']);
+    $allObjects=$pdo->query('SELECT id,name FROM sb_objects WHERE is_active=1')->fetchAll();$names=[];foreach($allObjects as $o)$names[(int)$o['id']]=$o['name'];
+    foreach($objectIds as $oid)if(!isset($names[$oid]))reply(400,['ok'=>false,'error'=>'Выбран недействующий объект.']);
+    $recipients=[];$targets=[];
+    foreach($objectIds as $oid){$targets[$oid]=true;$q=$pdo->prepare('SELECT u.id FROM sb_users u JOIN sb_user_objects uo ON uo.user_id=u.id WHERE u.is_active=1 AND uo.object_id=?');$q->execute([$oid]);foreach($q->fetchAll(PDO::FETCH_COLUMN) as $uid)if((int)$uid!==(int)$ctx['id'])$recipients[(int)$uid]=true;}
+    if($assigneeIds){$sql='SELECT u.id,uo.object_id FROM sb_users u JOIN sb_user_objects uo ON uo.user_id=u.id JOIN sb_objects o ON o.id=uo.object_id AND o.is_active=1 WHERE u.is_active=1 AND u.id IN ('.implode(',',array_fill(0,count($assigneeIds),'?')).')';$q=$pdo->prepare($sql);$q->execute($assigneeIds);$found=[];foreach($q->fetchAll() as $row){$uid=(int)$row['id'];$oid=(int)$row['object_id'];$found[$uid]=true;$targets[$oid]=true;}if(count($found)!==count($assigneeIds))reply(400,['ok'=>false,'error'=>'Выбранный сотрудник неактивен или не закреплён за объектом.']);foreach($assigneeIds as $uid)$recipients[$uid]=true;}
+    $recipientIds=array_keys($recipients);$targetIds=array_keys($targets);sort($recipientIds);sort($targetIds);
+    if(!$recipientIds||!$targetIds)reply(400,['ok'=>false,'error'=>'На выбранных объектах нет активных сотрудников.']);
+    try{
+        $pdo->beginTransaction();
+        $up=$pdo->prepare('UPDATE sb_tasks SET object_id=?,title=?,description=?,priority=?,due_date=? WHERE id=?');
+        $up->execute([$targetIds[0],$title,$description,$priority,$due!==''?$due:null,$id]);
+        $pdo->prepare('DELETE FROM sb_task_assignees WHERE task_id=?')->execute([$id]);
+        $linkA=$pdo->prepare('INSERT INTO sb_task_assignees(task_id,user_id) VALUES(?,?)');foreach($recipientIds as $uid)$linkA->execute([$id,$uid]);
+        $pdo->prepare('DELETE FROM sb_task_objects WHERE task_id=?')->execute([$id]);
+        $linkO=$pdo->prepare('INSERT INTO sb_task_objects(task_id,object_id) VALUES(?,?)');foreach($targetIds as $oid)$linkO->execute([$id,$oid]);
+        $pdo->commit();
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();error_log('SB task edit error: '.$e->getMessage());reply(500,['ok'=>false,'error'=>'Не удалось сохранить изменения задачи.']);}
+    audit_log($pdo,$ctx,'task_updated','task',$id,$title,['previous_title'=>(string)$task['title'],'object_ids'=>$targetIds,'assignee_ids'=>$recipientIds]);
+    foreach($recipientIds as $uid)if($uid!==(int)$ctx['id'])notification_add($pdo,$uid,'task','Задача изменена','Обновлены данные задачи «'.$title.'».','tasks.php');
+    reply(200,['ok'=>true]);
 }
 if ($action === 'task_update' && $method === 'POST') {
     if (!role_can($pdo,$ctx,'tasks.update_status')) reply(403,['ok'=>false,'error'=>'Недостаточно прав для этого раздела.']);
