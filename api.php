@@ -567,12 +567,12 @@ function permission_catalog(): array {
         'reports.delete'=>'Удаление отчётов',
         'tasks.view'=>'Просмотр задач',
         'tasks.create'=>'Создание задач',
-        'tasks.update'=>'Изменение статуса своих задач',
+        'tasks.update'=>'Изменение статуса задач по правилам роли',
         'tasks.manage'=>'Управление задачами в зоне доступа',
         'tasks.delete'=>'Удаление задач',
         'tasks.comment_delete'=>'Удаление комментариев по правилам роли',
         'employees.view'=>'Просмотр сотрудников',
-        'employees.manage'=>'Создание и управление сотрудниками в зоне доступа',
+        'employees.manage'=>'Создание сотрудников в зоне доступа',
         'documents.view'=>'Просмотр и скачивание документов',
         'documents.manage'=>'Загрузка и удаление документов в зоне доступа',
         'documents.acknowledge'=>'Подтверждение ознакомления с документами',
@@ -590,7 +590,7 @@ function role_permission_defaults(string $role): array {
     $values = array_fill_keys(array_keys($catalog), false);
     if ($role === 'admin') return array_fill_keys(array_keys($catalog), true);
     if ($role === 'moderator') {
-        foreach (array_keys($catalog) as $key) $values[$key] = !in_array($key, ['settings.manage','permissions.manage'], true);
+        foreach (array_keys($catalog) as $key) $values[$key] = !in_array($key, ['settings.manage','permissions.manage','documents.acknowledge'], true);
         return $values;
     }
     $enabled = [
@@ -2686,7 +2686,8 @@ if ($action === 'permissions_save' && $method === 'POST') {
         foreach(['moderator','user'] as $role){
             $values=is_array($roles[$role]??null)?$roles[$role]:[];
             foreach($catalog as $key=>$label){
-                $st->execute([':r'=>$role,':k'=>$key,':v'=>!empty($values[$key])?1:0,':u'=>(int)$ctx['id']]);
+                $allowed=role_permission_defaults($role);
+                $st->execute([':r'=>$role,':k'=>$key,':v'=>(!empty($allowed[$key])&&!empty($values[$key]))?1:0,':u'=>(int)$ctx['id']]);
             }
         }
         $pdo->commit();
