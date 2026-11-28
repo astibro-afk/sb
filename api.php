@@ -578,7 +578,6 @@ function permission_catalog(): array {
         'documents.acknowledge'=>'Подтверждение ознакомления с документами',
         'incidents.view'=>'Просмотр происшествий',
         'incidents.create'=>'Регистрация происшествий',
-        'incidents.manage'=>'Изменение и управление происшествиями',
         'damage.view'=>'Просмотр данных о возмещении ущерба',
         'damage.manage'=>'Изменение требований и регистрация возмещений',
         'settings.manage'=>'Изменение настроек системы',
