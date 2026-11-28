@@ -161,7 +161,7 @@ function openTaskView(task){
   if(!comments.open||comments.dataset.loaded==='1')return;
   comments.dataset.loaded='1';commentItems.replaceChildren(node('div','comment','Загружаем комментарии…'));
   try{
-   const data=await get('task_comments',{id:task.id});comments._mentionable=data.mentionable_users||[];const mentionSelect=comments.querySelector('.comment-form select');if(mentionSelect)(data.mentionable_users||[]).forEach(u=>mentionSelect.add(new Option(u.full_name,u.id)));commentItems.replaceChildren();
+   const data=await get('task_comments',{id:task.id});comments._mentionable=data.mentionable_users||[];const mentionSelect=discussion.querySelector('.comment-form select');if(mentionSelect)(data.mentionable_users||[]).forEach(u=>mentionSelect.add(new Option(u.full_name,u.id)));commentItems.replaceChildren();
    (data.comments||[]).forEach(c=>{
     const item=node('div','comment');
     if(Number(c.can_delete)===1){const del=node('button','comment-delete','×');del.type='button';del.title='Удалить комментарий';del.setAttribute('aria-label','Удалить комментарий');del.addEventListener('click',()=>deleteComment(c.id,task,item,summary,commentItems));item.append(del);}
