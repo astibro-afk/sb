@@ -2793,6 +2793,10 @@ if ($action === 'damage_update' && $method === 'POST') {
     $claimedRaw=str_replace(',','.',trim((string)($body['claimed_amount']??'')));
     $paymentRaw=str_replace(',','.',trim((string)($body['payment_amount']??'')));
     if($claimedRaw!==''&&(!is_numeric($claimedRaw)||(float)$claimedRaw<0||(float)$claimedRaw>(float)$row['damage_amount']))reply(400,['ok'=>false,'error'=>'Предъявленная сумма должна быть от 0 до установленной суммы ущерба.']);
+    if($claimedRaw!==''){
+        $paidCheck=$pdo->prepare('SELECT COALESCE(SUM(amount),0) FROM sb_damage_payments WHERE incident_id=:id');$paidCheck->execute([':id'=>$id]);
+        if((float)$paidCheck->fetchColumn()>(float)$claimedRaw+0.001)reply(400,['ok'=>false,'error'=>'Нельзя уменьшить предъявленную сумму ниже уже возмещённой.']);
+    }
     if($paymentRaw!==''&&(!is_numeric($paymentRaw)||(float)$paymentRaw<=0))reply(400,['ok'=>false,'error'=>'Укажите положительную сумму возмещения.']);
     $paidAt=(string)($body['paid_at']??date('Y-m-d'));$date=DateTime::createFromFormat('!Y-m-d',$paidAt);
     if(!$date||$date->format('Y-m-d')!==$paidAt)reply(400,['ok'=>false,'error'=>'Некорректная дата возмещения.']);
