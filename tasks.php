@@ -23,8 +23,8 @@ if(empty($_SESSION['sb_user_id'])){header('Location: index.html');exit;}
 <div id="error" class="error hidden" role="alert"></div>
 <section id="createPanel" class="form-panel hidden"><h2>Поставить новую задачу</h2><form class="form" id="createForm">
 <div class="field wide"><label for="title">Название задачи *</label><input id="title" maxlength="180" required placeholder="Например: Проверить соблюдение кассовой дисциплины"></div>
-<div class="field"><label for="object">Доступные ТО</label><select id="object" multiple size="3" aria-label="Выберите один или несколько объектов"></select></div>
-<div class="field"><label for="assignee">Сотрудники</label><select id="assignee" multiple size="3" aria-label="Выберите одного или нескольких сотрудников"></select></div>
+<div class="field"><label for="object">Доступные ТО</label><select id="object" multiple size="3" aria-label="Выберите один или несколько объектов"><option value="__all__">Все объекты</option></select></div>
+<div class="field"><label for="assignee">Сотрудники</label><select id="assignee" multiple size="3" aria-label="Выберите одного или нескольких сотрудников"><option value="__all__">Все сотрудники</option></select></div>
 <div class="field"><label for="priority">Приоритет</label><select id="priority"><option value="normal">Обычный</option><option value="high">Высокий</option><option value="low">Низкий</option></select></div>
 <div class="field"><label for="due">Срок выполнения</label><input id="due" type="date"></div>
 <div class="field full"><label for="description">Описание и ожидаемый результат</label><textarea id="description" maxlength="5000" placeholder="Опишите задачу, ожидаемый результат и важные детали"></textarea></div>
@@ -49,7 +49,9 @@ function showError(message){$('error').textContent=message;$('error').classList.
 function clearError(){$('error').textContent='';$('error').classList.add('hidden');}
 function date(v){if(!v)return 'Без срока';const d=new Date(v+'T00:00:00');return isNaN(d)?v:d.toLocaleDateString('ru-RU',{day:'2-digit',month:'long',year:'numeric'});}
 function time(v){if(!v)return '';const raw=String(v).trim();const iso=/Z$|[+-]\\d{2}:?\\d{2}$/.test(raw)?raw:raw.replace(' ','T')+'Z';const d=new Date(iso);return isNaN(d)?v:d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
-function fillAssignees(){const sel=$('assignee');sel.replaceChildren();state.assignees.filter(u=>!state.user||Number(u.id)!==Number(state.user.id)).forEach(u=>sel.add(new Option(u.full_name,u.id)));}
+function selectedObjectIds(){const values=Array.from($('object').selectedOptions).map(o=>o.value);if(values.includes('__all__'))return state.objects.map(o=>Number(o.id));return values.map(Number).filter(Boolean);}
+function normalizeMultiSelect(sel,sentinel){const all=Array.from(sel.options).find(o=>o.value==='__all__');if(!all)return;if(all.selected){Array.from(sel.options).forEach(o=>{if(o!==all)o.selected=false;});}else if(Array.from(sel.selectedOptions).some(o=>o.value!==sentinel)){all.selected=false;}}
+function fillAssignees(keepSelection=true){const sel=$('assignee');const previous=keepSelection?Array.from(sel.selectedOptions).map(o=>o.value):[];const hadAll=previous.includes('__all__');const objectIds=selectedObjectIds();const available=state.assignees.filter(u=>!state.user||Number(u.id)!==Number(state.user.id)).filter(u=>!objectIds.length||(u.object_ids||[]).some(id=>objectIds.includes(Number(id))));sel.replaceChildren(new Option('Все сотрудники','__all__'));available.forEach(u=>sel.add(new Option(u.full_name,u.id)));if(hadAll){sel.options[0].selected=true;}else{Array.from(sel.options).forEach(o=>{if(o.value!=='__all__'&&previous.includes(o.value))o.selected=true;});}}
 function stats(){const s=state.stats||{};$('total').textContent=Number(s.total||0);$('active').textContent=Number(s.active||0);$('reviewCount').textContent=Number(s.review||0);$('overdue').textContent=Number(s.overdue||0);}
 function renderPagination(){const p=state.pagination||{page:1,total_pages:1,total:0};const wrap=$('pagination');wrap.hidden=Number(p.total_pages)<=1;$('prevPage').disabled=Number(p.page)<=1;$('nextPage').disabled=Number(p.page)>=Number(p.total_pages);$('pageInfo').textContent='Страница '+p.page+' из '+p.total_pages+' · задач: '+p.total;}
 function render(){
@@ -104,14 +106,16 @@ function render(){
    form.append(area,mention,fileInput,send);form.addEventListener('submit',async e=>{e.preventDefault();const comment=area.value.trim(),files=Array.from(fileInput.files||[]);if(!comment&&!files.length)return;send.disabled=true;clearError();try{const fd=new FormData();fd.append('csrf',state.csrf);fd.append('task_id',String(t.id));fd.append('comment',comment);fd.append('mentions',JSON.stringify(Array.from(mentionIds)));files.forEach(file=>fd.append('attachments[]',file));const response=await fetch('api.php?action=task_comment_add',{method:'POST',credentials:'same-origin',body:fd});const result=await json(response);if(!response.ok||!result.ok)throw new Error(result.error||'Не удалось отправить комментарий.');await load(state.pagination.page||1);}catch(err){showError(err.message);}finally{send.disabled=false;}});details.append(form);}card.append(details);tasksEl.append(card);
  });
 }
-function resetTaskForm(){editingTaskId=0;$('createForm').reset();$('createPanel').querySelector('h2').textContent='Поставить новую задачу';$('createBtn').textContent='Создать задачу';$('cancelEdit').hidden=true;fillAssignees();}
+function resetTaskForm(){editingTaskId=0;$('createForm').reset();Array.from($('object').options).forEach(o=>o.selected=false);Array.from($('assignee').options).forEach(o=>o.selected=false);$('createPanel').querySelector('h2').textContent='Поставить новую задачу';$('createBtn').textContent='Создать задачу';$('cancelEdit').hidden=true;fillAssignees(false);}
 function editTask(task){
  if(!state.user||state.user.role!=='admin'||state.archiveView)return;
  editingTaskId=Number(task.id);$('createPanel').classList.remove('hidden');$('createPanel').querySelector('h2').textContent='Изменить задачу';$('createBtn').textContent='Сохранить изменения';$('cancelEdit').hidden=false;
  $('title').value=task.title||'';$('description').value=task.description||'';$('priority').value=task.priority||'normal';$('due').value=task.due_date||'';
  const objectIds=Array.isArray(task.object_ids)?task.object_ids.map(Number):[];const assigneeIds=Array.isArray(task.assignee_ids)?task.assignee_ids.map(Number):[];
- Array.from($('object').options).forEach(o=>o.selected=objectIds.includes(Number(o.value)));
- Array.from($('assignee').options).forEach(o=>o.selected=assigneeIds.includes(Number(o.value)));
+ const allObjectIds=state.objects.map(o=>Number(o.id));const allObjectsSelected=allObjectIds.length>0&&allObjectIds.every(id=>objectIds.includes(id));
+ Array.from($('object').options).forEach(o=>o.selected=o.value==='__all__'?allObjectsSelected:objectIds.includes(Number(o.value)));
+ fillAssignees(false);const availableIds=state.assignees.filter(u=>(!state.user||Number(u.id)!==Number(state.user.id))&&(!objectIds.length||(u.object_ids||[]).some(id=>objectIds.includes(Number(id))))).map(u=>Number(u.id));const allAssigneesSelected=availableIds.length>0&&availableIds.every(id=>assigneeIds.includes(id));
+ Array.from($('assignee').options).forEach(o=>o.selected=o.value==='__all__'?allAssigneesSelected:assigneeIds.includes(Number(o.value)));
  $('createPanel').scrollIntoView({behavior:'smooth',block:'start'});$('title').focus();
 }
 async function deleteComment(commentId,task, item, summary, commentItems){
@@ -134,15 +138,18 @@ async function load(page){const token=++loadToken;clearError();try{
  const d=await get('tasks_data',params);if(token!==loadToken)return;
  state.tasks=d.tasks||[];state.stats=d.stats||{};state.pagination=d.pagination||{page:1,total_pages:1,total:0};state.objects=d.objects||[];state.assignees=d.assignees||[];state.user=d.user;state.csrf=d.csrf||'';
  const taskPermissions=new Set(state.user.permissions||[]);const canCreate=state.user.role==='admin'||(state.user.role==='moderator'&&taskPermissions.has('tasks.create'));$('createPanel').classList.toggle('hidden',!canCreate);$('description').placeholder='Опишите задачу, ожидаемый результат и важные детали';
- const selectedObject=$('object').value;
- $('object').replaceChildren(new Option('Выберите объект',''));$('objectFilter').replaceChildren(new Option('Все объекты',''));
+ const selectedObjects=Array.from($('object').selectedOptions).map(o=>o.value);const selectedAssignees=Array.from($('assignee').selectedOptions).map(o=>o.value);
+ $('object').replaceChildren(new Option('Все объекты','__all__'));$('objectFilter').replaceChildren(new Option('Все объекты',''));
  state.objects.forEach(o=>{$('object').add(new Option(o.name,o.id));$('objectFilter').add(new Option(o.name,o.id));});
  $('objectFilter').value=params.object_id||'';
- if(selectedObject&&state.objects.some(o=>String(o.id)===selectedObject))$('object').value=selectedObject;
- fillAssignees();render();
+ Array.from($('object').options).forEach(o=>o.selected=selectedObjects.includes(o.value));
+ fillAssignees(false);Array.from($('assignee').options).forEach(o=>o.selected=selectedAssignees.includes(o.value));
+ render();
  }catch(e){if(token!==loadToken)return;showError(e.message);tasksEl.replaceChildren(node('div','empty','Не удалось загрузить задачи.'));}}
 fillAssignees();
-$('createForm').addEventListener('submit',async e=>{e.preventDefault();clearError();const b=$('createBtn');b.disabled=true;try{const object_ids=Array.from($('object').selectedOptions).map(o=>Number(o.value));const assignee_ids=Array.from($('assignee').selectedOptions).map(o=>Number(o.value));const payload={title:$('title').value.trim(),description:$('description').value.trim(),object_ids,assignee_ids,priority:$('priority').value,due_date:$('due').value};if(editingTaskId){await api('task_edit',{id:editingTaskId,...payload});}else{await api('task_create',payload);}resetTaskForm();await load(1);}catch(err){showError(err.message);}finally{b.disabled=false;}});
+$('object').addEventListener('change',()=>{normalizeMultiSelect($('object'),'__all__');const assigneeWasAll=Array.from($('assignee').selectedOptions).some(o=>o.value==='__all__');fillAssignees(false);if(assigneeWasAll)$('assignee').options[0].selected=true;});
+$('assignee').addEventListener('change',()=>normalizeMultiSelect($('assignee'),'__all__'));
+$('createForm').addEventListener('submit',async e=>{e.preventDefault();clearError();const b=$('createBtn');b.disabled=true;try{const object_ids=selectedObjectIds();const assigneeOptions=Array.from($('assignee').selectedOptions);const assignee_ids=assigneeOptions.some(o=>o.value==='__all__')?Array.from($('assignee').options).filter(o=>o.value!=='__all__').map(o=>Number(o.value)):assigneeOptions.map(o=>Number(o.value));const payload={title:$('title').value.trim(),description:$('description').value.trim(),object_ids,assignee_ids,priority:$('priority').value,due_date:$('due').value};if(editingTaskId){await api('task_edit',{id:editingTaskId,...payload});}else{await api('task_create',payload);}resetTaskForm();await load(1);}catch(err){showError(err.message);}finally{b.disabled=false;}});
 $('cancelEdit').addEventListener('click',resetTaskForm);
 $('search').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>load(1),300);});
 $('statusFilter').addEventListener('change',()=>load(1));$('objectFilter').addEventListener('change',()=>load(1));
