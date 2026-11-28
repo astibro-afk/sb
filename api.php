@@ -237,6 +237,8 @@ function db(array $cfg): PDO {
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
         ]);
+        // Храним и читаем серверные даты в UTC; браузер переводит их в местное время пользователя.
+        $pdo->exec("SET time_zone = '+00:00'");
         // Инициализация схемы один раз на PHP-сессию, а не при каждом AJAX-запросе.
         // Версию можно повысить при добавлении новых миграций.
         if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-28-6') {
