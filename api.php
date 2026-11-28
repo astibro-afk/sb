@@ -241,7 +241,7 @@ function db(array $cfg): PDO {
         $pdo->exec("SET time_zone = '+00:00'");
         // Инициализация схемы один раз на PHP-сессию, а не при каждом AJAX-запросе.
         // Версию можно повысить при добавлении новых миграций.
-        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-28-6') {
+        if ((string)($_SESSION['sb_schema_version'] ?? '') !== '2026-11-28-7') {
             $pdo->exec(
                 "CREATE TABLE IF NOT EXISTS sb_app_data (
                     data_key VARCHAR(100) NOT NULL PRIMARY KEY,
@@ -453,7 +453,7 @@ function db(array $cfg): PDO {
                 CONSTRAINT fk_task_comment_mention_comment FOREIGN KEY (comment_id) REFERENCES sb_task_comments(id) ON DELETE CASCADE,
                 CONSTRAINT fk_task_comment_mention_user FOREIGN KEY (user_id) REFERENCES sb_users(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-            $_SESSION['sb_schema_version'] = '2026-11-28-6';
+            $_SESSION['sb_schema_version'] = '2026-11-28-7';
         }
     } catch (Throwable $e) {
         error_log('SB storage database error: ' . $e->getMessage());
@@ -1854,33 +1854,39 @@ if ($action === 'task_comment_add' && $method === 'POST') {
     if($comment===''&&!$files) reply(400,['ok'=>false,'error'=>'Напишите комментарий или прикрепите файл.']);
     $storage=__DIR__.'/task-attachments-storage';
     if(!is_dir($storage)&&!mkdir($storage,0750,true)&&!is_dir($storage)) reply(500,['ok'=>false,'error'=>'Не удалось создать защищённое хранилище вложений.']);
+    if(!is_writable($storage)) reply(500,['ok'=>false,'error'=>'Хранилище вложений недоступно для записи. Обратитесь к администратору.']);
     $deny=$storage.'/.htaccess';
     if(!is_file($deny)) @file_put_contents($deny,"Require all denied\nDeny from all\n");
     $moved=[];
+    $saveStage='подготовке файлов';
     try {
         foreach($files as $index=>$file){
             $destination=$storage.'/'.$file['stored'];
-            if(!move_uploaded_file($file['tmp'],$destination)) throw new RuntimeException('Не удалось сохранить вложение.');
+            if(!move_uploaded_file($file['tmp'],$destination)) throw new RuntimeException('move_uploaded_file вернул false для вложения.');
             $moved[]=$destination;
         }
+        $saveStage='сохранении записи комментария';
         $pdo->beginTransaction();
         $ins=$pdo->prepare('INSERT INTO sb_task_comments(task_id,user_id,user_name,comment) VALUES(?,?,?,?)');
         $ins->execute([$taskId,(int)$ctx['id'],(string)$ctx['full_name'],$comment]);
         $touchTask=$pdo->prepare('UPDATE sb_tasks SET updated_at=CURRENT_TIMESTAMP WHERE id=?');$touchTask->execute([$taskId]);
         $commentId=(int)$pdo->lastInsertId();
+        $saveStage='сохранении метаданных вложений';
         $attach=$pdo->prepare('INSERT INTO sb_task_comment_attachments(comment_id,original_name,stored_name,mime_type,file_size) VALUES(?,?,?,?,?)');
         foreach($files as $file)$attach->execute([$commentId,$file['name'],$file['stored'],$file['mime'],$file['size']]);
+        $saveStage='сохранении упоминаний и уведомлений';
         $mentionInsert=$pdo->prepare('INSERT INTO sb_task_comment_mentions(comment_id,user_id) VALUES(?,?)');
         foreach($mentionIds as $uid){$mentionInsert->execute([$commentId,$uid]);notification_add($pdo,$uid,'task_mention','Вас упомянули в задаче',''.(string)$ctx['full_name'].' упомянул(а) вас в комментарии к задаче «'.$task['title'].'».','tasks.php');}
         $recipients=array_unique(array_map('intval',$allowedMentionIds));
         foreach($recipients as $uid) if($uid!==(int)$ctx['id']&&!in_array($uid,$mentionIds,true)) notification_add($pdo,$uid,'task','Комментарий к задаче','Новый комментарий к задаче «'.$task['title'].'».','tasks.php');
         audit_log($pdo,$ctx,'task_comment_added','task',$taskId,(string)$task['title'],['comment_id'=>$commentId,'attachments'=>count($files),'mentions'=>$mentionIds]);
+        $saveStage='завершении транзакции';
         $pdo->commit();
     } catch(Throwable $e) {
         if($pdo->inTransaction())$pdo->rollBack();
         foreach($moved as $path) if(is_file($path)) @unlink($path);
-        error_log('SB task comment add error: '.$e->getMessage());
-        reply(500,['ok'=>false,'error'=>'Не удалось сохранить комментарий и вложения.']);
+        error_log('SB task comment add error at '.$saveStage.': '.$e->getMessage());
+        reply(500,['ok'=>false,'error'=>'Не удалось сохранить комментарий и вложения. Попробуйте ещё раз.']);
     }
     reply(200,['ok'=>true,'comment_id'=>$commentId]);
 }
