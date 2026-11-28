@@ -13,13 +13,6 @@ function sb_push_dispatch_pending(PDO $pdo, int $limit = 4): void {
     if ($pdo->inTransaction()) return;
 
     try {
-        $pushEnabled = $pdo->query("SELECT setting_value FROM sb_system_settings WHERE setting_key='push_enabled' LIMIT 1")->fetchColumn();
-        if ($pushEnabled === '0') return;
-    } catch (Throwable $e) {
-        // Keep delivery compatible with installations that have not yet run the settings migration.
-    }
-
-    try {
         $due = $pdo->query(
             "SELECT 1 FROM sb_push_queue
              WHERE (status='pending' AND next_attempt_at<=NOW())

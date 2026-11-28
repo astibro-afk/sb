@@ -24,7 +24,7 @@ function roleName(user){const role=user&&user.role;return user&&user.role_name||
 function setupPermissionNav(user){
  const nav=document.querySelector('.sb-site-nav-inner,.nav-inner');if(!nav)return;
  const permissions=new Set(user.permissions||[]);const allowed=(key)=>user.role==='admin'||permissions.has(key);
- const links=[['tasks.php','Задачи','tasks.view'],['reports.php','Отчёты','reports.view'],['employees.php','Сотрудники','employees.view'],['documents.php','База документов','documents.view'],['incidents.php','Инциденты','incidents.view'],['damage.php','Возмещение ущерба','damage.view'],['settings.php','Настройки','settings.manage']];
+ const links=[['tasks.php','Задачи','tasks.view'],['reports.php','Отчёты','reports.view'],['employees.php','Сотрудники','employees.view'],['documents.php','База документов','documents.view']];
  for(const [href,label,permission] of links){let link=nav.querySelector('a[href$="'+href+'"]');if(!link&&allowed(permission)){link=document.createElement('a');link.href=nav.classList.contains('nav-inner')?href:'/'+href;link.textContent=label;nav.append(link);}if(link)link.hidden=!allowed(permission);}
 }
 function localLink(value){return typeof value==='string'&&/^\/?[a-z0-9_/-]+\.php(?:\?[a-z0-9_=&%-]*)?$/i.test(value)&&!value.includes('..')?value:'/notifications.php';}
